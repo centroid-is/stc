@@ -172,13 +172,98 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| PARS-01 | Phase 1 | Pending |
+| PARS-02 | Phase 1 | Pending |
+| PARS-03 | Phase 1 | Pending |
+| PARS-04 | Phase 1 | Pending |
+| PARS-05 | Phase 1 | Pending |
+| PARS-06 | Phase 1 | Pending |
+| PARS-07 | Phase 1 | Pending |
+| PARS-08 | Phase 1 | Pending |
+| PARS-09 | Phase 1 | Pending |
+| PARS-10 | Phase 1 | Pending |
+| CLI-01 | Phase 1 | Pending |
+| CLI-02 | Phase 1 | Pending |
+| CLI-03 | Phase 1 | Pending |
+| CLI-04 | Phase 1 | Pending |
+| CLI-05 | Phase 1 | Pending |
+| PREP-01 | Phase 2 | Pending |
+| PREP-02 | Phase 2 | Pending |
+| PREP-03 | Phase 2 | Pending |
+| PREP-04 | Phase 2 | Pending |
+| PREP-05 | Phase 2 | Pending |
+| SEMA-01 | Phase 3 | Pending |
+| SEMA-02 | Phase 3 | Pending |
+| SEMA-03 | Phase 3 | Pending |
+| SEMA-04 | Phase 3 | Pending |
+| SEMA-05 | Phase 3 | Pending |
+| SEMA-06 | Phase 3 | Pending |
+| SEMA-07 | Phase 3 | Pending |
+| STLB-01 | Phase 4 | Pending |
+| STLB-02 | Phase 4 | Pending |
+| STLB-03 | Phase 4 | Pending |
+| STLB-04 | Phase 4 | Pending |
+| STLB-05 | Phase 4 | Pending |
+| STLB-06 | Phase 4 | Pending |
+| STLB-07 | Phase 4 | Pending |
+| STLB-08 | Phase 4 | Pending |
+| INTP-01 | Phase 4 | Pending |
+| INTP-02 | Phase 4 | Pending |
+| INTP-03 | Phase 4 | Pending |
+| INTP-04 | Phase 4 | Pending |
+| TEST-01 | Phase 5 | Pending |
+| TEST-02 | Phase 5 | Pending |
+| TEST-03 | Phase 5 | Pending |
+| TEST-04 | Phase 5 | Pending |
+| TEST-05 | Phase 5 | Pending |
+| TEST-06 | Phase 5 | Pending |
+| TEST-07 | Phase 5 | Pending |
+| DBUG-01 | Phase 5 | Pending |
+| DBUG-02 | Phase 5 | Pending |
+| SIM-01 | Phase 6 | Pending |
+| SIM-02 | Phase 6 | Pending |
+| SIM-03 | Phase 6 | Pending |
+| EMIT-01 | Phase 7 | Pending |
+| EMIT-02 | Phase 7 | Pending |
+| EMIT-03 | Phase 7 | Pending |
+| EMIT-04 | Phase 7 | Pending |
+| EMIT-05 | Phase 7 | Pending |
+| FMT-01 | Phase 8 | Pending |
+| FMT-02 | Phase 8 | Pending |
+| FMT-03 | Phase 8 | Pending |
+| LINT-01 | Phase 8 | Pending |
+| LINT-02 | Phase 8 | Pending |
+| LINT-03 | Phase 8 | Pending |
+| LINT-04 | Phase 8 | Pending |
+| LSP-01 | Phase 9 | Pending |
+| LSP-02 | Phase 9 | Pending |
+| LSP-03 | Phase 9 | Pending |
+| LSP-04 | Phase 9 | Pending |
+| LSP-05 | Phase 9 | Pending |
+| LSP-06 | Phase 9 | Pending |
+| LSP-07 | Phase 9 | Pending |
+| LSP-08 | Phase 9 | Pending |
+| INCR-01 | Phase 10 | Pending |
+| INCR-02 | Phase 10 | Pending |
+| MCP-01 | Phase 11 | Pending |
+| MCP-02 | Phase 11 | Pending |
+| MCP-03 | Phase 11 | Pending |
+| MCP-04 | Phase 11 | Pending |
+| MCP-05 | Phase 11 | Pending |
+| MCP-06 | Phase 11 | Pending |
+| MCP-07 | Phase 11 | Pending |
+| SKIL-01 | Phase 11 | Pending |
+| SKIL-02 | Phase 11 | Pending |
+| SKIL-03 | Phase 11 | Pending |
+| SKIL-04 | Phase 11 | Pending |
+| SKIL-05 | Phase 11 | Pending |
+| SKIL-06 | Phase 11 | Pending |
 
 **Coverage:**
-- v1 requirements: 71 total
-- Mapped to phases: 0
-- Unmapped: 71
+- v1 requirements: 86 total
+- Mapped to phases: 86
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after initial definition*
+*Last updated: 2026-03-26 after roadmap creation*
