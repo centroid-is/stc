@@ -56,7 +56,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Preprocessor core: directive parser, condition evaluator, source map, Preprocess function
+- [x] 02-01-PLAN.md — Preprocessor core: directive parser, condition evaluator, source map, Preprocess function
 - [ ] 02-02-PLAN.md — CLI pp command: --define flag, text/JSON output, integration tests
 
 ### Phase 3: Semantic Analysis

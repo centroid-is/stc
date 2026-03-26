@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-03-26T17:07:21.961Z"
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-26T17:19:37.126Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 11
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 7
+  completed_plans: 6
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor — no hardware required for development and testing.
-**Current focus:** Phase 01 — project-bootstrap-parser
+**Current focus:** Phase 02 — preprocessor
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 02 (preprocessor) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-26
 
 Progress: [░░░░░░░░░░] 0%
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 271s | 2 tasks | 9 files |
 | Phase 01 P04 | 7min | 2 tasks | 17 files |
 | Phase 01 P05 | 2min | 2 tasks | 11 files |
+| Phase 02-01 P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Recent decisions affecting current work:
 - [Phase 01]: METHOD modifiers accepted both before and after keyword for CODESYS dialect compatibility
 - [Phase 01]: Pratt parser with 8 IEC 61131-3 precedence levels including right-associative ** operator
 - [Phase 01]: Cobra CLI with persistent --format flag; stub subcommands return exit 0; binary integration tests via TestMain
+- [Phase 02-01]: Line-based preprocessing with stack-based IF nesting for IEC 61131-3 directives
+- [Phase 02-01]: Diagnostic codes: PP001 (ERROR), PP002 (unmatched), PP003 (unclosed IF)
+- [Phase 02-01]: Source map per-line mappings sufficient for ST line-based directives
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T17:01:08.723Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-03-26T17:19:37.124Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

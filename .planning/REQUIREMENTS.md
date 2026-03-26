@@ -22,10 +22,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Preprocessor
 
-- [ ] **PREP-01**: User can use {IF defined(NAME)}, {ELSIF}, {ELSE}, {END_IF} for conditional compilation
-- [ ] **PREP-02**: User can use {DEFINE NAME} for file-local definitions
-- [ ] **PREP-03**: User can use {ERROR "message"} to emit compile errors for unsupported vendor paths
-- [ ] **PREP-04**: Preprocessor emits source maps (original line:col → preprocessed line:col)
+- [x] **PREP-01**: User can use {IF defined(NAME)}, {ELSIF}, {ELSE}, {END_IF} for conditional compilation
+- [x] **PREP-02**: User can use {DEFINE NAME} for file-local definitions
+- [x] **PREP-03**: User can use {ERROR "message"} to emit compile errors for unsupported vendor paths
+- [x] **PREP-04**: Preprocessor emits source maps (original line:col → preprocessed line:col)
 - [ ] **PREP-05**: CLI command `stc pp <file> --define VENDOR_BECKHOFF` emits vendor-specific output
 
 ### Type Checking & Semantic Analysis
@@ -187,10 +187,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-03 | Phase 1 | Complete |
 | CLI-04 | Phase 1 | Complete |
 | CLI-05 | Phase 1 | Complete |
-| PREP-01 | Phase 2 | Pending |
-| PREP-02 | Phase 2 | Pending |
-| PREP-03 | Phase 2 | Pending |
-| PREP-04 | Phase 2 | Pending |
+| PREP-01 | Phase 2 | Complete |
+| PREP-02 | Phase 2 | Complete |
+| PREP-03 | Phase 2 | Complete |
+| PREP-04 | Phase 2 | Complete |
 | PREP-05 | Phase 2 | Pending |
 | SEMA-01 | Phase 3 | Pending |
 | SEMA-02 | Phase 3 | Pending |
