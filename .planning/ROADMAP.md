@@ -36,12 +36,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can run `stc --version` and every subcommand supports `--format json`
   4. User can create an `stc.toml` project manifest defining source roots and vendor target
   5. Parser correctly handles CODESYS extensions (OOP, POINTER TO, REFERENCE TO, 64-bit types), all control structures, all VAR sections, arrays, structs, enums, pragmas
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Project bootstrap: Go module, CI, Makefile, foundation packages (source, diag, project)
+- [ ] 01-02-PLAN.md — AST node types: all CST nodes, JSON marshaling, visitor pattern, trivia support
+- [ ] 01-03-PLAN.md — Lexer: tokenizer with full keyword table, trivia, typed literals, nested comments
+- [ ] 01-04-PLAN.md — Parser: recursive descent with Pratt expressions, error recovery, all declarations/statements
+- [ ] 01-05-PLAN.md — CLI: Cobra binary with parse command, version, stubs, integration tests
 
 ### Phase 2: Preprocessor
 **Goal**: Users can write vendor-portable ST using conditional compilation directives and get vendor-specific output with accurate source mapping
@@ -200,7 +202,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Bootstrap & Parser | 0/3 | Not started | - |
+| 1. Project Bootstrap & Parser | 0/5 | Planning complete | - |
 | 2. Preprocessor | 0/1 | Not started | - |
 | 3. Semantic Analysis | 0/2 | Not started | - |
 | 4. Standard Library & Interpreter | 0/3 | Not started | - |
