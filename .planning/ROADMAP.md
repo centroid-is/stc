@@ -43,7 +43,7 @@ Plans:
 - [x] 01-02-PLAN.md — AST node types: all CST nodes, JSON marshaling, visitor pattern, trivia support
 - [x] 01-03-PLAN.md — Lexer: tokenizer with full keyword table, trivia, typed literals, nested comments
 - [x] 01-04-PLAN.md — Parser: recursive descent with Pratt expressions, error recovery, all declarations/statements
-- [ ] 01-05-PLAN.md — CLI: Cobra binary with parse command, version, stubs, integration tests
+- [x] 01-05-PLAN.md — CLI: Cobra binary with parse command, version, stubs, integration tests
 
 ### Phase 2: Preprocessor
 **Goal**: Users can write vendor-portable ST using conditional compilation directives and get vendor-specific output with accurate source mapping
