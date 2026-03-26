@@ -9,15 +9,15 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Parsing
 
-- [ ] **PARS-01**: User can parse IEC 61131-3 Ed.3 ST source files (PROGRAM, FUNCTION_BLOCK, FUNCTION, TYPE declarations)
-- [ ] **PARS-02**: Parser handles CODESYS OOP extensions (METHOD, INTERFACE, PROPERTY, EXTENDS, IMPLEMENTS)
-- [ ] **PARS-03**: Parser handles CODESYS pointer/reference types (POINTER TO, REFERENCE TO)
-- [ ] **PARS-04**: Parser handles 64-bit types (LINT, LREAL, LWORD, ULINT)
+- [x] **PARS-01**: User can parse IEC 61131-3 Ed.3 ST source files (PROGRAM, FUNCTION_BLOCK, FUNCTION, TYPE declarations)
+- [x] **PARS-02**: Parser handles CODESYS OOP extensions (METHOD, INTERFACE, PROPERTY, EXTENDS, IMPLEMENTS)
+- [x] **PARS-03**: Parser handles CODESYS pointer/reference types (POINTER TO, REFERENCE TO)
+- [x] **PARS-04**: Parser handles 64-bit types (LINT, LREAL, LWORD, ULINT)
 - [ ] **PARS-05**: Parser produces partial ASTs from broken code with error nodes (error recovery for LSP)
 - [ ] **PARS-06**: Parser outputs AST as JSON via `stc parse <file> --format json`
 - [ ] **PARS-07**: Parser handles all ST control structures (IF/CASE/FOR/WHILE/REPEAT) with full operator precedence
-- [ ] **PARS-08**: Parser handles VAR sections (VAR, VAR_INPUT, VAR_OUTPUT, VAR_IN_OUT, VAR_TEMP, VAR_GLOBAL)
-- [ ] **PARS-09**: Parser handles arrays, structs, enums, subranges, typed literals
+- [x] **PARS-08**: Parser handles VAR sections (VAR, VAR_INPUT, VAR_OUTPUT, VAR_IN_OUT, VAR_TEMP, VAR_GLOBAL)
+- [x] **PARS-09**: Parser handles arrays, structs, enums, subranges, typed literals
 - [ ] **PARS-10**: Parser handles {attribute '...'} pragmas (Beckhoff-style)
 
 ### Preprocessor
@@ -172,15 +172,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PARS-01 | Phase 1 | Pending |
-| PARS-02 | Phase 1 | Pending |
-| PARS-03 | Phase 1 | Pending |
-| PARS-04 | Phase 1 | Pending |
+| PARS-01 | Phase 1 | Complete |
+| PARS-02 | Phase 1 | Complete |
+| PARS-03 | Phase 1 | Complete |
+| PARS-04 | Phase 1 | Complete |
 | PARS-05 | Phase 1 | Pending |
 | PARS-06 | Phase 1 | Pending |
 | PARS-07 | Phase 1 | Pending |
-| PARS-08 | Phase 1 | Pending |
-| PARS-09 | Phase 1 | Pending |
+| PARS-08 | Phase 1 | Complete |
+| PARS-09 | Phase 1 | Complete |
 | PARS-10 | Phase 1 | Pending |
 | CLI-01 | Phase 1 | Pending |
 | CLI-02 | Phase 1 | Pending |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-26T16:39:16.956Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-26T16:41:28.331Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 01 (project-bootstrap-parser) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-03-26
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 2min | 2 tasks | 14 files |
+| Phase 01 P02 | 5min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Recent decisions affecting current work:
 - [Init]: Beckhoff + Schneider first, Allen Bradley deferred to v2
 - [Init]: GitHub-first — all work via PRs, CI on macOS/Windows/Linux, agent PR reviews
 - [Phase 01]: Go 1.22 minimum in go.mod; Pos uses 1-based line/col; Diagnostic format file:line:col: severity: message
+- [Phase 01]: Local Pos/Span types in ast package to avoid circular imports with future source package
+- [Phase 01]: JSON marshaling via centralized nodeToMap dispatch with kind discriminator on every node
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T16:39:16.954Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-03-26T16:41:28.329Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
