@@ -1,0 +1,5 @@
+/stc
+coverage.out
+*.exe
+.DS_Store
+/vendor/
