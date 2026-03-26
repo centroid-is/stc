@@ -185,6 +185,12 @@ type ErrorNode struct {
 // Children returns an empty slice (error nodes have no children).
 func (n *ErrorNode) Children() []Node { return nil }
 
+// ErrorNode satisfies Declaration, Statement, and Expr interfaces for error recovery.
+func (n *ErrorNode) declNode()     {}
+func (n *ErrorNode) stmtNode()     {}
+func (n *ErrorNode) exprNode()     {}
+func (n *ErrorNode) typeSpecNode() {}
+
 // Ident represents an identifier reference.
 type Ident struct {
 	NodeBase
