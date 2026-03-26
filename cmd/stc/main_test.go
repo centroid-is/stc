@@ -170,3 +170,124 @@ func TestCLI_FormatFlag(t *testing.T) {
 		t.Fatalf("output should be valid JSON with -f flag:\n%s", stdout)
 	}
 }
+
+// --- Preprocessor (pp) integration tests ---
+
+func TestPpBeckhoff(t *testing.T) {
+	stdout, _, exitCode := runStc(t, "pp", "../../testdata/preprocess/vendor_portable.st", "--define", "VENDOR_BECKHOFF")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "Beckhoff path") {
+		t.Errorf("output should contain 'Beckhoff path', got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Schneider path") {
+		t.Errorf("output should NOT contain 'Schneider path', got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Generic path") {
+		t.Errorf("output should NOT contain 'Generic path', got:\n%s", stdout)
+	}
+}
+
+func TestPpSchneider(t *testing.T) {
+	stdout, _, exitCode := runStc(t, "pp", "../../testdata/preprocess/vendor_portable.st", "--define", "VENDOR_SCHNEIDER")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "Schneider path") {
+		t.Errorf("output should contain 'Schneider path', got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Beckhoff path") {
+		t.Errorf("output should NOT contain 'Beckhoff path', got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Generic path") {
+		t.Errorf("output should NOT contain 'Generic path', got:\n%s", stdout)
+	}
+}
+
+func TestPpNoDef(t *testing.T) {
+	stdout, _, exitCode := runStc(t, "pp", "../../testdata/preprocess/vendor_portable.st")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "Generic path") {
+		t.Errorf("output should contain 'Generic path', got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Beckhoff path") {
+		t.Errorf("output should NOT contain 'Beckhoff path', got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Schneider path") {
+		t.Errorf("output should NOT contain 'Schneider path', got:\n%s", stdout)
+	}
+}
+
+func TestPpDefineLocal(t *testing.T) {
+	stdout, _, exitCode := runStc(t, "pp", "../../testdata/preprocess/define_local.st")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "y := TRUE") {
+		t.Errorf("output should contain 'y := TRUE' (feature-gated block), got:\n%s", stdout)
+	}
+}
+
+func TestPpErrorActive(t *testing.T) {
+	_, stderr, exitCode := runStc(t, "pp", "../../testdata/preprocess/error_directive.st")
+	if exitCode == 0 {
+		t.Fatal("expected non-zero exit code when ERROR directive is active")
+	}
+	if !strings.Contains(stderr, "No supported vendor") {
+		t.Errorf("stderr should contain error message, got: %s", stderr)
+	}
+}
+
+func TestPpErrorInactive(t *testing.T) {
+	_, _, exitCode := runStc(t, "pp", "../../testdata/preprocess/error_directive.st", "--define", "VENDOR_BECKHOFF")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0 when ERROR is in inactive branch, got %d", exitCode)
+	}
+}
+
+func TestPpJsonOutput(t *testing.T) {
+	stdout, _, exitCode := runStc(t, "pp", "../../testdata/preprocess/vendor_portable.st", "--define", "VENDOR_BECKHOFF", "--format", "json")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", exitCode)
+	}
+	if !json.Valid([]byte(stdout)) {
+		t.Fatalf("output should be valid JSON:\n%s", stdout)
+	}
+	// Unmarshal and verify structure.
+	var result struct {
+		File        string          `json:"file"`
+		Output      string          `json:"output"`
+		SourceMap   json.RawMessage `json:"source_map"`
+		Diagnostics json.RawMessage `json:"diagnostics"`
+		HasErrors   bool            `json:"has_errors"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to unmarshal JSON: %v", err)
+	}
+	if !strings.Contains(result.Output, "Beckhoff path") {
+		t.Errorf("JSON output field should contain 'Beckhoff path', got: %s", result.Output)
+	}
+	if result.SourceMap == nil || string(result.SourceMap) == "null" {
+		t.Error("source_map should be present and non-null")
+	}
+	if result.Diagnostics == nil || string(result.Diagnostics) == "null" {
+		t.Error("diagnostics should be present and non-null")
+	}
+	if result.HasErrors {
+		t.Error("has_errors should be false for valid input")
+	}
+}
+
+func TestPpFileNotFound(t *testing.T) {
+	_, stderr, exitCode := runStc(t, "pp", "nonexistent_file.st")
+	if exitCode == 0 {
+		t.Fatal("expected non-zero exit code for nonexistent file")
+	}
+	if !strings.Contains(stderr, "no such file") && !strings.Contains(stderr, "not found") &&
+		!strings.Contains(stderr, "cannot find") && !strings.Contains(stderr, "error") {
+		t.Errorf("stderr should mention file error, got: %s", stderr)
+	}
+}
