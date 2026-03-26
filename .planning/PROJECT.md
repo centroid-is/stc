@@ -60,6 +60,13 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 - **Determinism**: All test execution must be deterministic — no wall-clock dependencies
 - **Machine-readable output**: Every CLI command supports `--format json`
 
+## Development Workflow
+
+- **GitHub-first delivery**: All work delivered via PRs to `centroid-is/stc` — do not commit directly to main
+- **Multi-platform CI**: GitHub Actions workflows must test on macOS, Windows, and Linux
+- **Agent PR reviews**: Use other agents to review PRs before merging
+- **Open repository**: Public repo, free use of all GitHub features (Actions, Issues, PRs, Releases)
+
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
