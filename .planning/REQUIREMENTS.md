@@ -111,8 +111,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **CLI-01**: Single binary `stc` with subcommands: parse, check, test, emit, lint, fmt, pp
 - [ ] **CLI-02**: Every subcommand supports `--format json` for machine-readable output
 - [ ] **CLI-03**: `stc --version` outputs version information
-- [ ] **CLI-04**: Project manifest (stc.toml) defines source roots, vendor target, library paths
-- [ ] **CLI-05**: All diagnostics include file:line:col with actionable error messages
+- [x] **CLI-04**: Project manifest (stc.toml) defines source roots, vendor target, library paths
+- [x] **CLI-05**: All diagnostics include file:line:col with actionable error messages
 
 ### MCP Server
 
@@ -185,8 +185,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-01 | Phase 1 | Pending |
 | CLI-02 | Phase 1 | Pending |
 | CLI-03 | Phase 1 | Pending |
-| CLI-04 | Phase 1 | Pending |
-| CLI-05 | Phase 1 | Pending |
+| CLI-04 | Phase 1 | Complete |
+| CLI-05 | Phase 1 | Complete |
 | PREP-01 | Phase 2 | Pending |
 | PREP-02 | Phase 2 | Pending |
 | PREP-03 | Phase 2 | Pending |
