@@ -12,7 +12,10 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 
 ### Validated
 
-(None yet — ship to validate)
+- IEC 61131-3 Ed.3 parser with CODESYS OOP extensions — Validated in Phase 1
+- CLI binary with JSON output (`stc parse --format json`) — Validated in Phase 1
+- Error-recovering parser producing partial ASTs — Validated in Phase 1
+- Project manifest (stc.toml) support — Validated in Phase 1
 
 ### Active
 
