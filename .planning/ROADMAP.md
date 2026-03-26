@@ -42,7 +42,7 @@ Plans:
 - [x] 01-01-PLAN.md — Project bootstrap: Go module, CI, Makefile, foundation packages (source, diag, project)
 - [x] 01-02-PLAN.md — AST node types: all CST nodes, JSON marshaling, visitor pattern, trivia support
 - [x] 01-03-PLAN.md — Lexer: tokenizer with full keyword table, trivia, typed literals, nested comments
-- [ ] 01-04-PLAN.md — Parser: recursive descent with Pratt expressions, error recovery, all declarations/statements
+- [x] 01-04-PLAN.md — Parser: recursive descent with Pratt expressions, error recovery, all declarations/statements
 - [ ] 01-05-PLAN.md — CLI: Cobra binary with parse command, version, stubs, integration tests
 
 ### Phase 2: Preprocessor

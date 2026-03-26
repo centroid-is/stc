@@ -13,7 +13,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **PARS-02**: Parser handles CODESYS OOP extensions (METHOD, INTERFACE, PROPERTY, EXTENDS, IMPLEMENTS)
 - [x] **PARS-03**: Parser handles CODESYS pointer/reference types (POINTER TO, REFERENCE TO)
 - [x] **PARS-04**: Parser handles 64-bit types (LINT, LREAL, LWORD, ULINT)
-- [ ] **PARS-05**: Parser produces partial ASTs from broken code with error nodes (error recovery for LSP)
+- [x] **PARS-05**: Parser produces partial ASTs from broken code with error nodes (error recovery for LSP)
 - [ ] **PARS-06**: Parser outputs AST as JSON via `stc parse <file> --format json`
 - [x] **PARS-07**: Parser handles all ST control structures (IF/CASE/FOR/WHILE/REPEAT) with full operator precedence
 - [x] **PARS-08**: Parser handles VAR sections (VAR, VAR_INPUT, VAR_OUTPUT, VAR_IN_OUT, VAR_TEMP, VAR_GLOBAL)
@@ -176,7 +176,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PARS-02 | Phase 1 | Complete |
 | PARS-03 | Phase 1 | Complete |
 | PARS-04 | Phase 1 | Complete |
-| PARS-05 | Phase 1 | Pending |
+| PARS-05 | Phase 1 | Complete |
 | PARS-06 | Phase 1 | Pending |
 | PARS-07 | Phase 1 | Complete |
 | PARS-08 | Phase 1 | Complete |
