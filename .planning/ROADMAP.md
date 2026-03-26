@@ -53,10 +53,11 @@ Plans:
   1. User can use `{IF defined(VENDOR_BECKHOFF)}` / `{ELSIF}` / `{ELSE}` / `{END_IF}` directives in ST source to conditionally include vendor-specific code
   2. User can run `stc pp <file> --define VENDOR_BECKHOFF` and get preprocessed output with only the Beckhoff-specific paths included
   3. Preprocessor emits source maps so that downstream diagnostics reference original file:line:col, not preprocessed positions
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — Preprocessor core: directive parser, condition evaluator, source map, Preprocess function
+- [ ] 02-02-PLAN.md — CLI pp command: --define flag, text/JSON output, integration tests
 
 ### Phase 3: Semantic Analysis
 **Goal**: Users get type errors, undeclared variable warnings, and vendor-aware diagnostics with actionable messages before ever touching a PLC
@@ -202,8 +203,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Project Bootstrap & Parser | 0/5 | Planning complete | - |
-| 2. Preprocessor | 0/1 | Not started | - |
+| 1. Project Bootstrap & Parser | 5/5 | Complete | 2026-03-26 |
+| 2. Preprocessor | 0/2 | Planning complete | - |
 | 3. Semantic Analysis | 0/2 | Not started | - |
 | 4. Standard Library & Interpreter | 0/3 | Not started | - |
 | 5. Testing Framework | 0/2 | Not started | - |
