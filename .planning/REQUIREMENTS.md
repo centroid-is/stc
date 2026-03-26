@@ -26,7 +26,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **PREP-02**: User can use {DEFINE NAME} for file-local definitions
 - [x] **PREP-03**: User can use {ERROR "message"} to emit compile errors for unsupported vendor paths
 - [x] **PREP-04**: Preprocessor emits source maps (original line:col → preprocessed line:col)
-- [ ] **PREP-05**: CLI command `stc pp <file> --define VENDOR_BECKHOFF` emits vendor-specific output
+- [x] **PREP-05**: CLI command `stc pp <file> --define VENDOR_BECKHOFF` emits vendor-specific output
 
 ### Type Checking & Semantic Analysis
 
@@ -191,7 +191,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PREP-02 | Phase 2 | Complete |
 | PREP-03 | Phase 2 | Complete |
 | PREP-04 | Phase 2 | Complete |
-| PREP-05 | Phase 2 | Pending |
+| PREP-05 | Phase 2 | Complete |
 | SEMA-01 | Phase 3 | Pending |
 | SEMA-02 | Phase 3 | Pending |
 | SEMA-03 | Phase 3 | Pending |
