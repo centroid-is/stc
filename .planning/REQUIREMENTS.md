@@ -15,10 +15,10 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **PARS-04**: Parser handles 64-bit types (LINT, LREAL, LWORD, ULINT)
 - [ ] **PARS-05**: Parser produces partial ASTs from broken code with error nodes (error recovery for LSP)
 - [ ] **PARS-06**: Parser outputs AST as JSON via `stc parse <file> --format json`
-- [ ] **PARS-07**: Parser handles all ST control structures (IF/CASE/FOR/WHILE/REPEAT) with full operator precedence
+- [x] **PARS-07**: Parser handles all ST control structures (IF/CASE/FOR/WHILE/REPEAT) with full operator precedence
 - [x] **PARS-08**: Parser handles VAR sections (VAR, VAR_INPUT, VAR_OUTPUT, VAR_IN_OUT, VAR_TEMP, VAR_GLOBAL)
 - [x] **PARS-09**: Parser handles arrays, structs, enums, subranges, typed literals
-- [ ] **PARS-10**: Parser handles {attribute '...'} pragmas (Beckhoff-style)
+- [x] **PARS-10**: Parser handles {attribute '...'} pragmas (Beckhoff-style)
 
 ### Preprocessor
 
@@ -178,10 +178,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PARS-04 | Phase 1 | Complete |
 | PARS-05 | Phase 1 | Pending |
 | PARS-06 | Phase 1 | Pending |
-| PARS-07 | Phase 1 | Pending |
+| PARS-07 | Phase 1 | Complete |
 | PARS-08 | Phase 1 | Complete |
 | PARS-09 | Phase 1 | Complete |
-| PARS-10 | Phase 1 | Pending |
+| PARS-10 | Phase 1 | Complete |
 | CLI-01 | Phase 1 | Pending |
 | CLI-02 | Phase 1 | Pending |
 | CLI-03 | Phase 1 | Pending |

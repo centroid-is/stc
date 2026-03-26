@@ -41,7 +41,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Project bootstrap: Go module, CI, Makefile, foundation packages (source, diag, project)
 - [x] 01-02-PLAN.md — AST node types: all CST nodes, JSON marshaling, visitor pattern, trivia support
-- [ ] 01-03-PLAN.md — Lexer: tokenizer with full keyword table, trivia, typed literals, nested comments
+- [x] 01-03-PLAN.md — Lexer: tokenizer with full keyword table, trivia, typed literals, nested comments
 - [ ] 01-04-PLAN.md — Parser: recursive descent with Pratt expressions, error recovery, all declarations/statements
 - [ ] 01-05-PLAN.md — CLI: Cobra binary with parse command, version, stubs, integration tests
 
