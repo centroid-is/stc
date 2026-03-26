@@ -1,0 +1,13 @@
+[project]
+name = "test-project"
+version = "1.0.0"
+
+[build]
+source_roots = ["src/", "lib/"]
+vendor_target = "beckhoff"
+
+[build.library_paths]
+oscat = "vendor/oscat/"
+
+[lint]
+naming_convention = "PascalCase"
