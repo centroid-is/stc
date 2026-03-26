@@ -135,7 +135,7 @@ func TestCLI_ParseNonexistentFile(t *testing.T) {
 }
 
 func TestCLI_StubCommands(t *testing.T) {
-	for _, sub := range []string{"check", "test", "emit", "lint", "fmt", "pp"} {
+	for _, sub := range []string{"check", "test", "emit", "lint", "fmt"} {
 		t.Run(sub, func(t *testing.T) {
 			_, stderr, exitCode := runStc(t, sub)
 			if exitCode != 0 {

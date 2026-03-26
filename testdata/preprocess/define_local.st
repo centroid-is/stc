@@ -1,0 +1,9 @@
+{DEFINE USE_FEATURE}
+PROGRAM Main
+VAR
+    y : BOOL;
+END_VAR
+{IF defined(USE_FEATURE)}
+    y := TRUE;
+{END_IF}
+END_PROGRAM

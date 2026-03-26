@@ -51,7 +51,3 @@ func newLintCmd() *cobra.Command {
 func newFmtCmd() *cobra.Command {
 	return stubCommand("fmt", "Format ST source files")
 }
-
-func newPpCmd() *cobra.Command {
-	return stubCommand("pp", "Preprocess ST source files")
-}

@@ -45,6 +45,13 @@ func (sm *SourceMap) OriginalPos(preprocLine, preprocCol int) source.Pos {
 	return source.Pos{}
 }
 
+// Mappings returns a copy of all mappings in the source map.
+func (sm *SourceMap) Mappings() []Mapping {
+	out := make([]Mapping, len(sm.mappings))
+	copy(out, sm.mappings)
+	return out
+}
+
 // Len returns the number of mappings in the source map.
 func (sm *SourceMap) Len() int {
 	return len(sm.mappings)
