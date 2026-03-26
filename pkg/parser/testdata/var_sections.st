@@ -1,0 +1,21 @@
+FUNCTION_BLOCK FB_VarTest
+VAR_INPUT
+    start : BOOL;
+    speed : INT;
+END_VAR
+VAR_OUTPUT
+    running : BOOL;
+END_VAR
+VAR_IN_OUT
+    counter : INT;
+END_VAR
+VAR_TEMP
+    temp : REAL;
+END_VAR
+VAR CONSTANT
+    MAX_SPEED : INT := 100;
+END_VAR
+VAR RETAIN
+    totalRuns : DINT;
+END_VAR
+END_FUNCTION_BLOCK

@@ -1,0 +1,9 @@
+FUNCTION_BLOCK FB_Broken
+VAR_INPUT
+    x : BOOL;
+END_VAR
+IF x THEN
+    y := ;
+END_IF;
+z := 42;
+END_FUNCTION_BLOCK

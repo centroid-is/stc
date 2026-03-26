@@ -1,0 +1,9 @@
+FUNCTION_BLOCK FB_PtrTest
+VAR
+    px : POINTER TO INT;
+    rx : REFERENCE TO REAL;
+    arr : ARRAY[0..9] OF POINTER TO BOOL;
+END_VAR
+    px^ := 42;
+    rx := px^;
+END_FUNCTION_BLOCK

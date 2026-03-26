@@ -129,7 +129,12 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 }
 
 // isMethodStart looks ahead to determine if the current position starts a METHOD.
+// Handles both "METHOD PUBLIC name" and "PUBLIC METHOD name" orderings.
 func (p *Parser) isMethodStart() bool {
+	// If directly at METHOD, it's a method
+	if p.at(lexer.KwMethod) {
+		return true
+	}
 	saved := p.pos
 	defer func() { p.pos = saved }()
 
@@ -246,31 +251,34 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 	}
 }
 
-// parseMethod parses [access] [ABSTRACT|FINAL|OVERRIDE] METHOD name [: returnType] ... END_METHOD
+// parseMethod parses METHOD [access] [ABSTRACT|FINAL|OVERRIDE] name [: returnType] ... END_METHOD
+// Also supports [access] METHOD ... ordering for pre-METHOD modifiers.
 func (p *Parser) parseMethod() *ast.MethodDecl {
 	startTok := p.peek()
 
-	// Parse access modifier
 	access := ast.AccessNone
-	switch p.peek().Kind {
-	case lexer.KwPublic:
-		access = ast.AccessPublic
-		p.advance()
-	case lexer.KwPrivate:
-		access = ast.AccessPrivate
-		p.advance()
-	case lexer.KwProtected:
-		access = ast.AccessProtected
-		p.advance()
-	case lexer.KwInternal:
-		access = ast.AccessInternal
-		p.advance()
-	}
-
-	// Parse flags
 	var isAbstract, isFinal, isOverride bool
+
+	// Modifiers can appear before or after METHOD keyword.
+	// First, consume any pre-METHOD modifiers.
 	for {
 		switch p.peek().Kind {
+		case lexer.KwPublic:
+			access = ast.AccessPublic
+			p.advance()
+			continue
+		case lexer.KwPrivate:
+			access = ast.AccessPrivate
+			p.advance()
+			continue
+		case lexer.KwProtected:
+			access = ast.AccessProtected
+			p.advance()
+			continue
+		case lexer.KwInternal:
+			access = ast.AccessInternal
+			p.advance()
+			continue
 		case lexer.KwAbstract:
 			isAbstract = true
 			p.advance()
@@ -288,6 +296,42 @@ func (p *Parser) parseMethod() *ast.MethodDecl {
 	}
 
 	p.expect(lexer.KwMethod)
+
+	// Modifiers can also appear after METHOD keyword.
+	for {
+		switch p.peek().Kind {
+		case lexer.KwPublic:
+			access = ast.AccessPublic
+			p.advance()
+			continue
+		case lexer.KwPrivate:
+			access = ast.AccessPrivate
+			p.advance()
+			continue
+		case lexer.KwProtected:
+			access = ast.AccessProtected
+			p.advance()
+			continue
+		case lexer.KwInternal:
+			access = ast.AccessInternal
+			p.advance()
+			continue
+		case lexer.KwAbstract:
+			isAbstract = true
+			p.advance()
+			continue
+		case lexer.KwFinal:
+			isFinal = true
+			p.advance()
+			continue
+		case lexer.KwOverride:
+			isOverride = true
+			p.advance()
+			continue
+		}
+		break
+	}
+
 	name := p.parseIdent()
 
 	var returnType ast.TypeSpec

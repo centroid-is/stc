@@ -1,0 +1,26 @@
+INTERFACE IMotor
+METHOD Start : BOOL
+END_METHOD
+METHOD Stop : BOOL
+END_METHOD
+END_INTERFACE
+
+FUNCTION_BLOCK FB_Motor EXTENDS FB_Base IMPLEMENTS IMotor
+VAR
+    _running : BOOL;
+END_VAR
+METHOD PUBLIC Start : BOOL
+VAR_TEMP
+    prev : BOOL;
+END_VAR
+    prev := _running;
+    _running := TRUE;
+    Start := NOT prev;
+END_METHOD
+METHOD PUBLIC OVERRIDE Stop : BOOL
+    _running := FALSE;
+    Stop := TRUE;
+END_METHOD
+PROPERTY Running : BOOL
+END_PROPERTY
+END_FUNCTION_BLOCK
