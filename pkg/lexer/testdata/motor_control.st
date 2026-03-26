@@ -1,0 +1,12 @@
+FUNCTION_BLOCK FB_Motor
+VAR_INPUT
+    Start : BOOL;
+    Stop  : BOOL;
+END_VAR
+VAR_OUTPUT
+    Running : BOOL;
+END_VAR
+IF Start AND NOT Stop THEN
+    Running := TRUE;
+END_IF;
+END_FUNCTION_BLOCK
