@@ -1,0 +1,18 @@
+FUNCTION_BLOCK MyFB
+VAR
+    counter : INT;
+END_VAR
+
+METHOD PUBLIC DoWork : BOOL
+VAR_INPUT
+    value : INT;
+END_VAR
+    DoWork := value > 0;
+END_METHOD
+
+END_FUNCTION_BLOCK
+
+INTERFACE IRunnable
+    METHOD Run : BOOL
+    END_METHOD
+END_INTERFACE
