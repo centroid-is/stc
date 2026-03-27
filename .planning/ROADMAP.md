@@ -72,7 +72,7 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Type system: IEC type lattice, widening rules, built-in type constants and function signatures
+- [x] 03-01-PLAN.md — Type system: IEC type lattice, widening rules, built-in type constants and function signatures
 - [x] 03-02-PLAN.md — Symbol table: hierarchical scope chain, case-insensitive lookup, POU registry
 - [ ] 03-03-PLAN.md — Two-pass checker: declaration resolution (pass 1) and expression/statement type checking (pass 2)
 - [ ] 03-04-PLAN.md — Vendor profiles and usage analysis: vendor-aware warnings, unused variables, unreachable code
