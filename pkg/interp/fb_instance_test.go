@@ -332,9 +332,17 @@ func TestFBMemberAccessInput(t *testing.T) {
 }
 
 func TestStdlibFBFactory(t *testing.T) {
-	// Factory should be an empty map by default
+	// Factory should contain all standard library FBs
 	assert.NotNil(t, StdlibFBFactory)
-	assert.Empty(t, StdlibFBFactory)
+	expectedFBs := []string{"TON", "TOF", "TP", "CTU", "CTD", "CTUD", "R_TRIG", "F_TRIG", "SR", "RS"}
+	for _, name := range expectedFBs {
+		factory, ok := StdlibFBFactory[name]
+		assert.True(t, ok, "StdlibFBFactory should contain %s", name)
+		if ok {
+			fb := factory()
+			assert.NotNil(t, fb, "%s factory should return non-nil StandardFB", name)
+		}
+	}
 }
 
 func TestUserFBInitializesVarsFromType(t *testing.T) {
