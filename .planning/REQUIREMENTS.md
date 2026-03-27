@@ -33,8 +33,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SEMA-01**: User gets type mismatch errors with file:line:col and actionable messages
 - [ ] **SEMA-02**: Type checker resolves all IEC primitive types (BOOL, BYTE, WORD, DWORD, SINT, INT, DINT, LINT, USINT, UINT, UDINT, ULINT, REAL, LREAL, STRING, WSTRING, TIME, DATE, DT, TOD)
 - [ ] **SEMA-03**: Type checker handles arrays, structs, enums, FB instances, method calls
-- [ ] **SEMA-04**: Type checker detects undeclared variables, unused variables, unreachable code
-- [ ] **SEMA-05**: Type checker handles cross-file symbol resolution (multi-file projects)
+- [x] **SEMA-04**: Type checker detects undeclared variables, unused variables, unreachable code
+- [x] **SEMA-05**: Type checker handles cross-file symbol resolution (multi-file projects)
 - [ ] **SEMA-06**: CLI command `stc check <files...> --format json` outputs diagnostics
 - [ ] **SEMA-07**: Vendor-aware diagnostics warn when using constructs unsupported by target vendor
 
@@ -195,8 +195,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEMA-01 | Phase 3 | Pending |
 | SEMA-02 | Phase 3 | Pending |
 | SEMA-03 | Phase 3 | Pending |
-| SEMA-04 | Phase 3 | Pending |
-| SEMA-05 | Phase 3 | Pending |
+| SEMA-04 | Phase 3 | Complete |
+| SEMA-05 | Phase 3 | Complete |
 | SEMA-06 | Phase 3 | Pending |
 | SEMA-07 | Phase 3 | Pending |
 | STLB-01 | Phase 4 | Pending |
