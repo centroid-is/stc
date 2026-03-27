@@ -16,6 +16,9 @@ import (
 type Interpreter struct {
 	// MaxLoopIterations is a safety limit for while/repeat loops.
 	MaxLoopIterations int
+
+	// dt is the current scan cycle delta time, passed to FB Execute calls.
+	dt time.Duration
 }
 
 // New creates a new Interpreter with default settings.
@@ -46,8 +49,7 @@ func (interp *Interpreter) evalExpr(env *Env, expr ast.Expr) (Value, error) {
 		// Stub: will be wired in plan 02/05 for function/FB calls
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("call expressions not yet implemented: %v", e.Callee)}
 	case *ast.MemberAccessExpr:
-		// Stub: will be wired in plan 02 for FB instance member access
-		return Value{}, &RuntimeError{Msg: fmt.Sprintf("member access not yet implemented: %v", e.Member)}
+		return interp.evalMemberAccess(env, e)
 	case *ast.DerefExpr:
 		return Value{}, &RuntimeError{Msg: "pointer dereference not yet implemented"}
 	case *ast.ErrorNode:
@@ -473,8 +475,7 @@ func (interp *Interpreter) execStmt(env *Env, stmt ast.Statement) error {
 	case *ast.EmptyStmt:
 		return nil
 	case *ast.CallStmt:
-		// Stub: will be wired in plan 02 for FB calls
-		return nil
+		return interp.execCallStmt(env, s)
 	case *ast.ErrorNode:
 		return &RuntimeError{Msg: fmt.Sprintf("cannot execute error node: %s", s.Message)}
 	default:
@@ -499,8 +500,7 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 	case *ast.IndexExpr:
 		return interp.execAssignIndex(env, target, val)
 	case *ast.MemberAccessExpr:
-		// Stub: will be wired in plan 02
-		return &RuntimeError{Msg: "member assignment not yet implemented"}
+		return interp.execAssignMember(env, target, val)
 	default:
 		return &RuntimeError{Msg: fmt.Sprintf("unsupported assignment target: %T", s.Target)}
 	}
@@ -781,4 +781,127 @@ func valuesInRange(v, low, high Value) bool {
 	lf := toFloat(low)
 	hf := toFloat(high)
 	return vf >= lf && vf <= hf
+}
+
+// --- FB call and member access ---
+
+// execCallStmt handles function block call statements: fbInst(IN := val, ...)
+// It resolves the callee in the environment, sets inputs from named args,
+// executes the FB, and copies output args back to the env.
+func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
+	// Resolve callee
+	calleeIdent, ok := s.Callee.(*ast.Ident)
+	if !ok {
+		return &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", s.Callee)}
+	}
+
+	v, found := env.Get(calleeIdent.Name)
+	if !found {
+		return &RuntimeError{Msg: fmt.Sprintf("undefined: %s", calleeIdent.Name)}
+	}
+	if v.Kind != ValFBInstance || v.FBRef == nil {
+		return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", calleeIdent.Name)}
+	}
+
+	fbInst := v.FBRef
+
+	// Set input args
+	for _, arg := range s.Args {
+		if arg.IsOutput {
+			// Output binding (=>) — skip during input phase
+			continue
+		}
+		if arg.Name == nil {
+			continue
+		}
+		argVal, err := interp.evalExpr(env, arg.Value)
+		if err != nil {
+			return err
+		}
+		fbInst.SetInput(arg.Name.Name, argVal)
+	}
+
+	// Execute the FB
+	fbInst.Execute(interp.dt, interp)
+
+	// Copy output args back (=> bindings)
+	for _, arg := range s.Args {
+		if !arg.IsOutput {
+			continue
+		}
+		if arg.Name == nil || arg.Value == nil {
+			continue
+		}
+		outVal := fbInst.GetOutput(arg.Name.Name)
+		// The value expression should be an identifier to assign to
+		if targetIdent, ok := arg.Value.(*ast.Ident); ok {
+			if !env.Set(targetIdent.Name, outVal) {
+				env.Define(targetIdent.Name, outVal)
+			}
+		}
+	}
+
+	return nil
+}
+
+// evalMemberAccess evaluates obj.member where obj may be an FB instance or struct.
+func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (Value, error) {
+	obj, err := interp.evalExpr(env, e.Object)
+	if err != nil {
+		return Value{}, err
+	}
+
+	memberName := e.Member.Name
+
+	switch obj.Kind {
+	case ValFBInstance:
+		if obj.FBRef == nil {
+			return Value{}, &RuntimeError{Msg: "nil FB instance reference"}
+		}
+		fbInst := obj.FBRef
+		return fbInst.GetMember(memberName), nil
+	case ValStruct:
+		if obj.Struct != nil {
+			key := strings.ToUpper(memberName)
+			if v, ok := obj.Struct[key]; ok {
+				return v, nil
+			}
+		}
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("struct has no member '%s'", memberName)}
+	default:
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot access member '%s' on %s", memberName, obj.Kind)}
+	}
+}
+
+// execAssignMember handles assignment to a member: obj.member := val
+func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessExpr, val Value) error {
+	obj, err := interp.evalExpr(env, target.Object)
+	if err != nil {
+		return err
+	}
+
+	memberName := target.Member.Name
+
+	switch obj.Kind {
+	case ValFBInstance:
+		if obj.FBRef == nil {
+			return &RuntimeError{Msg: "nil FB instance reference"}
+		}
+		fbInst := obj.FBRef
+		fbInst.SetInput(memberName, val)
+		return nil
+	case ValStruct:
+		if obj.Struct != nil {
+			key := strings.ToUpper(memberName)
+			obj.Struct[key] = val
+			// Write back the struct to the env
+			if objIdent, ok := target.Object.(*ast.Ident); ok {
+				env.Set(objIdent.Name, obj)
+			}
+			return nil
+		}
+		return &RuntimeError{Msg: fmt.Sprintf("struct has no member '%s'", memberName)}
+	default:
+		return &RuntimeError{Msg: fmt.Sprintf("cannot assign member '%s' on %s", memberName, obj.Kind)}
+	}
 }

@@ -59,7 +59,7 @@ type Value struct {
 	Time    time.Duration
 	Array   []Value
 	Struct  map[string]Value
-	FBRef   any            // *FBInstance -- forward-declared as any for now
+	FBRef   *FBInstance     // Reference to a function block instance
 	IECType types.TypeKind // Tracks the precise IEC type for conversions
 }
 
