@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-27T21:56:25.635Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-27T22:04:39.419Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 11
   completed_phases: 3
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 15
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 04 (standard-library-interpreter) — EXECUTING
-Plan: 2 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-03-27
 
@@ -65,6 +65,8 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P03 | 634s | 2 tasks | 12 files |
 | Phase 03 P05 | 236s | 2 tasks | 9 files |
 | Phase 04 P01 | 5min | 2 tasks | 7 files |
+| Phase 04 P03 | 361s | 2 tasks | 6 files |
+| Phase 04 P02 | 6min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -105,6 +107,12 @@ Recent decisions affecting current work:
 - [Phase 04]: Tagged union Value with IECType tracks precise IEC type through runtime
 - [Phase 04]: Control flow (RETURN/EXIT/CONTINUE) uses typed error values for stack unwinding
 - [Phase 04]: Power (**) always returns real via math.Pow per IEC EXPT semantics
+- [Phase 04]: StdlibFunctions as package-level map populated via init() for simple function registration
+- [Phase 04]: IEC 1-based string indexing with goIdx = iecPos - 1 conversion; FIND returns 0 for not-found
+- [Phase 04]: REAL_TO_INT uses math.RoundToEven for IEC-standard banker's rounding
+- [Phase 04]: FBRef field changed from any to *FBInstance for type safety
+- [Phase 04]: ScanCycleEngine lazy-initializes env on first Tick, not at construction
+- [Phase 04]: GetMember resolves outputs first then inputs matching PLC convention
 
 ### Pending Todos
 
@@ -118,6 +126,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T21:56:25.632Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-27T22:04:39.417Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
