@@ -91,7 +91,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Interpreter core: Value type, Env scoping, expression/statement evaluation engine
+- [x] 04-01-PLAN.md — Interpreter core: Value type, Env scoping, expression/statement evaluation engine
 - [ ] 04-02-PLAN.md — Scan cycle engine: FB instance management, Tick(dt), I/O table, deterministic clock
 - [ ] 04-03-PLAN.md — Standard library functions: math, string (1-based indexing), type conversion (banker's rounding)
 - [ ] 04-04-PLAN.md — Standard library FBs (timers, counters, edge, bistable) and integration wiring

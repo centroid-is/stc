@@ -59,7 +59,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **INTP-01**: Interpreter executes typed AST with scan-cycle semantics (read inputs → execute → write outputs)
 - [ ] **INTP-02**: Interpreter supports deterministic time advancement (no wall-clock dependency)
 - [ ] **INTP-03**: Interpreter can set/get inputs and outputs programmatically for testing
-- [ ] **INTP-04**: Interpreter handles all ST control structures, expressions, and FB instance calls
+- [x] **INTP-04**: Interpreter handles all ST control structures, expressions, and FB instance calls
 
 ### Testing
 
@@ -210,7 +210,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INTP-01 | Phase 4 | Pending |
 | INTP-02 | Phase 4 | Pending |
 | INTP-03 | Phase 4 | Pending |
-| INTP-04 | Phase 4 | Pending |
+| INTP-04 | Phase 4 | Complete |
 | TEST-01 | Phase 5 | Pending |
 | TEST-02 | Phase 5 | Pending |
 | TEST-03 | Phase 5 | Pending |
