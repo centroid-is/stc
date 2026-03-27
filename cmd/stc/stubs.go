@@ -32,10 +32,6 @@ func stubCommand(use, short string) *cobra.Command {
 	}
 }
 
-func newCheckCmd() *cobra.Command {
-	return stubCommand("check", "Type-check ST source files")
-}
-
 func newTestCmd() *cobra.Command {
 	return stubCommand("test", "Run ST unit tests")
 }
