@@ -88,12 +88,13 @@ Plans:
   3. User can programmatically set inputs and read outputs on the interpreter for testing scenarios
   4. All standard math, string, and type conversion functions work correctly (ABS, SQRT, LEN, CONCAT, INT_TO_REAL, etc.)
   5. Standard library FBs accept injected time for deterministic test execution
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
+- [ ] 04-01-PLAN.md — Interpreter core: Value type, Env scoping, expression/statement evaluation engine
+- [ ] 04-02-PLAN.md — Scan cycle engine: FB instance management, Tick(dt), I/O table, deterministic clock
+- [ ] 04-03-PLAN.md — Standard library functions: math, string (1-based indexing), type conversion (banker's rounding)
+- [ ] 04-04-PLAN.md — Standard library FBs (timers, counters, edge, bistable) and integration wiring
 
 ### Phase 5: Testing Framework
 **Goal**: Users can write unit tests for ST code in ST syntax, run them on their machine, and integrate results into CI pipelines
@@ -209,7 +210,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 1. Project Bootstrap & Parser | 5/5 | Complete | 2026-03-26 |
 | 2. Preprocessor | 2/2 | Complete | 2026-03-26 |
 | 3. Semantic Analysis | 0/5 | Planning complete | - |
-| 4. Standard Library & Interpreter | 0/3 | Not started | - |
+| 4. Standard Library & Interpreter | 0/4 | Planning complete | - |
 | 5. Testing Framework | 0/2 | Not started | - |
 | 6. Simulation | 0/1 | Not started | - |
 | 7. Multi-Vendor Emission | 0/2 | Not started | - |
