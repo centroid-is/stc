@@ -311,6 +311,12 @@ func (p *Parser) parsePostfix(expr ast.Expr) ast.Expr {
 			}
 
 		case lexer.LParen:
+			// Check for named-argument FB call: ident(name := ...) or ident(name => ...)
+			// These are statement-level constructs, not expression calls.
+			// Use lookahead: if ( is followed by ident then := or =>, leave for stmt parser.
+			if p.isNamedArgCall() {
+				return expr
+			}
 			p.advance()
 			var args []ast.Expr
 			if !p.at(lexer.RParen) {
@@ -360,6 +366,32 @@ func (p *Parser) parsePostfix(expr ast.Expr) ast.Expr {
 			return expr
 		}
 	}
+}
+
+// isNamedArgCall checks whether the current LParen starts a named-argument
+// FB call (e.g., fb(IN := val)). It peeks ahead without consuming tokens.
+// Returns true if the pattern is ( ident := or ( ident =>
+func (p *Parser) isNamedArgCall() bool {
+	// Current token should be LParen
+	if !p.at(lexer.LParen) {
+		return false
+	}
+	// Also return false for empty parens -- that's a regular call
+	nextIdx := p.pos + 1
+	if nextIdx >= len(p.tokens) {
+		return false
+	}
+	// Check if next token after ( is an identifier
+	if p.tokens[nextIdx].Kind != lexer.Ident {
+		return false
+	}
+	// Check if the token after that is := or =>
+	afterIdx := nextIdx + 1
+	if afterIdx >= len(p.tokens) {
+		return false
+	}
+	afterKind := p.tokens[afterIdx].Kind
+	return afterKind == lexer.Assign || afterKind == lexer.Arrow
 }
 
 // parseParenExpr parses (expr).

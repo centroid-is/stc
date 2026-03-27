@@ -184,6 +184,15 @@ func (inst *FBInstance) GetMember(name string) Value {
 	return Value{}
 }
 
+// typeNameFromSpec extracts the type name from a TypeSpec.
+// Returns empty string if not a NamedType.
+func typeNameFromSpec(ts ast.TypeSpec) string {
+	if nt, ok := ts.(*ast.NamedType); ok && nt.Name != nil {
+		return nt.Name.Name
+	}
+	return ""
+}
+
 // zeroFromTypeSpec resolves a TypeSpec to its zero Value.
 // For NamedType, it looks up the elementary type by name.
 func zeroFromTypeSpec(ts ast.TypeSpec) Value {

@@ -109,8 +109,32 @@ func (e *ScanCycleEngine) initializeEnv() {
 
 	for _, vb := range e.program.VarBlocks {
 		for _, vd := range vb.Declarations {
+			// Check if the type is a stdlib FB
+			var val Value
+			typeName := typeNameFromSpec(vd.Type)
+			if factory, ok := StdlibFBFactory[strings.ToUpper(typeName)]; ok {
+				// Create an FB instance for each variable of this type
+				for _, n := range vd.Names {
+					fb := factory()
+					inst := &FBInstance{
+						TypeName: typeName,
+						FB:       fb,
+					}
+					val = Value{Kind: ValFBInstance, FBRef: inst}
+					e.env.Define(n.Name, val)
+					upper := strings.ToUpper(n.Name)
+					switch vb.Section {
+					case ast.VarInput:
+						e.inputNames = append(e.inputNames, upper)
+					case ast.VarOutput:
+						e.outputNames = append(e.outputNames, upper)
+					}
+				}
+				continue
+			}
+
 			// Resolve zero value from the type spec
-			val := zeroFromTypeSpec(vd.Type)
+			val = zeroFromTypeSpec(vd.Type)
 
 			// If there is an init value, try to evaluate it
 			if vd.InitValue != nil {

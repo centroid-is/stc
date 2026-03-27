@@ -46,8 +46,7 @@ func (interp *Interpreter) evalExpr(env *Env, expr ast.Expr) (Value, error) {
 	case *ast.IndexExpr:
 		return interp.evalIndex(env, e)
 	case *ast.CallExpr:
-		// Stub: will be wired in plan 02/05 for function/FB calls
-		return Value{}, &RuntimeError{Msg: fmt.Sprintf("call expressions not yet implemented: %v", e.Callee)}
+		return interp.evalCall(env, e)
 	case *ast.MemberAccessExpr:
 		return interp.evalMemberAccess(env, e)
 	case *ast.DerefExpr:
@@ -904,4 +903,32 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 	default:
 		return &RuntimeError{Msg: fmt.Sprintf("cannot assign member '%s' on %s", memberName, obj.Kind)}
 	}
+}
+
+// evalCall evaluates a function call expression.
+// It dispatches to StdlibFunctions first, then falls back to user-defined functions.
+func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
+	// Resolve callee name
+	calleeName := ""
+	switch c := e.Callee.(type) {
+	case *ast.Ident:
+		calleeName = strings.ToUpper(c.Name)
+	default:
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", e.Callee)}
+	}
+
+	// Check StdlibFunctions (math, string, conversion)
+	if fn, ok := StdlibFunctions[calleeName]; ok {
+		args := make([]Value, 0, len(e.Args))
+		for _, argExpr := range e.Args {
+			v, err := interp.evalExpr(env, argExpr)
+			if err != nil {
+				return Value{}, err
+			}
+			args = append(args, v)
+		}
+		return fn(args)
+	}
+
+	return Value{}, &RuntimeError{Msg: fmt.Sprintf("undefined function: %s", calleeName)}
 }
