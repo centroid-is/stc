@@ -45,14 +45,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Standard Library
 
-- [ ] **STLB-01**: Timers implemented with correct IEC semantics (TON, TOF, TP)
-- [ ] **STLB-02**: Counters implemented with correct IEC semantics (CTU, CTD, CTUD)
-- [ ] **STLB-03**: Edge detection implemented (R_TRIG, F_TRIG)
-- [ ] **STLB-04**: Bistable FBs implemented (SR, RS)
+- [x] **STLB-01**: Timers implemented with correct IEC semantics (TON, TOF, TP)
+- [x] **STLB-02**: Counters implemented with correct IEC semantics (CTU, CTD, CTUD)
+- [x] **STLB-03**: Edge detection implemented (R_TRIG, F_TRIG)
+- [x] **STLB-04**: Bistable FBs implemented (SR, RS)
 - [x] **STLB-05**: Standard math functions implemented (ABS, SQRT, MIN, MAX, SEL, MUX, LIMIT, etc.)
 - [x] **STLB-06**: Standard string functions implemented (LEN, LEFT, RIGHT, MID, CONCAT, FIND, etc.)
 - [x] **STLB-07**: Standard type conversion functions implemented (INT_TO_REAL, BOOL_TO_INT, etc.)
-- [ ] **STLB-08**: All standard library FBs support deterministic time injection for testing
+- [x] **STLB-08**: All standard library FBs support deterministic time injection for testing
 
 ### Interpreter & Host Execution
 
@@ -199,14 +199,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEMA-05 | Phase 3 | Complete |
 | SEMA-06 | Phase 3 | Complete |
 | SEMA-07 | Phase 3 | Complete |
-| STLB-01 | Phase 4 | Pending |
-| STLB-02 | Phase 4 | Pending |
-| STLB-03 | Phase 4 | Pending |
-| STLB-04 | Phase 4 | Pending |
+| STLB-01 | Phase 4 | Complete |
+| STLB-02 | Phase 4 | Complete |
+| STLB-03 | Phase 4 | Complete |
+| STLB-04 | Phase 4 | Complete |
 | STLB-05 | Phase 4 | Complete |
 | STLB-06 | Phase 4 | Complete |
 | STLB-07 | Phase 4 | Complete |
-| STLB-08 | Phase 4 | Pending |
+| STLB-08 | Phase 4 | Complete |
 | INTP-01 | Phase 4 | Complete |
 | INTP-02 | Phase 4 | Complete |
 | INTP-03 | Phase 4 | Complete |
