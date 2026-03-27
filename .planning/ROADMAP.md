@@ -76,7 +76,7 @@ Plans:
 - [x] 03-02-PLAN.md — Symbol table: hierarchical scope chain, case-insensitive lookup, POU registry
 - [x] 03-03-PLAN.md — Two-pass checker: declaration resolution (pass 1) and expression/statement type checking (pass 2)
 - [x] 03-04-PLAN.md — Vendor profiles and usage analysis: vendor-aware warnings, unused variables, unreachable code
-- [ ] 03-05-PLAN.md — Analyzer facade and CLI check command: cross-file orchestration, text/JSON output
+- [x] 03-05-PLAN.md — Analyzer facade and CLI check command: cross-file orchestration, text/JSON output
 
 ### Phase 4: Standard Library & Interpreter
 **Goal**: Users can execute ST programs on their development machine with correct PLC scan-cycle semantics and IEC standard library support, no hardware required

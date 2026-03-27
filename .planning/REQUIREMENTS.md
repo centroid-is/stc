@@ -35,7 +35,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SEMA-03**: Type checker handles arrays, structs, enums, FB instances, method calls
 - [x] **SEMA-04**: Type checker detects undeclared variables, unused variables, unreachable code
 - [x] **SEMA-05**: Type checker handles cross-file symbol resolution (multi-file projects)
-- [ ] **SEMA-06**: CLI command `stc check <files...> --format json` outputs diagnostics
+- [x] **SEMA-06**: CLI command `stc check <files...> --format json` outputs diagnostics
 - [x] **SEMA-07**: Vendor-aware diagnostics warn when using constructs unsupported by target vendor
 
 ### Incremental Compilation
@@ -197,7 +197,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEMA-03 | Phase 3 | Complete |
 | SEMA-04 | Phase 3 | Complete |
 | SEMA-05 | Phase 3 | Complete |
-| SEMA-06 | Phase 3 | Pending |
+| SEMA-06 | Phase 3 | Complete |
 | SEMA-07 | Phase 3 | Complete |
 | STLB-01 | Phase 4 | Pending |
 | STLB-02 | Phase 4 | Pending |

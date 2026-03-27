@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-03-27T14:39:56.335Z"
+status: verifying
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-03-27T14:46:07.951Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 11
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 Phase: 03 (semantic-analysis) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-27
 
 Progress: [░░░░░░░░░░] 0%
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P01 | 4min | 2 tasks | 6 files |
 | Phase 03 P04 | 260s | 2 tasks | 7 files |
 | Phase 03 P03 | 634s | 2 tasks | 12 files |
+| Phase 03 P05 | 236s | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Interface variables (VAR_INPUT/OUTPUT/IN_OUT/GLOBAL/EXTERNAL) excluded from unused warnings
 - [Phase 03]: Integer literals (DINT) compatible with any integer target; real literals (LREAL) compatible with any real target
 - [Phase 03]: Resolver uses POU scope directly (bypassing scope stack) for Pass 1 variable registration
+- [Phase 03]: Analyzer facade sequences passes: resolve -> check -> usage -> vendor (vendor only if config present)
+- [Phase 03]: CLI check exits 1 on errors only; warnings alone produce exit 0
 
 ### Pending Todos
 
@@ -111,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T14:39:56.333Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-03-27T14:46:07.948Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
