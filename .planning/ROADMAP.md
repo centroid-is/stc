@@ -69,11 +69,14 @@ Plans:
   3. User gets warnings for undeclared variables, unused variables, and unreachable code
   4. User can pass `--vendor beckhoff` or `--vendor schneider` and get warnings when using constructs unsupported by that vendor
   5. `stc check --format json` outputs machine-readable diagnostics for CI integration
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Type system: IEC type lattice, widening rules, built-in type constants and function signatures
+- [ ] 03-02-PLAN.md — Symbol table: hierarchical scope chain, case-insensitive lookup, POU registry
+- [ ] 03-03-PLAN.md — Two-pass checker: declaration resolution (pass 1) and expression/statement type checking (pass 2)
+- [ ] 03-04-PLAN.md — Vendor profiles and usage analysis: vendor-aware warnings, unused variables, unreachable code
+- [ ] 03-05-PLAN.md — Analyzer facade and CLI check command: cross-file orchestration, text/JSON output
 
 ### Phase 4: Standard Library & Interpreter
 **Goal**: Users can execute ST programs on their development machine with correct PLC scan-cycle semantics and IEC standard library support, no hardware required
@@ -204,8 +207,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Project Bootstrap & Parser | 5/5 | Complete | 2026-03-26 |
-| 2. Preprocessor | 0/2 | Planning complete | - |
-| 3. Semantic Analysis | 0/2 | Not started | - |
+| 2. Preprocessor | 2/2 | Complete | 2026-03-26 |
+| 3. Semantic Analysis | 0/5 | Planning complete | - |
 | 4. Standard Library & Interpreter | 0/3 | Not started | - |
 | 5. Testing Framework | 0/2 | Not started | - |
 | 6. Simulation | 0/1 | Not started | - |
