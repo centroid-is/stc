@@ -126,12 +126,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Claude Code Skills
 
-- [ ] **SKIL-01**: Skill for generating ST code from natural language description
-- [ ] **SKIL-02**: Skill for validating ST code (parse + check + lint pipeline)
-- [ ] **SKIL-03**: Skill for writing and running ST unit tests
-- [ ] **SKIL-04**: Skill for emitting vendor-specific ST from portable source
-- [ ] **SKIL-05**: Skill for reviewing ST code against IEC best practices
-- [ ] **SKIL-06**: Skills auto-invoke when working with .st files in the stc project
+- [x] **SKIL-01**: Skill for generating ST code from natural language description
+- [x] **SKIL-02**: Skill for validating ST code (parse + check + lint pipeline)
+- [x] **SKIL-03**: Skill for writing and running ST unit tests
+- [x] **SKIL-04**: Skill for emitting vendor-specific ST from portable source
+- [x] **SKIL-05**: Skill for reviewing ST code against IEC best practices
+- [x] **SKIL-06**: Skills auto-invoke when working with .st files in the stc project
 
 ### Source Debug Mapping
 
@@ -252,12 +252,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MCP-05 | Phase 11 | Pending |
 | MCP-06 | Phase 11 | Pending |
 | MCP-07 | Phase 11 | Pending |
-| SKIL-01 | Phase 11 | Pending |
-| SKIL-02 | Phase 11 | Pending |
-| SKIL-03 | Phase 11 | Pending |
-| SKIL-04 | Phase 11 | Pending |
-| SKIL-05 | Phase 11 | Pending |
-| SKIL-06 | Phase 11 | Pending |
+| SKIL-01 | Phase 11 | Complete |
+| SKIL-02 | Phase 11 | Complete |
+| SKIL-03 | Phase 11 | Complete |
+| SKIL-04 | Phase 11 | Complete |
+| SKIL-05 | Phase 11 | Complete |
+| SKIL-06 | Phase 11 | Complete |
 
 **Coverage:**
 - v1 requirements: 86 total
