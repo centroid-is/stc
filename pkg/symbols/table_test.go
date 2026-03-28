@@ -148,3 +148,84 @@ func TestTableFileTracking(t *testing.T) {
 		t.Fatalf("Files()[1] = %q, want %q", files[1], "utils.st")
 	}
 }
+
+func TestPurgeFile(t *testing.T) {
+	table := NewTable()
+
+	// Register two POUs from different files
+	table.RegisterPOU("Motor", KindFunctionBlock, source.Pos{File: "motor.st", Line: 1, Col: 1})
+	table.RegisterFile("motor.st")
+
+	table.RegisterPOU("Main", KindProgram, source.Pos{File: "main.st", Line: 1, Col: 1})
+	table.RegisterFile("main.st")
+
+	// Verify both exist
+	if table.LookupGlobal("Motor") == nil {
+		t.Fatal("Motor should exist before purge")
+	}
+	if table.LookupPOU("Motor") == nil {
+		t.Fatal("Motor POU scope should exist before purge")
+	}
+
+	// Purge motor.st
+	table.PurgeFile("motor.st")
+
+	// Motor should be gone
+	if table.LookupGlobal("Motor") != nil {
+		t.Fatal("Motor should be nil after PurgeFile(motor.st)")
+	}
+	if table.LookupPOU("Motor") != nil {
+		t.Fatal("Motor POU scope should be nil after PurgeFile(motor.st)")
+	}
+
+	// Main should still exist
+	if table.LookupGlobal("Main") == nil {
+		t.Fatal("Main should still exist after PurgeFile(motor.st)")
+	}
+
+	// File list should not contain motor.st
+	for _, f := range table.Files() {
+		if f == "motor.st" {
+			t.Fatal("motor.st should not be in Files() after PurgeFile")
+		}
+	}
+}
+
+func TestPurgeFileRemovesChildScopes(t *testing.T) {
+	table := NewTable()
+
+	table.RegisterPOU("Motor", KindFunctionBlock, source.Pos{File: "motor.st", Line: 1, Col: 1})
+	table.RegisterFile("motor.st")
+
+	childrenBefore := len(table.GlobalScope().Children)
+	if childrenBefore == 0 {
+		t.Fatal("GlobalScope should have children after RegisterPOU")
+	}
+
+	table.PurgeFile("motor.st")
+
+	childrenAfter := len(table.GlobalScope().Children)
+	if childrenAfter != childrenBefore-1 {
+		t.Fatalf("children after purge = %d, want %d", childrenAfter, childrenBefore-1)
+	}
+}
+
+func TestSymbolsByFile(t *testing.T) {
+	table := NewTable()
+
+	table.RegisterPOU("Motor", KindFunctionBlock, source.Pos{File: "motor.st", Line: 1, Col: 1})
+	table.RegisterPOU("Main", KindProgram, source.Pos{File: "main.st", Line: 1, Col: 1})
+
+	syms := table.SymbolsByFile("motor.st")
+	if len(syms) != 1 {
+		t.Fatalf("SymbolsByFile(motor.st) returned %d symbols, want 1", len(syms))
+	}
+	if syms[0].Name != "Motor" {
+		t.Fatalf("SymbolsByFile(motor.st)[0].Name = %q, want Motor", syms[0].Name)
+	}
+
+	syms = table.SymbolsByFile("nonexistent.st")
+	if len(syms) != 0 {
+		t.Fatalf("SymbolsByFile(nonexistent.st) returned %d symbols, want 0", len(syms))
+	}
+}
