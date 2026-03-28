@@ -106,11 +106,11 @@ Plans:
   3. Test failures reference original ST file:line, not internal representation, with clear assertion messages
   4. Test runner outputs JUnit XML (`--format junit`) and JSON (`--format json`) for CI integration and returns non-zero exit code on failure
   5. Tests support I/O mocking (inject inputs, read outputs) and deterministic time advancement (ADVANCE_TIME)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Lexer/parser/AST extensions for TEST_CASE, assertion functions, ADVANCE_TIME, source position tracking
+- [ ] 05-02-PLAN.md — Test runner package (discovery, execution, JUnit XML, JSON output) and CLI stc test command
 
 ### Phase 6: Simulation
 **Goal**: Users can run closed-loop simulations of their ST programs with simulated sensors and actuators for integration testing without hardware
@@ -211,7 +211,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. Preprocessor | 2/2 | Complete | 2026-03-26 |
 | 3. Semantic Analysis | 0/5 | Planning complete | - |
 | 4. Standard Library & Interpreter | 0/4 | Planning complete | - |
-| 5. Testing Framework | 0/2 | Not started | - |
+| 5. Testing Framework | 0/2 | Planning complete | - |
 | 6. Simulation | 0/1 | Not started | - |
 | 7. Multi-Vendor Emission | 0/2 | Not started | - |
 | 8. Formatter & Linter | 0/2 | Not started | - |
