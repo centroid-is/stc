@@ -139,7 +139,7 @@ Plans:
 
 Plans:
 - [x] 07-01-PLAN.md — Core emitter package: AST-to-ST printer with vendor profiles, round-trip tests
-- [ ] 07-02-PLAN.md — CLI stc emit command: --target flag, text/JSON output, integration tests
+- [x] 07-02-PLAN.md — CLI stc emit command: --target flag, text/JSON output, integration tests
 
 ### Phase 8: Formatter & Linter
 **Goal**: Users can auto-format ST code to a consistent style and check it against coding standards, with no commercial tool dependency
