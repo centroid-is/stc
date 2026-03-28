@@ -80,11 +80,11 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Developer Experience — LSP
 
 - [x] **LSP-01**: LSP server provides real-time diagnostics (errors from parser + type checker)
-- [ ] **LSP-02**: LSP server provides go-to-definition for variables, FBs, methods
-- [ ] **LSP-03**: LSP server provides hover showing type information
-- [ ] **LSP-04**: LSP server provides completion for keywords, types, declared variables, FB members
-- [ ] **LSP-05**: LSP server provides find-references
-- [ ] **LSP-06**: LSP server provides rename refactoring
+- [x] **LSP-02**: LSP server provides go-to-definition for variables, FBs, methods
+- [x] **LSP-03**: LSP server provides hover showing type information
+- [x] **LSP-04**: LSP server provides completion for keywords, types, declared variables, FB members
+- [x] **LSP-05**: LSP server provides find-references
+- [x] **LSP-06**: LSP server provides rename refactoring
 - [x] **LSP-07**: LSP server grays out inactive preprocessor blocks via semantic tokens
 - [x] **LSP-08**: VS Code extension launches stc-lsp binary and provides syntax highlighting
 
@@ -236,11 +236,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LINT-03 | Phase 8 | Complete |
 | LINT-04 | Phase 8 | Complete |
 | LSP-01 | Phase 9 | Complete |
-| LSP-02 | Phase 9 | Pending |
-| LSP-03 | Phase 9 | Pending |
-| LSP-04 | Phase 9 | Pending |
-| LSP-05 | Phase 9 | Pending |
-| LSP-06 | Phase 9 | Pending |
+| LSP-02 | Phase 9 | Complete |
+| LSP-03 | Phase 9 | Complete |
+| LSP-04 | Phase 9 | Complete |
+| LSP-05 | Phase 9 | Complete |
+| LSP-06 | Phase 9 | Complete |
 | LSP-07 | Phase 9 | Complete |
 | LSP-08 | Phase 9 | Complete |
 | INCR-01 | Phase 10 | Pending |
