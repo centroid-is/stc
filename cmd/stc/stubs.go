@@ -32,10 +32,6 @@ func stubCommand(use, short string) *cobra.Command {
 	}
 }
 
-func newLintCmd() *cobra.Command {
-	return stubCommand("lint", "Lint ST source files")
-}
-
 func newFmtCmd() *cobra.Command {
 	return stubCommand("fmt", "Format ST source files")
 }

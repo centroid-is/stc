@@ -135,8 +135,8 @@ func TestCLI_ParseNonexistentFile(t *testing.T) {
 }
 
 func TestCLI_StubCommands(t *testing.T) {
-	// "test" and "emit" are no longer stubs -- they have real implementations
-	for _, sub := range []string{"lint", "fmt"} {
+	// "test", "emit", and "lint" are no longer stubs -- they have real implementations
+	for _, sub := range []string{"fmt"} {
 		t.Run(sub, func(t *testing.T) {
 			_, stderr, exitCode := runStc(t, sub)
 			if exitCode != 0 {
@@ -146,19 +146,6 @@ func TestCLI_StubCommands(t *testing.T) {
 				t.Errorf("stub %q should output 'not yet implemented', stderr: %s", sub, stderr)
 			}
 		})
-	}
-}
-
-func TestCLI_StubCommandsJSON(t *testing.T) {
-	stdout, _, exitCode := runStc(t, "lint", "--format", "json")
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", exitCode)
-	}
-	if !json.Valid([]byte(stdout)) {
-		t.Fatalf("output should be valid JSON, got: %s", stdout)
-	}
-	if !strings.Contains(stdout, "not yet implemented") {
-		t.Errorf("JSON should contain 'not yet implemented', got: %s", stdout)
 	}
 }
 
