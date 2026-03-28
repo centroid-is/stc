@@ -29,6 +29,7 @@ func newRootCmd() *cobra.Command {
 		newLintCmd(),
 		newFmtCmd(),
 		newPpCmd(),
+		newLspCmd(),
 	)
 
 	return rootCmd
