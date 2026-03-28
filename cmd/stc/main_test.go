@@ -134,16 +134,17 @@ func TestCLI_ParseNonexistentFile(t *testing.T) {
 	}
 }
 
-func TestCLI_StubCommands(t *testing.T) {
-	// "test", "emit", and "lint" are no longer stubs -- they have real implementations
-	for _, sub := range []string{"fmt"} {
+func TestCLI_RealCommands(t *testing.T) {
+	// All previous stubs (test, emit, lint, fmt) are now real implementations.
+	// Real commands require file arguments; no args should produce exit 1.
+	for _, sub := range []string{"lint", "fmt"} {
 		t.Run(sub, func(t *testing.T) {
 			_, stderr, exitCode := runStc(t, sub)
-			if exitCode != 0 {
-				t.Fatalf("expected exit code 0 for stub command %q, got %d", sub, exitCode)
+			if exitCode == 0 {
+				t.Fatalf("expected non-zero exit code for %q with no args, got 0", sub)
 			}
-			if !strings.Contains(stderr, "not yet implemented") {
-				t.Errorf("stub %q should output 'not yet implemented', stderr: %s", sub, stderr)
+			if !strings.Contains(stderr, "no input files") {
+				t.Errorf("%q should mention 'no input files', stderr: %s", sub, stderr)
 			}
 		})
 	}
