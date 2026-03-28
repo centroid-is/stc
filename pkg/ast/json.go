@@ -184,6 +184,13 @@ func nodeToMap(n Node) map[string]interface{} {
 		}
 		marshalBody(m, v.Body)
 
+	case *TestCaseDecl:
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		m["name"] = v.Name
+		marshalVarBlocks(m, v.VarBlocks)
+		marshalBody(m, v.Body)
+
 	// Statements
 	case *AssignStmt:
 		m["span"] = v.NodeSpan

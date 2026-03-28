@@ -19,6 +19,7 @@ const (
 	KindPropertyDecl
 	KindTypeDecl
 	KindActionDecl
+	KindTestCaseDecl
 
 	// Statements
 	KindAssignStmt
@@ -70,6 +71,7 @@ var nodeKindNames = [...]string{
 	KindPropertyDecl:      "PropertyDecl",
 	KindTypeDecl:          "TypeDecl",
 	KindActionDecl:        "ActionDecl",
+	KindTestCaseDecl:     "TestCaseDecl",
 	KindAssignStmt:        "AssignStmt",
 	KindCallStmt:          "CallStmt",
 	KindIfStmt:            "IfStmt",

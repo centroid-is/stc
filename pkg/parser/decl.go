@@ -26,6 +26,8 @@ func (p *Parser) parseDeclaration() ast.Declaration {
 		return p.parseTypeDecls()
 	case lexer.KwInterface:
 		return p.parseInterface()
+	case lexer.KwTestCase:
+		return p.parseTestCase()
 	default:
 		return p.recoverDeclaration()
 	}
@@ -440,5 +442,44 @@ func (p *Parser) parsePropertySignature() *ast.PropertySignature {
 		},
 		Name: name,
 		Type: typeSpec,
+	}
+}
+
+// parseTestCase parses TEST_CASE 'name' ... END_TEST_CASE
+func (p *Parser) parseTestCase() *ast.TestCaseDecl {
+	startTok := p.advance() // consume TEST_CASE
+
+	// Expect string literal for test name (single or double quoted)
+	var name string
+	if p.at(lexer.StringLiteral) || p.at(lexer.WStringLiteral) {
+		nameTok := p.advance()
+		name = nameTok.Text
+		// Strip surrounding quotes (single or double)
+		if len(name) >= 2 {
+			if (name[0] == '\'' && name[len(name)-1] == '\'') ||
+				(name[0] == '"' && name[len(name)-1] == '"') {
+				name = name[1 : len(name)-1]
+			}
+		}
+	} else {
+		p.error("expected string literal for TEST_CASE name, got %s", p.peek().Kind.String())
+	}
+
+	p.match(lexer.Semicolon) // optional
+
+	varBlocks := p.parseVarBlocks()
+	body := p.parseStatements(lexer.KwEndTestCase)
+
+	endTok := p.expect(lexer.KwEndTestCase)
+	p.match(lexer.Semicolon) // optional
+
+	return &ast.TestCaseDecl{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindTestCaseDecl,
+			NodeSpan: spanFromTokens(startTok, endTok),
+		},
+		Name:      name,
+		VarBlocks: varBlocks,
+		Body:      body,
 	}
 }

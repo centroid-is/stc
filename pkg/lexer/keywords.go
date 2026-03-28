@@ -117,6 +117,10 @@ func init() {
 		"XOR":   KwXor,
 		"NOT":   KwNot,
 		"MOD":   KwMod,
+
+		// Testing
+		"TEST_CASE":     KwTestCase,
+		"END_TEST_CASE": KwEndTestCase,
 	}
 }
 

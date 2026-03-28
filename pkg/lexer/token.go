@@ -172,6 +172,10 @@ const (
 	KwXor
 	KwNot
 	KwMod
+
+	// Testing keywords
+	KwTestCase
+	KwEndTestCase
 )
 
 var tokenKindNames = [...]string{
@@ -320,6 +324,9 @@ var tokenKindNames = [...]string{
 	KwXor:   "KwXor",
 	KwNot:   "KwNot",
 	KwMod:   "KwMod",
+
+	KwTestCase:    "KwTestCase",
+	KwEndTestCase: "KwEndTestCase",
 }
 
 // String returns the human-readable name of a TokenKind.
@@ -333,7 +340,7 @@ func (k TokenKind) String() string {
 // firstKeyword and lastKeyword bracket the keyword token range.
 const (
 	firstKeyword = KwProgram
-	lastKeyword  = KwMod
+	lastKeyword  = KwEndTestCase
 )
 
 // IsKeyword returns true if this token kind is a keyword.
