@@ -69,11 +69,28 @@ func (f *formatter) emitTrivia(trivia []ast.Trivia) {
 }
 
 func (f *formatter) emitLeadingTrivia(n *ast.NodeBase) {
-	f.emitTrivia(n.LeadingTrivia)
+	if len(n.LeadingTrivia) == 0 {
+		return
+	}
+	for _, t := range n.LeadingTrivia {
+		if t.Kind == ast.TriviaLineComment || t.Kind == ast.TriviaBlockComment {
+			f.emitIndent()
+			f.write(t.Text)
+			f.newline()
+		}
+	}
 }
 
 func (f *formatter) emitTrailingTrivia(n *ast.NodeBase) {
-	f.emitTrivia(n.TrailingTrivia)
+	if len(n.TrailingTrivia) == 0 {
+		return
+	}
+	for _, t := range n.TrailingTrivia {
+		if t.Kind == ast.TriviaLineComment || t.Kind == ast.TriviaBlockComment {
+			f.write(" ")
+			f.write(t.Text)
+		}
+	}
 }
 
 // --- source file ---
@@ -436,8 +453,8 @@ func (f *formatter) emitVarDecl(vd *ast.VarDecl) {
 		f.emitExpr(vd.InitValue)
 	}
 	f.write(";")
-	f.newline()
 	f.emitTrailingTrivia(&vd.NodeBase)
+	f.newline()
 }
 
 // --- type specs ---
@@ -525,9 +542,28 @@ func (f *formatter) emitTypeSpec(ts ast.TypeSpec) {
 // --- statements ---
 
 func (f *formatter) emitIndentedStmt(s ast.Statement) {
-	f.emitLeadingTrivia(f.nodeBase(s))
+	nb := f.nodeBase(s)
+	f.emitLeadingTrivia(nb)
 	f.emitIndent()
-	f.emitStmt(s)
+
+	// If the statement has trailing trivia, we need to insert it before the
+	// final newline that the statement emitter writes.
+	if len(nb.TrailingTrivia) > 0 {
+		// Capture statement output in a temporary buffer.
+		saved := f.buf
+		f.buf = strings.Builder{}
+		f.emitStmt(s)
+		stmtText := f.buf.String()
+		f.buf = saved
+
+		// Strip trailing newline, emit trivia, then re-add newline.
+		stmtText = strings.TrimRight(stmtText, "\n")
+		f.write(stmtText)
+		f.emitTrailingTrivia(nb)
+		f.newline()
+	} else {
+		f.emitStmt(s)
+	}
 }
 
 func (f *formatter) emitStmt(s ast.Statement) {
