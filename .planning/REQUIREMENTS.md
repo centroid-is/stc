@@ -63,12 +63,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Testing
 
-- [ ] **TEST-01**: User can write tests in ST using TEST_CASE / ASSERT_EQ / ASSERT_TRUE / ASSERT_NEAR / ASSERT_FALSE
+- [x] **TEST-01**: User can write tests in ST using TEST_CASE / ASSERT_EQ / ASSERT_TRUE / ASSERT_NEAR / ASSERT_FALSE
 - [ ] **TEST-02**: CLI command `stc test <dir>` discovers and runs test files
 - [ ] **TEST-03**: Test runner outputs JUnit XML for CI integration
 - [ ] **TEST-04**: Test runner supports JSON output (`--format json`)
-- [ ] **TEST-05**: Tests support I/O mocking (inject input values, read output values)
-- [ ] **TEST-06**: Tests support deterministic time advancement (ADVANCE_TIME or equivalent)
+- [x] **TEST-05**: Tests support I/O mocking (inject input values, read output values)
+- [x] **TEST-06**: Tests support deterministic time advancement (ADVANCE_TIME or equivalent)
 - [ ] **TEST-07**: Test runner returns non-zero exit code on failure
 
 ### Simulation
@@ -135,8 +135,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Source Debug Mapping
 
-- [ ] **DBUG-01**: Source maps from original ST lines to interpreter execution points
-- [ ] **DBUG-02**: Test failure messages reference original ST file:line, not internal representation
+- [x] **DBUG-01**: Source maps from original ST lines to interpreter execution points
+- [x] **DBUG-02**: Test failure messages reference original ST file:line, not internal representation
 
 ## v2 Requirements
 
@@ -211,15 +211,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INTP-02 | Phase 4 | Complete |
 | INTP-03 | Phase 4 | Complete |
 | INTP-04 | Phase 4 | Complete |
-| TEST-01 | Phase 5 | Pending |
+| TEST-01 | Phase 5 | Complete |
 | TEST-02 | Phase 5 | Pending |
 | TEST-03 | Phase 5 | Pending |
 | TEST-04 | Phase 5 | Pending |
-| TEST-05 | Phase 5 | Pending |
-| TEST-06 | Phase 5 | Pending |
+| TEST-05 | Phase 5 | Complete |
+| TEST-06 | Phase 5 | Complete |
 | TEST-07 | Phase 5 | Pending |
-| DBUG-01 | Phase 5 | Pending |
-| DBUG-02 | Phase 5 | Pending |
+| DBUG-01 | Phase 5 | Complete |
+| DBUG-02 | Phase 5 | Complete |
 | SIM-01 | Phase 6 | Pending |
 | SIM-02 | Phase 6 | Pending |
 | SIM-03 | Phase 6 | Pending |

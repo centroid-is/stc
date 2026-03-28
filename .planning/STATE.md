@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-03-27T22:18:14.986Z"
-last_activity: 2026-03-27
+status: executing
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-28T07:49:27.362Z"
+last_activity: 2026-03-28
 progress:
   total_phases: 11
   completed_phases: 4
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 18
+  completed_plans: 17
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor — no hardware required for development and testing.
-**Current focus:** Phase 04 — standard-library-interpreter
+**Current focus:** Phase 05 — testing-framework
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-03-27
+Phase: 05 (testing-framework) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-28
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -68,6 +68,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P03 | 361s | 2 tasks | 6 files |
 | Phase 04 P02 | 6min | 2 tasks | 6 files |
 | Phase 04 P04 | 412s | 2 tasks | 14 files |
+| Phase 05 P01 | 278s | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,9 @@ Recent decisions affecting current work:
 - [Phase 04]: ScanCycleEngine lazy-initializes env on first Tick, not at construction
 - [Phase 04]: GetMember resolves outputs first then inputs matching PLC convention
 - [Phase 04]: Parser lookahead for named-arg FB calls: isNamedArgCall checks ident := or ident => after LParen
+- [Phase 05]: LocalFunctions per-interpreter dispatch for test isolation (avoids global StdlibFunctions mutation)
+- [Phase 05]: Assertions return BoolValue(true) always, recording failures on collector instead of aborting
+- [Phase 05]: Position-aware LocalFunctions signature: func(args []Value, pos ast.Pos) for source position propagation
 
 ### Pending Todos
 
@@ -128,6 +132,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T22:13:37.702Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-03-28T07:49:27.360Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None

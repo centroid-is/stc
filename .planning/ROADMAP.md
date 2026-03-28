@@ -109,7 +109,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Lexer/parser/AST extensions for TEST_CASE, assertion functions, ADVANCE_TIME, source position tracking
+- [x] 05-01-PLAN.md — Lexer/parser/AST extensions for TEST_CASE, assertion functions, ADVANCE_TIME, source position tracking
 - [ ] 05-02-PLAN.md — Test runner package (discovery, execution, JUnit XML, JSON output) and CLI stc test command
 
 ### Phase 6: Simulation
