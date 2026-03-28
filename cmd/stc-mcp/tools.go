@@ -20,30 +20,30 @@ import (
 // --- Arg types for MCP tool handlers ---
 
 type parseArgs struct {
-	Code     string `json:"code" jsonschema:"required,description=IEC 61131-3 ST source code to parse"`
-	Filename string `json:"filename,omitempty" jsonschema:"description=Source filename (default: input.st)"`
+	Code     string `json:"code" jsonschema:"IEC 61131-3 ST source code to parse"`
+	Filename string `json:"filename,omitempty" jsonschema:"source filename (default: input.st)"`
 }
 
 type checkArgs struct {
-	Code   string `json:"code" jsonschema:"required,description=IEC 61131-3 ST source code to type-check"`
-	Vendor string `json:"vendor,omitempty" jsonschema:"description=Vendor target: beckhoff schneider or portable"`
+	Code   string `json:"code" jsonschema:"IEC 61131-3 ST source code to type-check"`
+	Vendor string `json:"vendor,omitempty" jsonschema:"vendor target: beckhoff schneider or portable"`
 }
 
 type testArgs struct {
-	Directory string `json:"directory" jsonschema:"required,description=Directory containing *_test.st files"`
+	Directory string `json:"directory" jsonschema:"directory containing *_test.st files"`
 }
 
 type emitArgs struct {
-	Code   string `json:"code" jsonschema:"required,description=IEC 61131-3 ST source code to emit"`
-	Target string `json:"target,omitempty" jsonschema:"description=Emit target: beckhoff schneider or portable (default: portable)"`
+	Code   string `json:"code" jsonschema:"IEC 61131-3 ST source code to emit"`
+	Target string `json:"target,omitempty" jsonschema:"emit target: beckhoff schneider or portable (default: portable)"`
 }
 
 type lintArgs struct {
-	Code string `json:"code" jsonschema:"required,description=IEC 61131-3 ST source code to lint"`
+	Code string `json:"code" jsonschema:"IEC 61131-3 ST source code to lint"`
 }
 
 type formatArgs struct {
-	Code string `json:"code" jsonschema:"required,description=IEC 61131-3 ST source code to format"`
+	Code string `json:"code" jsonschema:"IEC 61131-3 ST source code to format"`
 }
 
 // --- Tool descriptions (must be under 100 tokens each per MCP-07) ---
