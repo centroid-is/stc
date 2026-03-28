@@ -40,7 +40,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Incremental Compilation
 
-- [ ] **INCR-01**: Only re-analyze changed files and their dependents on subsequent runs
+- [x] **INCR-01**: Only re-analyze changed files and their dependents on subsequent runs
 - [x] **INCR-02**: File-level dependency tracking with cached symbol tables
 
 ### Standard Library
@@ -243,7 +243,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LSP-06 | Phase 9 | Complete |
 | LSP-07 | Phase 9 | Complete |
 | LSP-08 | Phase 9 | Complete |
-| INCR-01 | Phase 10 | Pending |
+| INCR-01 | Phase 10 | Complete |
 | INCR-02 | Phase 10 | Complete |
 | MCP-01 | Phase 11 | Pending |
 | MCP-02 | Phase 11 | Pending |

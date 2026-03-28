@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 7: Multi-Vendor Emission** - Beckhoff and Schneider ST emitters, vendor profiles, round-trip stability, portable normalized output
 - [ ] **Phase 8: Formatter & Linter** - Auto-formatting with configurable style, PLCopen coding guidelines linter, JSON diagnostics
 - [ ] **Phase 9: LSP & VS Code Extension** - Full language server (diagnostics, go-to-def, hover, completion, rename, references), VS Code extension with syntax highlighting
-- [ ] **Phase 10: Incremental Compilation** - File-level dependency tracking, cached symbol tables, re-analyze only changed files
+- [x] **Phase 10: Incremental Compilation** - File-level dependency tracking, cached symbol tables, re-analyze only changed files (completed 2026-03-28)
 - [ ] **Phase 11: MCP Server & Claude Code Skills** - MCP tool wrappers for all CLI commands, Claude Code skills for ST development workflows
 
 ## Phase Details
@@ -186,7 +186,7 @@ Plans:
 
 Plans:
 - [x] 10-01-PLAN.md — Dependency graph, per-file symbol purge, and on-disk file cache infrastructure
-- [ ] 10-02-PLAN.md — Incremental analyzer facade with CLI check and LSP integration
+- [x] 10-02-PLAN.md — Incremental analyzer facade with CLI check and LSP integration
 
 ### Phase 11: MCP Server & Claude Code Skills
 **Goal**: LLM agents can parse, check, test, lint, format, and emit ST code through MCP tools, and Claude Code users get purpose-built skills for ST development workflows
@@ -219,5 +219,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Multi-Vendor Emission | 0/2 | Planning complete | - |
 | 8. Formatter & Linter | 2/3 | Gap closure planned | - |
 | 9. LSP & VS Code Extension | 0/3 | Planning complete | - |
-| 10. Incremental Compilation | 1/2 | In Progress|  |
+| 10. Incremental Compilation | 2/2 | Complete   | 2026-03-28 |
 | 11. MCP Server & Claude Code Skills | 0/2 | Not started | - |
