@@ -220,4 +220,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. Formatter & Linter | 2/3 | Gap closure planned | - |
 | 9. LSP & VS Code Extension | 0/3 | Planning complete | - |
 | 10. Incremental Compilation | 2/2 | Complete    | 2026-03-28 |
-| 11. MCP Server & Claude Code Skills | 2/2 | Complete   | 2026-03-28 |
+| 11. MCP Server & Claude Code Skills | 2/2 | Complete    | 2026-03-28 |
