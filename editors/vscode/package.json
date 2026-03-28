@@ -1,0 +1,62 @@
+{
+  "name": "stc-st",
+  "displayName": "IEC 61131-3 Structured Text",
+  "description": "Language support for IEC 61131-3 Structured Text via stc",
+  "version": "0.1.0",
+  "publisher": "centroid-is",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:iec61131-st"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "iec61131-st",
+        "aliases": [
+          "Structured Text",
+          "ST",
+          "IEC 61131-3"
+        ],
+        "extensions": [
+          ".st",
+          ".ST"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "iec61131-st",
+        "scopeName": "source.iec61131-st",
+        "path": "./syntaxes/iec61131-st.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "STC",
+      "properties": {
+        "stc.lsp.path": {
+          "type": "string",
+          "default": "stc",
+          "description": "Path to the stc binary"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.3.0"
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  }
+}

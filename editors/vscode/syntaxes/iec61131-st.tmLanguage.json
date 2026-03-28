@@ -1,0 +1,157 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "IEC 61131-3 Structured Text",
+  "scopeName": "source.iec61131-st",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#preprocessor" },
+    { "include": "#pragmas" },
+    { "include": "#strings" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#declaration-keywords" },
+    { "include": "#control-keywords" },
+    { "include": "#variable-keywords" },
+    { "include": "#operator-words" },
+    { "include": "#types" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.iec61131-st",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.iec61131-st",
+          "begin": "\\(\\*",
+          "end": "\\*\\)"
+        }
+      ]
+    },
+    "preprocessor": {
+      "patterns": [
+        {
+          "name": "meta.preprocessor.iec61131-st",
+          "match": "(?i)\\{\\s*(?:IF|ELSIF|ELSE|END_IF|DEFINE|ERROR)\\b[^}]*\\}"
+        }
+      ]
+    },
+    "pragmas": {
+      "patterns": [
+        {
+          "name": "meta.pragma.iec61131-st",
+          "match": "\\{\\s*attribute\\s+'[^']*'\\s*\\}"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.iec61131-st",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.iec61131-st",
+              "match": "\\$[LNPRT$']|\\$[0-9A-Fa-f]{2}"
+            }
+          ]
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.iec61131-st",
+          "match": "(?i)\\b(?:TRUE|FALSE)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.typed.iec61131-st",
+          "match": "(?i)\\b(?:BOOL|BYTE|WORD|DWORD|LWORD|SINT|INT|DINT|LINT|USINT|UINT|UDINT|ULINT|REAL|LREAL|TIME|DATE|DT|TOD)#[^\\s;,)\\]]+\\b"
+        },
+        {
+          "name": "constant.numeric.hex.iec61131-st",
+          "match": "(?i)\\b16#[0-9A-Fa-f_]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.iec61131-st",
+          "match": "(?i)\\b8#[0-7_]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.iec61131-st",
+          "match": "(?i)\\b2#[01_]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.iec61131-st",
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*(?:[eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.iec61131-st",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+    "declaration-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.declaration.iec61131-st",
+          "match": "(?i)\\b(?:PROGRAM|END_PROGRAM|FUNCTION_BLOCK|END_FUNCTION_BLOCK|FUNCTION|END_FUNCTION|METHOD|END_METHOD|PROPERTY|END_PROPERTY|INTERFACE|END_INTERFACE|TYPE|END_TYPE|STRUCT|END_STRUCT|ACTION|END_ACTION|IMPLEMENTS|EXTENDS|ABSTRACT|FINAL|OVERRIDE)\\b"
+        }
+      ]
+    },
+    "control-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.iec61131-st",
+          "match": "(?i)\\b(?:IF|THEN|ELSE|ELSIF|END_IF|FOR|TO|BY|DO|END_FOR|WHILE|END_WHILE|REPEAT|UNTIL|END_REPEAT|CASE|OF|END_CASE|RETURN|EXIT|CONTINUE)\\b"
+        }
+      ]
+    },
+    "variable-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.other.variable.iec61131-st",
+          "match": "(?i)\\b(?:VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT|VAR_TEMP|VAR_GLOBAL|VAR_EXTERNAL|VAR|END_VAR|CONSTANT|RETAIN|PERSISTENT)\\b"
+        }
+      ]
+    },
+    "operator-words": {
+      "patterns": [
+        {
+          "name": "keyword.operator.word.iec61131-st",
+          "match": "(?i)\\b(?:AND|OR|XOR|NOT|MOD)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.iec61131-st",
+          "match": "(?i)\\b(?:BOOL|BYTE|WORD|DWORD|LWORD|SINT|INT|DINT|LINT|USINT|UINT|UDINT|ULINT|REAL|LREAL|STRING|WSTRING|TIME|DATE|DT|TOD|ARRAY|POINTER|REFERENCE)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.iec61131-st",
+          "match": ":=|=>"
+        },
+        {
+          "name": "keyword.operator.comparison.iec61131-st",
+          "match": "<>|<=|>=|<|>|="
+        },
+        {
+          "name": "keyword.operator.arithmetic.iec61131-st",
+          "match": "\\*\\*|[+\\-*/]"
+        }
+      ]
+    }
+  }
+}
