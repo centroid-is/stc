@@ -120,10 +120,11 @@ Plans:
   1. User can define a simulation with sensor waveforms (ramp, sine, step) injected into program inputs and observe program behavior over time
   2. User can define simple plant models (motor with inertia, valve with flow dynamics, cylinder with position) that respond to program outputs
   3. Simulations are fully deterministic and replayable — running the same simulation twice produces identical results for regression testing
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md — Waveform generators (Step, Ramp, Sine, Square) and plant models (Motor, Valve, Cylinder)
+- [ ] 06-02-PLAN.md — Simulation engine with closed-loop feedback and CLI stc sim command
 
 ### Phase 7: Multi-Vendor Emission
 **Goal**: Users can write ST once and emit vendor-flavored output for Beckhoff TwinCAT and Schneider/CODESYS targets, ready to paste into vendor IDEs
@@ -212,7 +213,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 3. Semantic Analysis | 0/5 | Planning complete | - |
 | 4. Standard Library & Interpreter | 0/4 | Planning complete | - |
 | 5. Testing Framework | 0/2 | Planning complete | - |
-| 6. Simulation | 0/1 | Not started | - |
+| 6. Simulation | 0/2 | Planning complete | - |
 | 7. Multi-Vendor Emission | 0/2 | Not started | - |
 | 8. Formatter & Linter | 0/2 | Not started | - |
 | 9. LSP & VS Code Extension | 0/3 | Not started | - |
