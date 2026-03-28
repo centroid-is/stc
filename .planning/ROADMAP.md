@@ -182,10 +182,11 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. After changing one file in a multi-file project, `stc check` only re-analyzes that file and its dependents, not the entire project
   2. File-level dependency graph and cached symbol tables persist between invocations, reducing repeated work
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 10-01: TBD
+- [ ] 10-01-PLAN.md — Dependency graph, per-file symbol purge, and on-disk file cache infrastructure
+- [ ] 10-02-PLAN.md — Incremental analyzer facade with CLI check and LSP integration
 
 ### Phase 11: MCP Server & Claude Code Skills
 **Goal**: LLM agents can parse, check, test, lint, format, and emit ST code through MCP tools, and Claude Code users get purpose-built skills for ST development workflows
@@ -218,5 +219,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Multi-Vendor Emission | 0/2 | Planning complete | - |
 | 8. Formatter & Linter | 2/3 | Gap closure planned | - |
 | 9. LSP & VS Code Extension | 0/3 | Planning complete | - |
-| 10. Incremental Compilation | 0/1 | Not started | - |
+| 10. Incremental Compilation | 0/2 | Planning complete | - |
 | 11. MCP Server & Claude Code Skills | 0/2 | Not started | - |
