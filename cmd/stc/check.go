@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/incremental"
 	"github.com/centroid-is/stc/pkg/project"
 	"github.com/spf13/cobra"
 )
@@ -55,13 +57,29 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		cfg.Build.VendorTarget = vendorFlag
 	}
 
-	// Run analysis
-	result := analyzer.AnalyzeFiles(args, cfg)
+	// Determine cache directory for incremental analysis
+	cacheDir := "."
+	if configPath, _ := project.FindConfig("."); configPath != "" {
+		cacheDir = filepath.Dir(configPath)
+	}
+
+	// Run incremental parse (skips parsing unchanged files)
+	ia := incremental.NewIncrementalAnalyzer(cacheDir)
+	incrResult := ia.Parse(args)
+	stats := incrResult.Stats
+
+	// Run semantic analysis on all parsed files
+	analysisResult := analyzer.Analyze(incrResult.Files, cfg)
+
+	// Combine parse diagnostics with analysis diagnostics
+	allDiags := make([]diag.Diagnostic, 0, len(incrResult.Diags)+len(analysisResult.Diags))
+	allDiags = append(allDiags, incrResult.Diags...)
+	allDiags = append(allDiags, analysisResult.Diags...)
 
 	// Count errors and warnings
 	errorCount := 0
 	warningCount := 0
-	for _, d := range result.Diags {
+	for _, d := range allDiags {
 		switch d.Severity {
 		case diag.Error:
 			errorCount++
@@ -73,7 +91,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	switch format {
 	case "json":
 		// JSON output to stdout
-		out, err := json.MarshalIndent(result.Diags, "", "  ")
+		out, err := json.MarshalIndent(allDiags, "", "  ")
 		if err != nil {
 			return fmt.Errorf("JSON marshal error: %w", err)
 		}
@@ -81,11 +99,12 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	default: // text
 		// Print each diagnostic to stderr
-		for _, d := range result.Diags {
+		for _, d := range allDiags {
 			fmt.Fprintln(os.Stderr, d.String())
 		}
 		// Print summary to stderr
 		fmt.Fprintf(os.Stderr, "%d error(s), %d warning(s)\n", errorCount, warningCount)
+		fmt.Fprintf(os.Stderr, "(%d/%d files re-parsed)\n", stats.StaleFiles, stats.TotalFiles)
 	}
 
 	// Exit code: 1 if errors, 0 if warnings-only or clean

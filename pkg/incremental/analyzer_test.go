@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/analyzer"
 )
 
 const mainST = `PROGRAM Main
@@ -57,17 +57,19 @@ func TestIncrementalFirstRun(t *testing.T) {
 	timerPath := writeFile(t, srcDir, "timer_wrapper.st", timerWrapperST)
 
 	ia := NewIncrementalAnalyzer(cacheDir)
-	_ = ia.Analyze([]string{mainPath, motorPath, timerPath}, (*project.Config)(nil))
+	result := ia.Parse([]string{mainPath, motorPath, timerPath})
 
-	stats := ia.Stats()
-	if stats.TotalFiles != 3 {
-		t.Errorf("TotalFiles = %d, want 3", stats.TotalFiles)
+	if result.Stats.TotalFiles != 3 {
+		t.Errorf("TotalFiles = %d, want 3", result.Stats.TotalFiles)
 	}
-	if stats.StaleFiles != 3 {
-		t.Errorf("StaleFiles = %d, want 3 (first run)", stats.StaleFiles)
+	if result.Stats.StaleFiles != 3 {
+		t.Errorf("StaleFiles = %d, want 3 (first run)", result.Stats.StaleFiles)
 	}
-	if stats.SkippedFiles != 0 {
-		t.Errorf("SkippedFiles = %d, want 0 (first run)", stats.SkippedFiles)
+	if result.Stats.SkippedFiles != 0 {
+		t.Errorf("SkippedFiles = %d, want 0 (first run)", result.Stats.SkippedFiles)
+	}
+	if len(result.Files) != 3 {
+		t.Errorf("Files count = %d, want 3", len(result.Files))
 	}
 }
 
@@ -80,22 +82,20 @@ func TestIncrementalSecondRunNoChanges(t *testing.T) {
 	timerPath := writeFile(t, srcDir, "timer_wrapper.st", timerWrapperST)
 
 	filenames := []string{mainPath, motorPath, timerPath}
-	var cfg *project.Config
 
 	// First run
 	ia1 := NewIncrementalAnalyzer(cacheDir)
-	_ = ia1.Analyze(filenames, cfg)
+	_ = ia1.Parse(filenames)
 
 	// Second run (new analyzer, same cache dir)
 	ia2 := NewIncrementalAnalyzer(cacheDir)
-	_ = ia2.Analyze(filenames, cfg)
+	result := ia2.Parse(filenames)
 
-	stats := ia2.Stats()
-	if stats.StaleFiles != 0 {
-		t.Errorf("StaleFiles = %d, want 0 (no changes)", stats.StaleFiles)
+	if result.Stats.StaleFiles != 0 {
+		t.Errorf("StaleFiles = %d, want 0 (no changes)", result.Stats.StaleFiles)
 	}
-	if stats.SkippedFiles != 3 {
-		t.Errorf("SkippedFiles = %d, want 3 (no changes)", stats.SkippedFiles)
+	if result.Stats.SkippedFiles != 3 {
+		t.Errorf("SkippedFiles = %d, want 3 (no changes)", result.Stats.SkippedFiles)
 	}
 }
 
@@ -108,25 +108,23 @@ func TestIncrementalOneFileChanged(t *testing.T) {
 	timerPath := writeFile(t, srcDir, "timer_wrapper.st", timerWrapperST)
 
 	filenames := []string{mainPath, motorPath, timerPath}
-	var cfg *project.Config
 
 	// First run
 	ia1 := NewIncrementalAnalyzer(cacheDir)
-	_ = ia1.Analyze(filenames, cfg)
+	_ = ia1.Parse(filenames)
 
 	// Modify motor.st
 	writeFile(t, srcDir, "motor.st", motorModifiedST)
 
-	// Third run
+	// Second run
 	ia2 := NewIncrementalAnalyzer(cacheDir)
-	_ = ia2.Analyze(filenames, cfg)
+	result := ia2.Parse(filenames)
 
-	stats := ia2.Stats()
-	if stats.StaleFiles < 1 {
-		t.Errorf("StaleFiles = %d, want >= 1 (motor.st changed)", stats.StaleFiles)
+	if result.Stats.StaleFiles < 1 {
+		t.Errorf("StaleFiles = %d, want >= 1 (motor.st changed)", result.Stats.StaleFiles)
 	}
-	if stats.TotalFiles != 3 {
-		t.Errorf("TotalFiles = %d, want 3", stats.TotalFiles)
+	if result.Stats.TotalFiles != 3 {
+		t.Errorf("TotalFiles = %d, want 3", result.Stats.TotalFiles)
 	}
 }
 
@@ -138,23 +136,15 @@ func TestIncrementalDiagnosticsEquivalence(t *testing.T) {
 	motorPath := writeFile(t, srcDir, "motor.st", motorST)
 
 	filenames := []string{mainPath, motorPath}
-	var cfg *project.Config
 
 	// First run (incremental)
 	ia := NewIncrementalAnalyzer(cacheDir)
-	incrResult := ia.Analyze(filenames, cfg)
+	incrResult := ia.Parse(filenames)
 
-	// Count diagnostics by severity from incremental
-	incrErrors := 0
-	for _, d := range incrResult.Diags {
-		if d.Severity == 0 { // diag.Error == 0
-			incrErrors++
-		}
-	}
+	// Run semantic analysis on the incremental result
+	analysisResult := analyzer.Analyze(incrResult.Files, nil)
 
-	// The incremental path should produce diagnostics (we don't require exact match
-	// with non-incremental since ordering may differ, but the result should be valid)
-	if incrResult.Symbols == nil {
+	if analysisResult.Symbols == nil {
 		t.Error("Symbols table is nil from incremental analysis")
 	}
 }
@@ -167,21 +157,18 @@ func TestIncrementalFileDeleted(t *testing.T) {
 	motorPath := writeFile(t, srcDir, "motor.st", motorST)
 	timerPath := writeFile(t, srcDir, "timer_wrapper.st", timerWrapperST)
 
-	var cfg *project.Config
-
 	// First run with 3 files
 	ia1 := NewIncrementalAnalyzer(cacheDir)
-	_ = ia1.Analyze([]string{mainPath, motorPath, timerPath}, cfg)
+	_ = ia1.Parse([]string{mainPath, motorPath, timerPath})
 
 	// Second run with timer_wrapper removed from list
 	ia2 := NewIncrementalAnalyzer(cacheDir)
-	result := ia2.Analyze([]string{mainPath, motorPath}, cfg)
+	result := ia2.Parse([]string{mainPath, motorPath})
 
-	stats := ia2.Stats()
-	if stats.TotalFiles != 2 {
-		t.Errorf("TotalFiles = %d, want 2", stats.TotalFiles)
+	if result.Stats.TotalFiles != 2 {
+		t.Errorf("TotalFiles = %d, want 2", result.Stats.TotalFiles)
 	}
-	if result.Symbols == nil {
-		t.Error("Symbols table is nil after file deletion")
+	if len(result.Files) != 2 {
+		t.Errorf("Files count = %d, want 2", len(result.Files))
 	}
 }

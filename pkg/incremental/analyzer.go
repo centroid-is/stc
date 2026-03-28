@@ -3,10 +3,9 @@ package incremental
 import (
 	"os"
 
-	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/parser"
-	"github.com/centroid-is/stc/pkg/project"
 )
 
 // IncrStats holds statistics about an incremental analysis run.
@@ -14,6 +13,14 @@ type IncrStats struct {
 	TotalFiles   int
 	StaleFiles   int
 	SkippedFiles int
+}
+
+// IncrResult holds the output of incremental parsing: the collected ASTs,
+// any parse diagnostics, and incremental stats.
+type IncrResult struct {
+	Files []*ast.SourceFile
+	Diags []diag.Diagnostic
+	Stats IncrStats
 }
 
 // IncrementalAnalyzer orchestrates incremental compilation by tracking
@@ -39,16 +46,16 @@ func NewIncrementalAnalyzer(cacheDir string) *IncrementalAnalyzer {
 	}
 }
 
-// Stats returns the statistics from the most recent Analyze call.
+// Stats returns the statistics from the most recent Parse call.
 func (ia *IncrementalAnalyzer) Stats() IncrStats {
 	return ia.stats
 }
 
-// Analyze performs incremental analysis on the given files.
+// Parse performs incremental parsing on the given files.
 // It skips parsing for files whose content hash has not changed since
-// the previous invocation. The full semantic analysis pass runs on all
-// files regardless (v1 simplification).
-func (ia *IncrementalAnalyzer) Analyze(filenames []string, cfg *project.Config) analyzer.AnalysisResult {
+// the previous invocation. Returns the collected ASTs and parse diagnostics.
+// The caller is responsible for running semantic analysis on the returned files.
+func (ia *IncrementalAnalyzer) Parse(filenames []string) IncrResult {
 	// Build set of current filenames for removal detection
 	currentFiles := make(map[string]bool, len(filenames))
 	for _, f := range filenames {
@@ -96,11 +103,9 @@ func (ia *IncrementalAnalyzer) Analyze(filenames []string, cfg *project.Config) 
 	for i := range entries {
 		e := &entries[i]
 		if e.stale {
-			// Stale: parse and store in cache
 			result := parser.Parse(e.filename, string(e.content))
 			ia.cache.Store(e.filename, e.hash, &result)
 		} else if ia.cache.NeedsParse(e.filename) {
-			// Not stale but needs parsing (loaded from disk index, no AST)
 			result := parser.Parse(e.filename, string(e.content))
 			ia.cache.Store(e.filename, e.hash, &result)
 		}
@@ -113,31 +118,17 @@ func (ia *IncrementalAnalyzer) Analyze(filenames []string, cfg *project.Config) 
 		}
 	}
 
-	// Phase 4: Collect all ASTs for full semantic analysis
+	// Phase 4: Collect all ASTs and parse diagnostics
 	var allFiles []*ast.SourceFile
-	var parseDiags []parser.ParseResult
+	var allDiags []diag.Diagnostic
 	for _, e := range entries {
 		if pr, ok := ia.cache.Load(e.filename); ok && pr != nil && pr.File != nil {
 			allFiles = append(allFiles, pr.File)
-			parseDiags = append(parseDiags, *pr)
+			allDiags = append(allDiags, pr.Diags...)
 		}
 	}
 
-	// Phase 5: Run full semantic analysis on all files
-	// (v1: always full semantic pass; parse skip is the main win)
-	analysisResult := analyzer.Analyze(allFiles, cfg)
-
-	// Merge parse diagnostics into analysis result
-	var allDiagList []interface{ String() string }
-	_ = allDiagList // suppress unused
-	// Collect parse diagnostics
-	for _, pr := range parseDiags {
-		if len(pr.Diags) > 0 {
-			analysisResult.Diags = append(pr.Diags, analysisResult.Diags...)
-		}
-	}
-
-	// Phase 6: Record stats and persist cache
+	// Phase 5: Record stats and persist cache
 	ia.stats = IncrStats{
 		TotalFiles:   len(entries),
 		StaleFiles:   len(staleFiles),
@@ -146,5 +137,9 @@ func (ia *IncrementalAnalyzer) Analyze(filenames []string, cfg *project.Config) 
 
 	_ = ia.cache.SaveIndex(ia.cacheDir)
 
-	return analysisResult
+	return IncrResult{
+		Files: allFiles,
+		Diags: allDiags,
+		Stats: ia.stats,
+	}
 }

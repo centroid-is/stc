@@ -82,14 +82,44 @@ func (s *DocumentStore) Get(uri string) *Document {
 	return s.docs[uri]
 }
 
-// analyzeDocument parses and analyzes the document content, storing
-// the results on the document.
+// analyzeDocument parses the changed document and performs cross-file
+// analysis across all open documents for multi-file symbol resolution.
 func (s *DocumentStore) analyzeDocument(doc *Document) {
 	filename := uriToFilename(doc.URI)
 	result := parser.Parse(filename, doc.Content)
 	doc.ParseResult = &result
 
-	analysisResult := analyzer.Analyze([]*ast.SourceFile{result.File}, nil)
+	// Collect all open documents for cross-file analysis
+	s.mu.RLock()
+	var allFiles []*ast.SourceFile
+	for _, d := range s.docs {
+		if d.ParseResult != nil {
+			allFiles = append(allFiles, d.ParseResult.File)
+		}
+	}
+	s.mu.RUnlock()
+
+	// Include the current document (may not be in docs yet during Open)
+	found := false
+	for _, f := range allFiles {
+		if f == result.File {
+			found = true
+			break
+		}
+	}
+	if !found {
+		allFiles = append(allFiles, result.File)
+	}
+
+	analysisResult := analyzer.Analyze(allFiles, nil)
+
+	// Store full analysis result on all open documents so cross-file
+	// features (go-to-def, hover) work across files
+	s.mu.RLock()
+	for _, d := range s.docs {
+		d.AnalysisResult = &analysisResult
+	}
+	s.mu.RUnlock()
 	doc.AnalysisResult = &analysisResult
 }
 
