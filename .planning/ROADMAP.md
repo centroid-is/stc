@@ -172,8 +172,8 @@ Plans:
 
 Plans:
 - [x] 09-01-PLAN.md — LSP server core: GLSP setup, document sync, real-time diagnostics, formatting, stc lsp CLI command
-- [ ] 09-02-PLAN.md — Navigation and refactoring: go-to-definition, hover, completion, find-references, rename
-- [ ] 09-03-PLAN.md — Semantic tokens for preprocessor blocks and VS Code extension with TextMate grammar
+- [x] 09-02-PLAN.md — Navigation and refactoring: go-to-definition, hover, completion, find-references, rename
+- [x] 09-03-PLAN.md — Semantic tokens for preprocessor blocks and VS Code extension with TextMate grammar
 
 ### Phase 10: Incremental Compilation
 **Goal**: Users experience fast re-analysis on large multi-file ST projects because only changed files and their dependents are re-processed

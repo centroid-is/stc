@@ -85,7 +85,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **LSP-04**: LSP server provides completion for keywords, types, declared variables, FB members
 - [ ] **LSP-05**: LSP server provides find-references
 - [ ] **LSP-06**: LSP server provides rename refactoring
-- [ ] **LSP-07**: LSP server grays out inactive preprocessor blocks via semantic tokens
+- [x] **LSP-07**: LSP server grays out inactive preprocessor blocks via semantic tokens
 - [x] **LSP-08**: VS Code extension launches stc-lsp binary and provides syntax highlighting
 
 ### Developer Experience — Formatter & Linter
@@ -241,7 +241,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LSP-04 | Phase 9 | Pending |
 | LSP-05 | Phase 9 | Pending |
 | LSP-06 | Phase 9 | Pending |
-| LSP-07 | Phase 9 | Pending |
+| LSP-07 | Phase 9 | Complete |
 | LSP-08 | Phase 9 | Complete |
 | INCR-01 | Phase 10 | Pending |
 | INCR-02 | Phase 10 | Pending |
