@@ -124,7 +124,7 @@ Plans:
 
 Plans:
 - [x] 06-01-PLAN.md — Waveform generators (Step, Ramp, Sine, Square) and plant models (Motor, Valve, Cylinder)
-- [ ] 06-02-PLAN.md — Simulation engine with closed-loop feedback and CLI stc sim command
+- [x] 06-02-PLAN.md — Simulation engine with closed-loop feedback and CLI stc sim command
 
 ### Phase 7: Multi-Vendor Emission
 **Goal**: Users can write ST once and emit vendor-flavored output for Beckhoff TwinCAT and Schneider/CODESYS targets, ready to paste into vendor IDEs
