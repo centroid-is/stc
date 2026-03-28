@@ -185,7 +185,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — Dependency graph, per-file symbol purge, and on-disk file cache infrastructure
+- [x] 10-01-PLAN.md — Dependency graph, per-file symbol purge, and on-disk file cache infrastructure
 - [ ] 10-02-PLAN.md — Incremental analyzer facade with CLI check and LSP integration
 
 ### Phase 11: MCP Server & Claude Code Skills
@@ -219,5 +219,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Multi-Vendor Emission | 0/2 | Planning complete | - |
 | 8. Formatter & Linter | 2/3 | Gap closure planned | - |
 | 9. LSP & VS Code Extension | 0/3 | Planning complete | - |
-| 10. Incremental Compilation | 0/2 | Planning complete | - |
+| 10. Incremental Compilation | 1/2 | In Progress|  |
 | 11. MCP Server & Claude Code Skills | 0/2 | Not started | - |
