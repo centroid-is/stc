@@ -32,10 +32,6 @@ func stubCommand(use, short string) *cobra.Command {
 	}
 }
 
-func newEmitCmd() *cobra.Command {
-	return stubCommand("emit", "Emit vendor-specific ST")
-}
-
 func newLintCmd() *cobra.Command {
 	return stubCommand("lint", "Lint ST source files")
 }
