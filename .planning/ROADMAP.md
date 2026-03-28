@@ -135,11 +135,11 @@ Plans:
   2. User can run `stc emit <file> --target schneider` and get Schneider/CODESYS-flavored ST output
   3. Round-trip stability: parse then emit then parse then emit produces identical output
   4. User can run `stc emit <file> --target portable` to get clean normalized ST stripped of vendor-specific constructs
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — Core emitter package: AST-to-ST printer with vendor profiles, round-trip tests
+- [ ] 07-02-PLAN.md — CLI stc emit command: --target flag, text/JSON output, integration tests
 
 ### Phase 8: Formatter & Linter
 **Goal**: Users can auto-format ST code to a consistent style and check it against coding standards, with no commercial tool dependency
@@ -214,7 +214,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 4. Standard Library & Interpreter | 0/4 | Planning complete | - |
 | 5. Testing Framework | 0/2 | Planning complete | - |
 | 6. Simulation | 0/2 | Planning complete | - |
-| 7. Multi-Vendor Emission | 0/2 | Not started | - |
+| 7. Multi-Vendor Emission | 0/2 | Planning complete | - |
 | 8. Formatter & Linter | 0/2 | Not started | - |
 | 9. LSP & VS Code Extension | 0/3 | Not started | - |
 | 10. Incremental Compilation | 0/1 | Not started | - |
