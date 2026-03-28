@@ -19,6 +19,16 @@ type Interpreter struct {
 
 	// dt is the current scan cycle delta time, passed to FB Execute calls.
 	dt time.Duration
+
+	// LocalFunctions provides per-interpreter-instance function overrides.
+	// These take priority over global StdlibFunctions during evalCall.
+	// Used for test-specific functions (assertions, ADVANCE_TIME) to avoid
+	// global state mutation between test cases.
+	LocalFunctions map[string]func(args []Value, pos ast.Pos) (Value, error)
+
+	// Collector gathers assertion results during test execution.
+	// Each test case gets its own collector via RegisterAssertions.
+	Collector *AssertionCollector
 }
 
 // New creates a new Interpreter with default settings.
@@ -915,6 +925,21 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		calleeName = strings.ToUpper(c.Name)
 	default:
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", e.Callee)}
+	}
+
+	// Check LocalFunctions first (per-instance overrides for test assertions, etc.)
+	if interp.LocalFunctions != nil {
+		if fn, ok := interp.LocalFunctions[calleeName]; ok {
+			args := make([]Value, 0, len(e.Args))
+			for _, argExpr := range e.Args {
+				v, err := interp.evalExpr(env, argExpr)
+				if err != nil {
+					return Value{}, err
+				}
+				args = append(args, v)
+			}
+			return fn(args, e.Span().Start)
+		}
 	}
 
 	// Check StdlibFunctions (math, string, conversion)
