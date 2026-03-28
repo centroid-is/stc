@@ -90,9 +90,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Developer Experience — Formatter & Linter
 
-- [ ] **FMT-01**: CLI command `stc fmt <file>` auto-formats ST code (indentation, keyword casing, spacing)
-- [ ] **FMT-02**: Formatter is configurable (indent style, casing conventions)
-- [ ] **FMT-03**: Formatter preserves comments correctly
+- [x] **FMT-01**: CLI command `stc fmt <file>` auto-formats ST code (indentation, keyword casing, spacing)
+- [x] **FMT-02**: Formatter is configurable (indent style, casing conventions)
+- [x] **FMT-03**: Formatter preserves comments correctly
 - [x] **LINT-01**: CLI command `stc lint <files...>` reports coding standard violations
 - [x] **LINT-02**: Linter checks PLCopen coding guidelines
 - [x] **LINT-03**: Linter checks naming conventions (configurable)
@@ -228,9 +228,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EMIT-03 | Phase 7 | Complete |
 | EMIT-04 | Phase 7 | Complete |
 | EMIT-05 | Phase 7 | Complete |
-| FMT-01 | Phase 8 | Pending |
-| FMT-02 | Phase 8 | Pending |
-| FMT-03 | Phase 8 | Pending |
+| FMT-01 | Phase 8 | Complete |
+| FMT-02 | Phase 8 | Complete |
+| FMT-03 | Phase 8 | Complete |
 | LINT-01 | Phase 8 | Complete |
 | LINT-02 | Phase 8 | Complete |
 | LINT-03 | Phase 8 | Complete |
