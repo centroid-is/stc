@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-28T08:02:42.722Z"
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-28T19:22:43.419Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 11
   completed_phases: 5
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 20
+  completed_plans: 19
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor — no hardware required for development and testing.
-**Current focus:** Phase 05 — testing-framework
+**Current focus:** Phase 06 — simulation
 
 ## Current Position
 
-Phase: 6
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 06 (simulation) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-28
 
 Progress: [░░░░░░░░░░] 0%
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P04 | 412s | 2 tasks | 14 files |
 | Phase 05 P01 | 278s | 2 tasks | 10 files |
 | Phase 05 P02 | 391s | 2 tasks | 15 files |
+| Phase 06 P01 | 228s | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -123,6 +124,7 @@ Recent decisions affecting current work:
 - [Phase 05]: Expression-statement support: nil Value in AssignStmt evaluates Target for side effects (assertion calls)
 - [Phase 05]: Export thin wrappers (ExecStatements, EvalExpr, SetDt, ZeroFromTypeSpec) for cross-package interpreter access
 - [Phase 05]: Import testing package as stctesting alias to avoid Go testing collision
+- [Phase 06]: WaveformGenerator is stateless pure function of t; PlantModel.Update uses map[string]interp.Value matching ScanCycleEngine conventions
 
 ### Pending Todos
 
@@ -136,6 +138,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-28T07:58:20.677Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-28T19:22:43.417Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None

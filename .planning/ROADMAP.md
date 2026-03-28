@@ -123,7 +123,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Waveform generators (Step, Ramp, Sine, Square) and plant models (Motor, Valve, Cylinder)
+- [x] 06-01-PLAN.md — Waveform generators (Step, Ramp, Sine, Square) and plant models (Motor, Valve, Cylinder)
 - [ ] 06-02-PLAN.md — Simulation engine with closed-loop feedback and CLI stc sim command
 
 ### Phase 7: Multi-Vendor Emission

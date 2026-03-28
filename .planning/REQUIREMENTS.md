@@ -73,8 +73,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Simulation
 
-- [ ] **SIM-01**: User can run closed-loop simulations injecting sensor waveforms
-- [ ] **SIM-02**: User can define simple plant models (motor, valve, cylinder behavior)
+- [x] **SIM-01**: User can run closed-loop simulations injecting sensor waveforms
+- [x] **SIM-02**: User can define simple plant models (motor, valve, cylinder behavior)
 - [ ] **SIM-03**: Simulations are deterministic and replayable for regression testing
 
 ### Developer Experience — LSP
@@ -220,8 +220,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-07 | Phase 5 | Complete |
 | DBUG-01 | Phase 5 | Complete |
 | DBUG-02 | Phase 5 | Complete |
-| SIM-01 | Phase 6 | Pending |
-| SIM-02 | Phase 6 | Pending |
+| SIM-01 | Phase 6 | Complete |
+| SIM-02 | Phase 6 | Complete |
 | SIM-03 | Phase 6 | Pending |
 | EMIT-01 | Phase 7 | Pending |
 | EMIT-02 | Phase 7 | Pending |
