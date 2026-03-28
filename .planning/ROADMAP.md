@@ -138,7 +138,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Core emitter package: AST-to-ST printer with vendor profiles, round-trip tests
+- [x] 07-01-PLAN.md — Core emitter package: AST-to-ST printer with vendor profiles, round-trip tests
 - [ ] 07-02-PLAN.md — CLI stc emit command: --target flag, text/JSON output, integration tests
 
 ### Phase 8: Formatter & Linter

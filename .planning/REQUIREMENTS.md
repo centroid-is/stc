@@ -100,11 +100,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Multi-Vendor Emission
 
-- [ ] **EMIT-01**: CLI command `stc emit <file> --target beckhoff` produces Beckhoff-flavored ST
-- [ ] **EMIT-02**: CLI command `stc emit <file> --target schneider` produces Schneider-flavored ST
-- [ ] **EMIT-03**: Emitters handle pragma/attribute differences between vendors
-- [ ] **EMIT-04**: Round-trip stability: parse → emit → parse → emit produces identical output
-- [ ] **EMIT-05**: CLI command `stc emit <file> --target portable` produces clean normalized ST
+- [x] **EMIT-01**: CLI command `stc emit <file> --target beckhoff` produces Beckhoff-flavored ST
+- [x] **EMIT-02**: CLI command `stc emit <file> --target schneider` produces Schneider-flavored ST
+- [x] **EMIT-03**: Emitters handle pragma/attribute differences between vendors
+- [x] **EMIT-04**: Round-trip stability: parse → emit → parse → emit produces identical output
+- [x] **EMIT-05**: CLI command `stc emit <file> --target portable` produces clean normalized ST
 
 ### CLI & Project
 
@@ -223,11 +223,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SIM-01 | Phase 6 | Complete |
 | SIM-02 | Phase 6 | Complete |
 | SIM-03 | Phase 6 | Complete |
-| EMIT-01 | Phase 7 | Pending |
-| EMIT-02 | Phase 7 | Pending |
-| EMIT-03 | Phase 7 | Pending |
-| EMIT-04 | Phase 7 | Pending |
-| EMIT-05 | Phase 7 | Pending |
+| EMIT-01 | Phase 7 | Complete |
+| EMIT-02 | Phase 7 | Complete |
+| EMIT-03 | Phase 7 | Complete |
+| EMIT-04 | Phase 7 | Complete |
+| EMIT-05 | Phase 7 | Complete |
 | FMT-01 | Phase 8 | Pending |
 | FMT-02 | Phase 8 | Pending |
 | FMT-03 | Phase 8 | Pending |
