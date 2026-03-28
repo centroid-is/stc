@@ -110,7 +110,7 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — Lexer/parser/AST extensions for TEST_CASE, assertion functions, ADVANCE_TIME, source position tracking
-- [ ] 05-02-PLAN.md — Test runner package (discovery, execution, JUnit XML, JSON output) and CLI stc test command
+- [x] 05-02-PLAN.md — Test runner package (discovery, execution, JUnit XML, JSON output) and CLI stc test command
 
 ### Phase 6: Simulation
 **Goal**: Users can run closed-loop simulations of their ST programs with simulated sensors and actuators for integration testing without hardware
