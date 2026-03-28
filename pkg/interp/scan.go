@@ -101,6 +101,26 @@ func (e *ScanCycleEngine) Clock() time.Duration {
 	return e.clock
 }
 
+// OutputNames returns the list of VAR_OUTPUT variable names (uppercase).
+// The engine must be initialized (at least one Tick) for this to return values.
+func (e *ScanCycleEngine) OutputNames() []string {
+	return e.outputNames
+}
+
+// InputNames returns the list of VAR_INPUT variable names (uppercase).
+// The engine must be initialized (at least one Tick) for this to return values.
+func (e *ScanCycleEngine) InputNames() []string {
+	return e.inputNames
+}
+
+// Initialize forces environment initialization without running a Tick.
+// Useful when callers need to query InputNames/OutputNames before the first cycle.
+func (e *ScanCycleEngine) Initialize() {
+	if !e.initialized {
+		e.initializeEnv()
+	}
+}
+
 // initializeEnv creates and populates the program environment from VarBlocks.
 // Called once on the first Tick (lazy init). Variables persist across scan cycles.
 func (e *ScanCycleEngine) initializeEnv() {
