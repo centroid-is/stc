@@ -40,6 +40,10 @@ func Parse(filename, src string) ParseResult {
 	}
 
 	file := p.parseSourceFile()
+
+	// Post-parse pass: attach comment trivia tokens to AST nodes.
+	attachTrivia(file, allTokens)
+
 	return ParseResult{
 		File:  file,
 		Diags: p.diags.All(),
