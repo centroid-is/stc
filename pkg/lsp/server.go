@@ -21,6 +21,13 @@ func NewServer() *server.Server {
 			opts.Change = &syncKind
 		}
 
+		// Navigation and refactoring capabilities
+		capabilities.DefinitionProvider = true
+		capabilities.HoverProvider = true
+		capabilities.CompletionProvider = &protocol.CompletionOptions{}
+		capabilities.ReferencesProvider = true
+		capabilities.RenameProvider = true
+
 		return protocol.InitializeResult{
 			Capabilities: capabilities,
 			ServerInfo: &protocol.InitializeResultServerInfo{
@@ -79,6 +86,11 @@ func NewServer() *server.Server {
 	}
 
 	handler.TextDocumentFormatting = handleFormatting(store)
+	handler.TextDocumentDefinition = handleDefinition(store)
+	handler.TextDocumentHover = handleHover(store)
+	handler.TextDocumentCompletion = handleCompletion(store)
+	handler.TextDocumentReferences = handleReferences(store)
+	handler.TextDocumentRename = handleRename(store)
 	handler.TextDocumentSemanticTokensFull = handleSemanticTokensFull(store)
 
 	srv := server.NewServer(&handler, "stc-lsp", false)
