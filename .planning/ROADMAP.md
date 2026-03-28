@@ -155,7 +155,7 @@ Plans:
 Plans:
 - [x] 08-01-PLAN.md — Formatter package (pkg/format) with configurable style, comment preservation, idempotency, and CLI stc fmt command
 - [x] 08-02-PLAN.md — Linter package (pkg/lint) with PLCopen rules, naming conventions, and CLI stc lint command
-- [ ] 08-03-PLAN.md — Gap closure: parser trivia attachment so parse->format round-trips preserve comments (FMT-03)
+- [x] 08-03-PLAN.md — Gap closure: parser trivia attachment so parse->format round-trips preserve comments (FMT-03)
 
 ### Phase 9: LSP & VS Code Extension
 **Goal**: Users get a modern IDE experience for ST development in VS Code with real-time diagnostics, navigation, and refactoring

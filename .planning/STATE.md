@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-28T20:10:49.405Z"
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-03-28T20:26:46.061Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 24
-  completed_plans: 24
+  total_plans: 25
+  completed_plans: 25
   percent: 0
 ---
 
@@ -76,6 +76,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07 P02 | 126s | 1 tasks | 6 files |
 | Phase 08 P02 | 272s | 2 tasks | 9 files |
 | Phase 08 P01 | 10min | 2 tasks | 7 files |
+| Phase 08 P03 | 313s | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,9 @@ Recent decisions affecting current work:
 - [Phase 08]: Formatter reuses emitter pattern without vendor filtering - formats ALL constructs
 - [Phase 08]: Body indentation: indent++ before body, indent-- after in all POU types
 - [Phase 08]: Comment preservation via trivia emission ready, awaits parser trivia support
+- [Phase 08]: Post-parse trivia attachment via offset-to-node mapping rather than inline during parsing
+- [Phase 08]: Trailing trivia detection by same-line check against previous non-trivia token end position
+- [Phase 08]: Formatter buffer capture for statement trailing trivia insertion before final newline
 
 ### Pending Todos
 
@@ -155,6 +159,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-28T20:10:49.403Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-03-28T20:26:46.059Z
+Stopped at: Completed 08-03-PLAN.md
 Resume file: None
