@@ -105,3 +105,64 @@ func (t *Table) RegisterFile(filename string) {
 func (t *Table) Files() []string {
 	return t.files
 }
+
+// PurgeFile removes all symbols declared in the given file from the global
+// scope and POU registry. It also removes matching child scopes from the
+// global scope and the filename from the tracked files list.
+// This supports incremental re-analysis by clearing a file's contributions.
+func (t *Table) PurgeFile(filename string) {
+	// Collect global symbol keys to delete (symbols declared in this file)
+	var keysToDelete []string
+	for key, sym := range t.global.symbols {
+		if sym.Pos.File == filename {
+			keysToDelete = append(keysToDelete, key)
+		}
+	}
+
+	// Track POU names being purged (for scope cleanup)
+	purgedPOUs := make(map[string]bool)
+	for _, key := range keysToDelete {
+		sym := t.global.symbols[key]
+		// If this symbol is a POU, mark for POU registry cleanup
+		switch sym.Kind {
+		case KindProgram, KindFunctionBlock, KindFunction, KindInterface:
+			purgedPOUs[strings.ToUpper(sym.Name)] = true
+		}
+		delete(t.global.symbols, key)
+	}
+
+	// Remove from POU registry
+	for pouKey := range purgedPOUs {
+		delete(t.pous, pouKey)
+	}
+
+	// Remove child scopes for purged POUs
+	filtered := t.global.Children[:0]
+	for _, child := range t.global.Children {
+		if !purgedPOUs[strings.ToUpper(child.Name)] {
+			filtered = append(filtered, child)
+		}
+	}
+	t.global.Children = filtered
+
+	// Remove filename from tracked files
+	newFiles := t.files[:0]
+	for _, f := range t.files {
+		if f != filename {
+			newFiles = append(newFiles, f)
+		}
+	}
+	t.files = newFiles
+}
+
+// SymbolsByFile returns all symbols in the global scope that were declared
+// in the given file.
+func (t *Table) SymbolsByFile(filename string) []*Symbol {
+	var result []*Symbol
+	for _, sym := range t.global.symbols {
+		if sym.Pos.File == filename {
+			result = append(result, sym)
+		}
+	}
+	return result
+}
