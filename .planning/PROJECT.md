@@ -12,10 +12,27 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 
 ### Validated
 
-- IEC 61131-3 Ed.3 parser with CODESYS OOP extensions — Validated in Phase 1
-- CLI binary with JSON output (`stc parse --format json`) — Validated in Phase 1
-- Error-recovering parser producing partial ASTs — Validated in Phase 1
-- Project manifest (stc.toml) support — Validated in Phase 1
+- IEC 61131-3 Ed.3 parser with CODESYS OOP extensions — v1.0
+- CLI binary with JSON output for all commands — v1.0
+- Error-recovering parser producing partial ASTs — v1.0
+- Preprocessor with conditional compilation — v1.0
+- Two-pass semantic analysis with vendor-aware diagnostics — v1.0
+- Tree-walking interpreter with scan-cycle semantics — v1.0
+- Full IEC standard library (timers, counters, edge, bistable, math, string, conversion) — v1.0
+- Host-based unit testing with TEST_CASE syntax and JUnit XML — v1.0
+- Closed-loop simulation with plant models — v1.0
+- Multi-vendor ST emission (Beckhoff, Schneider, Portable) — v1.0
+- Formatter and linter with PLCopen rules — v1.0
+- Full LSP with VS Code extension — v1.0
+- Incremental compilation with file caching — v1.0
+- MCP server with 6 tool handlers — v1.0
+- Claude Code skills for ST workflows — v1.0
+
+## Current State
+
+**v1.0 shipped** — 2026-03-28
+
+21 Go packages, ~31,000 LOC, 320 files, 21 test suites all passing. Full compiler toolchain from parse to emit, with host testing, simulation, LSP, and AI integration.
 
 ### Active
 
