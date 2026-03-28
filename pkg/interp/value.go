@@ -3,6 +3,7 @@
 package interp
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -157,4 +158,30 @@ func StringValue(s string) Value {
 // TimeValue is a convenience constructor for a time Value.
 func TimeValue(d time.Duration) Value {
 	return Value{Kind: ValTime, Time: d, IECType: types.KindTIME}
+}
+
+// MarshalJSON encodes a Value as a JSON value appropriate to its kind.
+// Bool -> JSON bool, Int -> JSON number, Real -> JSON number,
+// String -> JSON string, Time -> JSON string, others -> JSON string.
+func (v Value) MarshalJSON() ([]byte, error) {
+	switch v.Kind {
+	case ValBool:
+		if v.Bool {
+			return []byte("true"), nil
+		}
+		return []byte("false"), nil
+	case ValInt:
+		return []byte(fmt.Sprintf("%d", v.Int)), nil
+	case ValReal:
+		return []byte(fmt.Sprintf("%g", v.Real)), nil
+	case ValString:
+		b, err := json.Marshal(v.Str)
+		return b, err
+	case ValTime:
+		b, err := json.Marshal(v.Time.String())
+		return b, err
+	default:
+		b, err := json.Marshal(v.String())
+		return b, err
+	}
 }
