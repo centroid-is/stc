@@ -150,11 +150,12 @@ Plans:
   2. Formatter style is configurable (indent style, casing conventions) via stc.toml or command-line flags
   3. User can run `stc lint <files...>` and get coding standard violations (PLCopen guidelines, naming conventions) with JSON output
   4. Linter naming conventions are configurable per project
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
 - [x] 08-01-PLAN.md — Formatter package (pkg/format) with configurable style, comment preservation, idempotency, and CLI stc fmt command
 - [x] 08-02-PLAN.md — Linter package (pkg/lint) with PLCopen rules, naming conventions, and CLI stc lint command
+- [ ] 08-03-PLAN.md — Gap closure: parser trivia attachment so parse->format round-trips preserve comments (FMT-03)
 
 ### Phase 9: LSP & VS Code Extension
 **Goal**: Users get a modern IDE experience for ST development in VS Code with real-time diagnostics, navigation, and refactoring
@@ -215,7 +216,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 5. Testing Framework | 0/2 | Planning complete | - |
 | 6. Simulation | 0/2 | Planning complete | - |
 | 7. Multi-Vendor Emission | 0/2 | Planning complete | - |
-| 8. Formatter & Linter | 0/2 | Planning complete | - |
+| 8. Formatter & Linter | 2/3 | Gap closure planned | - |
 | 9. LSP & VS Code Extension | 0/3 | Not started | - |
 | 10. Incremental Compilation | 0/1 | Not started | - |
 | 11. MCP Server & Claude Code Skills | 0/2 | Not started | - |
