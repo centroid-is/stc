@@ -167,13 +167,13 @@ Plans:
   3. User can hover over any symbol and see its type information; completions suggest keywords, types, declared variables, and FB members
   4. User can rename a symbol and all references update across files; find-references shows all usages
   5. Inactive preprocessor blocks are grayed out via semantic tokens in the editor
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
 
 Plans:
-- [ ] 09-01: TBD
-- [ ] 09-02: TBD
-- [ ] 09-03: TBD
+- [ ] 09-01-PLAN.md — LSP server core: GLSP setup, document sync, real-time diagnostics, formatting, stc lsp CLI command
+- [ ] 09-02-PLAN.md — Navigation and refactoring: go-to-definition, hover, completion, find-references, rename
+- [ ] 09-03-PLAN.md — Semantic tokens for preprocessor blocks and VS Code extension with TextMate grammar
 
 ### Phase 10: Incremental Compilation
 **Goal**: Users experience fast re-analysis on large multi-file ST projects because only changed files and their dependents are re-processed
@@ -217,6 +217,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 6. Simulation | 0/2 | Planning complete | - |
 | 7. Multi-Vendor Emission | 0/2 | Planning complete | - |
 | 8. Formatter & Linter | 2/3 | Gap closure planned | - |
-| 9. LSP & VS Code Extension | 0/3 | Not started | - |
+| 9. LSP & VS Code Extension | 0/3 | Planning complete | - |
 | 10. Incremental Compilation | 0/1 | Not started | - |
 | 11. MCP Server & Claude Code Skills | 0/2 | Not started | - |
