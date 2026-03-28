@@ -171,7 +171,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 09-01-PLAN.md — LSP server core: GLSP setup, document sync, real-time diagnostics, formatting, stc lsp CLI command
+- [x] 09-01-PLAN.md — LSP server core: GLSP setup, document sync, real-time diagnostics, formatting, stc lsp CLI command
 - [ ] 09-02-PLAN.md — Navigation and refactoring: go-to-definition, hover, completion, find-references, rename
 - [ ] 09-03-PLAN.md — Semantic tokens for preprocessor blocks and VS Code extension with TextMate grammar
 
