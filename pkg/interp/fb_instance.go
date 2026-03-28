@@ -184,6 +184,22 @@ func (inst *FBInstance) GetMember(name string) Value {
 	return Value{}
 }
 
+// ZeroFromTypeSpec is the exported wrapper around zeroFromTypeSpec
+// for use by the test runner package.
+func ZeroFromTypeSpec(ts ast.TypeSpec) Value {
+	return zeroFromTypeSpec(ts)
+}
+
+// MakeFBInstanceValue creates a Value wrapping a StandardFB as an FBInstance.
+// Used by the test runner to initialize FB variables in test environments.
+func MakeFBInstanceValue(typeName string, fb StandardFB) Value {
+	inst := &FBInstance{
+		TypeName: typeName,
+		FB:       fb,
+	}
+	return Value{Kind: ValFBInstance, FBRef: inst}
+}
+
 // typeNameFromSpec extracts the type name from a TypeSpec.
 // Returns empty string if not a NamedType.
 func typeNameFromSpec(ts ast.TypeSpec) string {

@@ -1,6 +1,8 @@
 package testing
 
-// FormatJSON formats test results as JSON.
+import "encoding/json"
+
+// FormatJSON formats test results as indented JSON.
 func FormatJSON(result *RunResult) ([]byte, error) {
-	return nil, nil
+	return json.MarshalIndent(result, "", "  ")
 }

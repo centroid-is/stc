@@ -38,6 +38,17 @@ func New() *Interpreter {
 	}
 }
 
+// SetDt sets the current scan cycle delta time on the interpreter.
+// Used by the test runner for ADVANCE_TIME support.
+func (interp *Interpreter) SetDt(dt time.Duration) {
+	interp.dt = dt
+}
+
+// EvalExpr is the exported wrapper around evalExpr for use by the test runner.
+func (interp *Interpreter) EvalExpr(env *Env, expr ast.Expr) (Value, error) {
+	return interp.evalExpr(env, expr)
+}
+
 // --- Expression evaluation ---
 
 // evalExpr evaluates an expression AST node and returns its runtime Value.
@@ -450,6 +461,12 @@ func (interp *Interpreter) evalIndex(env *Env, e *ast.IndexExpr) (Value, error) 
 
 // --- Statement execution ---
 
+// ExecStatements is the exported wrapper around execStatements for use by
+// the test runner and other external packages that need to execute statement lists.
+func (interp *Interpreter) ExecStatements(env *Env, stmts []ast.Statement) error {
+	return interp.execStatements(env, stmts)
+}
+
 // execStatements executes a list of statements sequentially.
 func (interp *Interpreter) execStatements(env *Env, stmts []ast.Statement) error {
 	for _, stmt := range stmts {
@@ -493,7 +510,15 @@ func (interp *Interpreter) execStmt(env *Env, stmt ast.Statement) error {
 }
 
 // execAssign executes an assignment statement.
+// If Value is nil, this is an expression statement (e.g., a function call
+// used as a statement). In that case, just evaluate Target for side effects.
 func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
+	if s.Value == nil {
+		// Expression statement: evaluate target for side effects (e.g., assertion calls)
+		_, err := interp.evalExpr(env, s.Target)
+		return err
+	}
+
 	val, err := interp.evalExpr(env, s.Value)
 	if err != nil {
 		return err
