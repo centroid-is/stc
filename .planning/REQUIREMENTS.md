@@ -116,13 +116,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### MCP Server
 
-- [ ] **MCP-01**: MCP server exposes stc_parse tool (parse ST, return AST or diagnostics)
-- [ ] **MCP-02**: MCP server exposes stc_check tool (type check, return diagnostics)
-- [ ] **MCP-03**: MCP server exposes stc_test tool (run tests, return results)
-- [ ] **MCP-04**: MCP server exposes stc_emit tool (emit vendor ST)
-- [ ] **MCP-05**: MCP server exposes stc_lint tool (lint, return suggestions)
-- [ ] **MCP-06**: MCP server exposes stc_format tool (format ST code)
-- [ ] **MCP-07**: All MCP tool descriptions are under 100 tokens each for minimal agent context
+- [x] **MCP-01**: MCP server exposes stc_parse tool (parse ST, return AST or diagnostics)
+- [x] **MCP-02**: MCP server exposes stc_check tool (type check, return diagnostics)
+- [x] **MCP-03**: MCP server exposes stc_test tool (run tests, return results)
+- [x] **MCP-04**: MCP server exposes stc_emit tool (emit vendor ST)
+- [x] **MCP-05**: MCP server exposes stc_lint tool (lint, return suggestions)
+- [x] **MCP-06**: MCP server exposes stc_format tool (format ST code)
+- [x] **MCP-07**: All MCP tool descriptions are under 100 tokens each for minimal agent context
 
 ### Claude Code Skills
 
@@ -245,13 +245,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LSP-08 | Phase 9 | Complete |
 | INCR-01 | Phase 10 | Complete |
 | INCR-02 | Phase 10 | Complete |
-| MCP-01 | Phase 11 | Pending |
-| MCP-02 | Phase 11 | Pending |
-| MCP-03 | Phase 11 | Pending |
-| MCP-04 | Phase 11 | Pending |
-| MCP-05 | Phase 11 | Pending |
-| MCP-06 | Phase 11 | Pending |
-| MCP-07 | Phase 11 | Pending |
+| MCP-01 | Phase 11 | Complete |
+| MCP-02 | Phase 11 | Complete |
+| MCP-03 | Phase 11 | Complete |
+| MCP-04 | Phase 11 | Complete |
+| MCP-05 | Phase 11 | Complete |
+| MCP-06 | Phase 11 | Complete |
+| MCP-07 | Phase 11 | Complete |
 | SKIL-01 | Phase 11 | Complete |
 | SKIL-02 | Phase 11 | Complete |
 | SKIL-03 | Phase 11 | Complete |

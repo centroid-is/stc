@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 8: Formatter & Linter** - Auto-formatting with configurable style, PLCopen coding guidelines linter, JSON diagnostics
 - [ ] **Phase 9: LSP & VS Code Extension** - Full language server (diagnostics, go-to-def, hover, completion, rename, references), VS Code extension with syntax highlighting
 - [x] **Phase 10: Incremental Compilation** - File-level dependency tracking, cached symbol tables, re-analyze only changed files (completed 2026-03-28)
-- [ ] **Phase 11: MCP Server & Claude Code Skills** - MCP tool wrappers for all CLI commands, Claude Code skills for ST development workflows
+- [x] **Phase 11: MCP Server & Claude Code Skills** - MCP tool wrappers for all CLI commands, Claude Code skills for ST development workflows (completed 2026-03-28)
 
 ## Phase Details
 
@@ -200,7 +200,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 11-01-PLAN.md — MCP server binary (cmd/stc-mcp) with 6 tool handlers wrapping pkg/ functions directly
+- [x] 11-01-PLAN.md — MCP server binary (cmd/stc-mcp) with 6 tool handlers wrapping pkg/ functions directly
 - [x] 11-02-PLAN.md — Claude Code skills (.claude/skills/) for generate, validate, test, emit, and review workflows
 
 ## Progress
@@ -220,4 +220,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. Formatter & Linter | 2/3 | Gap closure planned | - |
 | 9. LSP & VS Code Extension | 0/3 | Planning complete | - |
 | 10. Incremental Compilation | 2/2 | Complete    | 2026-03-28 |
-| 11. MCP Server & Claude Code Skills | 1/2 | In Progress|  |
+| 11. MCP Server & Claude Code Skills | 2/2 | Complete   | 2026-03-28 |

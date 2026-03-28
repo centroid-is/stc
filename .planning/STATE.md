@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-03-28T21:27:11.463Z"
+status: verifying
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-28T21:29:45.064Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 11
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 32
-  completed_plans: 31
+  completed_plans: 32
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 Phase: 11 (mcp-server-claude-code-skills) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-28
 
 Progress: [░░░░░░░░░░] 0%
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 10 P01 | 228s | 2 tasks | 6 files |
 | Phase 10 P02 | 287s | 2 tasks | 4 files |
 | Phase 11 P02 | 174s | 2 tasks | 6 files |
+| Phase 11 P01 | 256s | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,8 @@ Recent decisions affecting current work:
 - [Phase 10]: IncrementalAnalyzer.Parse returns files+stats; caller runs semantic analysis (avoids import cycle)
 - [Phase 10]: LSP cross-file analysis: all open documents analyzed together with shared AnalysisResult
 - [Phase 11]: Skills are self-contained markdown files with no cross-skill dependencies
+- [Phase 11]: MCP tool handlers as testable package-level functions separate from transport registration
+- [Phase 11]: google/jsonschema-go tags use description-only text format
 
 ### Pending Todos
 
@@ -174,6 +177,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-28T21:27:11.460Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-03-28T21:29:45.061Z
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
