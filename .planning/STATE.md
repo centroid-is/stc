@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-03-28T19:52:36.282Z"
+status: executing
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-28T20:05:16.261Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 11
   completed_phases: 7
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 24
+  completed_plans: 23
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor — no hardware required for development and testing.
-**Current focus:** Phase 07 — multi-vendor-emission
+**Current focus:** Phase 08 — formatter-linter
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 08 (formatter-linter) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-28
 
 Progress: [░░░░░░░░░░] 0%
@@ -74,6 +74,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 06 P02 | 318s | 2 tasks | 9 files |
 | Phase 07 P01 | 309s | 2 tasks | 3 files |
 | Phase 07 P02 | 126s | 1 tasks | 6 files |
+| Phase 08 P02 | 272s | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,9 @@ Recent decisions affecting current work:
 - [Phase 07]: Vendor filtering at VarDecl level: skip declarations with unsupported types
 - [Phase 07]: Canonical 4-space indent, uppercase keywords for round-trip stability
 - [Phase 07]: Default emit target is portable (safest cross-vendor subset)
+- [Phase 08]: LINT0xx diagnostic code prefix for all lint rules (distinct from SEMA/VEND)
+- [Phase 08]: Lint warnings exit 0, parse errors exit 1 (consistent with stc check)
+- [Phase 08]: PascalCase naming regex allows underscore-separated segments (FB_Motor style)
 
 ### Pending Todos
 
@@ -147,6 +151,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-28T19:49:31.601Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-03-28T20:05:16.258Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None

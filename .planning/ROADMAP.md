@@ -154,7 +154,7 @@ Plans:
 
 Plans:
 - [ ] 08-01-PLAN.md — Formatter package (pkg/format) with configurable style, comment preservation, idempotency, and CLI stc fmt command
-- [ ] 08-02-PLAN.md — Linter package (pkg/lint) with PLCopen rules, naming conventions, and CLI stc lint command
+- [x] 08-02-PLAN.md — Linter package (pkg/lint) with PLCopen rules, naming conventions, and CLI stc lint command
 
 ### Phase 9: LSP & VS Code Extension
 **Goal**: Users get a modern IDE experience for ST development in VS Code with real-time diagnostics, navigation, and refactoring

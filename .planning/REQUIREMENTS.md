@@ -93,10 +93,10 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **FMT-01**: CLI command `stc fmt <file>` auto-formats ST code (indentation, keyword casing, spacing)
 - [ ] **FMT-02**: Formatter is configurable (indent style, casing conventions)
 - [ ] **FMT-03**: Formatter preserves comments correctly
-- [ ] **LINT-01**: CLI command `stc lint <files...>` reports coding standard violations
-- [ ] **LINT-02**: Linter checks PLCopen coding guidelines
-- [ ] **LINT-03**: Linter checks naming conventions (configurable)
-- [ ] **LINT-04**: Linter reports with JSON output (`--format json`)
+- [x] **LINT-01**: CLI command `stc lint <files...>` reports coding standard violations
+- [x] **LINT-02**: Linter checks PLCopen coding guidelines
+- [x] **LINT-03**: Linter checks naming conventions (configurable)
+- [x] **LINT-04**: Linter reports with JSON output (`--format json`)
 
 ### Multi-Vendor Emission
 
@@ -231,10 +231,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FMT-01 | Phase 8 | Pending |
 | FMT-02 | Phase 8 | Pending |
 | FMT-03 | Phase 8 | Pending |
-| LINT-01 | Phase 8 | Pending |
-| LINT-02 | Phase 8 | Pending |
-| LINT-03 | Phase 8 | Pending |
-| LINT-04 | Phase 8 | Pending |
+| LINT-01 | Phase 8 | Complete |
+| LINT-02 | Phase 8 | Complete |
+| LINT-03 | Phase 8 | Complete |
+| LINT-04 | Phase 8 | Complete |
 | LSP-01 | Phase 9 | Pending |
 | LSP-02 | Phase 9 | Pending |
 | LSP-03 | Phase 9 | Pending |
