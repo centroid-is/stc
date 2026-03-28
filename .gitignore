@@ -1,5 +1,7 @@
 /stc
+/stc-mcp
 coverage.out
 *.exe
 .DS_Store
 /vendor/
+.stc-cache/
