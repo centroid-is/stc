@@ -79,8 +79,30 @@ func NewServer() *server.Server {
 	}
 
 	handler.TextDocumentFormatting = handleFormatting(store)
+	handler.TextDocumentSemanticTokensFull = handleSemanticTokensFull(store)
 
-	return server.NewServer(&handler, "stc-lsp", false)
+	srv := server.NewServer(&handler, "stc-lsp", false)
+
+	// Override the auto-generated SemanticTokensProvider to include our legend.
+	// GLSP's CreateServerCapabilities sets Full=true when the handler is registered
+	// but does not populate the legend, so we set it explicitly in the Initialize handler.
+	origInit := handler.Initialize
+	handler.Initialize = func(ctx *glsp.Context, params *protocol.InitializeParams) (any, error) {
+		result, err := origInit(ctx, params)
+		if err != nil {
+			return result, err
+		}
+		if initResult, ok := result.(protocol.InitializeResult); ok {
+			initResult.Capabilities.SemanticTokensProvider = &protocol.SemanticTokensOptions{
+				Legend: semanticTokensLegend,
+				Full:   true,
+			}
+			return initResult, nil
+		}
+		return result, nil
+	}
+
+	return srv
 }
 
 // Run creates and starts the LSP server on stdio.
