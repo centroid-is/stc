@@ -135,7 +135,8 @@ func TestCLI_ParseNonexistentFile(t *testing.T) {
 }
 
 func TestCLI_StubCommands(t *testing.T) {
-	for _, sub := range []string{"test", "emit", "lint", "fmt"} {
+	// "test" is no longer a stub -- it has a real implementation
+	for _, sub := range []string{"emit", "lint", "fmt"} {
 		t.Run(sub, func(t *testing.T) {
 			_, stderr, exitCode := runStc(t, sub)
 			if exitCode != 0 {
@@ -149,7 +150,7 @@ func TestCLI_StubCommands(t *testing.T) {
 }
 
 func TestCLI_StubCommandsJSON(t *testing.T) {
-	stdout, _, exitCode := runStc(t, "test", "--format", "json")
+	stdout, _, exitCode := runStc(t, "emit", "--format", "json")
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)
 	}
