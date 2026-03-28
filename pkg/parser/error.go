@@ -17,7 +17,7 @@ func (p *Parser) error(format string, args ...any) {
 
 // errorAt adds an Error diagnostic at a specific position.
 func (p *Parser) errorAt(pos source.Pos, format string, args ...any) {
-	p.diags.Errorf(pos, "P001", fmt.Sprintf(format, args...))
+	p.diags.Errorf(pos, "P001", format, args...)
 }
 
 // declarationStarts lists token kinds that begin a declaration.

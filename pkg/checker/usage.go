@@ -1,8 +1,6 @@
 package checker
 
 import (
-	"fmt"
-
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/symbols"
@@ -88,7 +86,7 @@ func checkUnreachableStmts(stmts []ast.Statement, diags *diag.Collector) {
 			span := nextStmt.Span()
 			pos := spanPos(span)
 			diags.Warnf(pos, CodeUnreachableCode,
-				fmt.Sprintf("unreachable code after %s statement", keyword))
+				"unreachable code after %s statement", keyword)
 			// Only warn once per block
 			return
 		}
