@@ -63,7 +63,7 @@ func TestCorpusParse(t *testing.T) {
 		results   []string
 	)
 
-	const perFileTimeout = 10 * time.Second
+	const perFileTimeout = 3 * time.Second
 
 	err := filepath.Walk(corpusDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
