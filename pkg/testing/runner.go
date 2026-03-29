@@ -365,9 +365,36 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 
 			for _, n := range vd.Names {
 				env.Define(n.Name, val)
+				// Register subrange constraints if applicable
+				if srt, ok := vd.Type.(*ast.SubrangeType); ok {
+					low := evalConstInt(srt.Low)
+					high := evalConstInt(srt.High)
+					env.DefineSubrange(n.Name, int64(low), int64(high))
+				}
 			}
 		}
 	}
+}
+
+// evalConstInt extracts an integer from a constant expression AST node.
+func evalConstInt(expr ast.Expr) int {
+	if lit, ok := expr.(*ast.Literal); ok {
+		if lit.LitKind == ast.LitInt {
+			n := 0
+			for _, ch := range lit.Value {
+				if ch >= '0' && ch <= '9' {
+					n = n*10 + int(ch-'0')
+				}
+			}
+			return n
+		}
+	}
+	if unary, ok := expr.(*ast.UnaryExpr); ok {
+		if unary.Op.Text == "-" {
+			return -evalConstInt(unary.Operand)
+		}
+	}
+	return 0
 }
 
 // validateImplements checks that an FB declares all methods required by

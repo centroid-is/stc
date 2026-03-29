@@ -1,13 +1,23 @@
 package interp
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+// SubrangeConstraint stores the bounds for a subrange variable.
+type SubrangeConstraint struct {
+	Low  int64
+	High int64
+}
 
 // Env is a scoped environment for variable storage during interpretation.
 // Variables are stored with uppercase keys for case-insensitive IEC 61131-3
 // identifier lookup. A parent pointer enables scope chain walking.
 type Env struct {
-	parent *Env
-	vars   map[string]Value
+	parent     *Env
+	vars       map[string]Value
+	subranges  map[string]*SubrangeConstraint // optional subrange bounds per variable
 }
 
 // NewEnv creates a new environment with an optional parent scope.
@@ -63,6 +73,35 @@ func (e *Env) AllVars() map[string]Value {
 // Parent returns the parent environment, or nil if this is the root scope.
 func (e *Env) Parent() *Env {
 	return e.parent
+}
+
+// DefineSubrange registers a subrange constraint for a variable.
+// When Set is called for this variable, the value will be range-checked.
+func (e *Env) DefineSubrange(name string, low, high int64) {
+	key := strings.ToUpper(name)
+	if e.subranges == nil {
+		e.subranges = make(map[string]*SubrangeConstraint)
+	}
+	e.subranges[key] = &SubrangeConstraint{Low: low, High: high}
+}
+
+// CheckSubrange checks if a value satisfies the subrange constraint for a variable.
+// Returns an error message if out of range, or empty string if OK or no constraint.
+func (e *Env) CheckSubrange(name string, v Value) string {
+	key := strings.ToUpper(name)
+	if e.subranges != nil {
+		if sr, ok := e.subranges[key]; ok {
+			if v.Kind == ValInt {
+				if v.Int < sr.Low || v.Int > sr.High {
+					return fmt.Sprintf("value %d out of subrange [%d..%d] for variable '%s'", v.Int, sr.Low, sr.High, name)
+				}
+			}
+		}
+	}
+	if e.parent != nil {
+		return e.parent.CheckSubrange(name, v)
+	}
+	return ""
 }
 
 // FindOwner returns the Env in the scope chain that directly contains the

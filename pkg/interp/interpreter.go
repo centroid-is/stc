@@ -564,6 +564,10 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 			}
 			return nil
 		}
+		// Check subrange constraints
+		if msg := env.CheckSubrange(target.Name, val); msg != "" {
+			return &RuntimeError{Msg: msg, Pos: target.Span().Start}
+		}
 		if !env.Set(target.Name, val) {
 			// If variable doesn't exist, define it (for compatibility)
 			env.Define(target.Name, val)
