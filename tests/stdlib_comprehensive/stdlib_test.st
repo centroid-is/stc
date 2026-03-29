@@ -36,11 +36,15 @@ END_VAR
     t(IN := TRUE, PT := T#100ms);
     ASSERT_TRUE(t.Q);
 
-    (* Drop IN *)
+    (* Drop IN — need a tick for the FB to process the new input *)
+    t(IN := FALSE, PT := T#100ms);
+    ADVANCE_TIME(T#1ms);
     t(IN := FALSE, PT := T#100ms);
     ASSERT_FALSE(t.Q);
 
     (* Re-raise IN, timer restarts from zero *)
+    t(IN := TRUE, PT := T#100ms);
+    ADVANCE_TIME(T#1ms);
     t(IN := TRUE, PT := T#100ms);
     ASSERT_FALSE(t.Q);
 
