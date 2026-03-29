@@ -31,6 +31,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Run ST test suites
+        run: go run ./cmd/stc test tests/
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
