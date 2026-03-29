@@ -1,0 +1,5 @@
+PROGRAM p
+VAR x : INT;
+END_VAR
+IF TRUE THEN
+  x := 1 +
