@@ -237,6 +237,12 @@ func zeroFromTypeSpec(ts ast.TypeSpec) Value {
 	case *ast.SubrangeType:
 		// Use the base type's zero
 		return zeroFromTypeSpec(t.BaseType)
+	case *ast.PointerType:
+		// Null pointer
+		return Value{Kind: ValPointer}
+	case *ast.ReferenceType:
+		// Null reference
+		return Value{Kind: ValReference}
 	default:
 		return Zero(types.KindDINT)
 	}

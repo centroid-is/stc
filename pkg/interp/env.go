@@ -64,3 +64,16 @@ func (e *Env) AllVars() map[string]Value {
 func (e *Env) Parent() *Env {
 	return e.parent
 }
+
+// FindOwner returns the Env in the scope chain that directly contains the
+// given variable (case-insensitive). Returns nil if not found.
+func (e *Env) FindOwner(name string) *Env {
+	key := strings.ToUpper(name)
+	if _, ok := e.vars[key]; ok {
+		return e
+	}
+	if e.parent != nil {
+		return e.parent.FindOwner(name)
+	}
+	return nil
+}

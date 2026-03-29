@@ -75,7 +75,7 @@ func (interp *Interpreter) evalExpr(env *Env, expr ast.Expr) (Value, error) {
 	case *ast.MemberAccessExpr:
 		return interp.evalMemberAccess(env, e)
 	case *ast.DerefExpr:
-		return Value{}, &RuntimeError{Msg: "pointer dereference not yet implemented"}
+		return interp.evalDeref(env, e)
 	case *ast.ErrorNode:
 		return Value{}, &RuntimeError{Msg: "cannot evaluate error node"}
 	default:
@@ -549,6 +549,8 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 		return interp.execAssignIndex(env, target, val)
 	case *ast.MemberAccessExpr:
 		return interp.execAssignMember(env, target, val)
+	case *ast.DerefExpr:
+		return interp.execAssignDeref(env, target, val)
 	default:
 		return &RuntimeError{Msg: fmt.Sprintf("unsupported assignment target: %T", s.Target)}
 	}
@@ -954,6 +956,44 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 	}
 }
 
+// execAssignDeref handles assignment through a pointer dereference: p^ := val
+func (interp *Interpreter) execAssignDeref(env *Env, target *ast.DerefExpr, val Value) error {
+	ptr, err := interp.evalExpr(env, target.Operand)
+	if err != nil {
+		return err
+	}
+	if ptr.Kind != ValPointer {
+		return &RuntimeError{Msg: fmt.Sprintf("cannot dereference non-pointer value of type %s", ptr.Kind)}
+	}
+	if ptr.PtrEnv == nil || ptr.PtrVar == "" {
+		return &RuntimeError{Msg: "nil pointer dereference"}
+	}
+	if !ptr.PtrEnv.Set(ptr.PtrVar, val) {
+		return &RuntimeError{Msg: fmt.Sprintf("dangling pointer: variable '%s' no longer exists", ptr.PtrVar)}
+	}
+	return nil
+}
+
+// evalDeref evaluates a pointer dereference expression (p^).
+// It resolves the pointer value and reads the target variable from the stored env.
+func (interp *Interpreter) evalDeref(env *Env, e *ast.DerefExpr) (Value, error) {
+	ptr, err := interp.evalExpr(env, e.Operand)
+	if err != nil {
+		return Value{}, err
+	}
+	if ptr.Kind != ValPointer {
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot dereference non-pointer value of type %s", ptr.Kind)}
+	}
+	if ptr.PtrEnv == nil || ptr.PtrVar == "" {
+		return Value{}, &RuntimeError{Msg: "nil pointer dereference"}
+	}
+	v, ok := ptr.PtrEnv.Get(ptr.PtrVar)
+	if !ok {
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("dangling pointer: variable '%s' no longer exists", ptr.PtrVar)}
+	}
+	return v, nil
+}
+
 // evalCall evaluates a function call expression.
 // It dispatches to StdlibFunctions first, then falls back to user-defined functions.
 func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
@@ -969,6 +1009,47 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		calleeName = strings.ToUpper(c.Name)
 	default:
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", e.Callee)}
+	}
+
+	// Handle ADR() specially: it needs the variable reference, not its value
+	if calleeName == "ADR" {
+		if len(e.Args) != 1 {
+			return Value{}, &RuntimeError{Msg: "ADR requires exactly 1 argument"}
+		}
+		argIdent, ok := e.Args[0].(*ast.Ident)
+		if !ok {
+			return Value{}, &RuntimeError{Msg: "ADR argument must be a variable name"}
+		}
+		// Find the env that owns this variable
+		targetEnv := env.FindOwner(argIdent.Name)
+		if targetEnv == nil {
+			return Value{}, &RuntimeError{Msg: fmt.Sprintf("ADR: undefined variable '%s'", argIdent.Name)}
+		}
+		return Value{
+			Kind:   ValPointer,
+			PtrEnv: targetEnv,
+			PtrVar: strings.ToUpper(argIdent.Name),
+		}, nil
+	}
+
+	// Handle REF() similarly to ADR() but returns a Reference value
+	if calleeName == "REF" {
+		if len(e.Args) != 1 {
+			return Value{}, &RuntimeError{Msg: "REF requires exactly 1 argument"}
+		}
+		argIdent, ok := e.Args[0].(*ast.Ident)
+		if !ok {
+			return Value{}, &RuntimeError{Msg: "REF argument must be a variable name"}
+		}
+		targetEnv := env.FindOwner(argIdent.Name)
+		if targetEnv == nil {
+			return Value{}, &RuntimeError{Msg: fmt.Sprintf("REF: undefined variable '%s'", argIdent.Name)}
+		}
+		return Value{
+			Kind:   ValReference,
+			PtrEnv: targetEnv,
+			PtrVar: strings.ToUpper(argIdent.Name),
+		}, nil
 	}
 
 	// Check LocalFunctions first (per-instance overrides for test assertions, etc.)

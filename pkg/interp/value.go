@@ -25,6 +25,8 @@ const (
 	ValArray                       // []Value
 	ValStruct                      // map[string]Value
 	ValFBInstance                  // Reference to a function block instance
+	ValPointer                     // Pointer to a variable (env + name)
+	ValReference                   // Reference to a variable (auto-deref pointer)
 )
 
 var valueKindNames = [...]string{
@@ -39,6 +41,8 @@ var valueKindNames = [...]string{
 	ValArray:      "Array",
 	ValStruct:     "Struct",
 	ValFBInstance: "FBInstance",
+	ValPointer:    "Pointer",
+	ValReference:  "Reference",
 }
 
 // String returns the human-readable name of a ValueKind.
@@ -62,6 +66,8 @@ type Value struct {
 	Struct  map[string]Value
 	FBRef   *FBInstance     // Reference to a function block instance
 	IECType types.TypeKind // Tracks the precise IEC type for conversions
+	PtrEnv  *Env           // For ValPointer/ValReference: the env containing the target
+	PtrVar  string         // For ValPointer/ValReference: uppercase variable name
 }
 
 // String returns a debug representation of the Value.
@@ -86,6 +92,10 @@ func (v Value) String() string {
 		return fmt.Sprintf("{%d fields}", len(v.Struct))
 	case ValFBInstance:
 		return "FB_INSTANCE"
+	case ValPointer:
+		return fmt.Sprintf("PTR(%s)", v.PtrVar)
+	case ValReference:
+		return fmt.Sprintf("REF(%s)", v.PtrVar)
 	default:
 		return fmt.Sprintf("Value(%v)", v.Kind)
 	}
