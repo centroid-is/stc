@@ -6,6 +6,7 @@ import (
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 )
 
 // IncrStats holds statistics about an incremental analysis run.
@@ -31,6 +32,7 @@ type IncrementalAnalyzer struct {
 	graph    *DepGraph
 	cacheDir string
 	stats    IncrStats
+	defines  map[string]bool // preprocessor defines from CLI flags
 }
 
 // NewIncrementalAnalyzer creates an incremental analyzer that persists
@@ -44,6 +46,12 @@ func NewIncrementalAnalyzer(cacheDir string) *IncrementalAnalyzer {
 		graph:    NewDepGraph(),
 		cacheDir: cacheDir,
 	}
+}
+
+// SetDefines sets the preprocessor defines used during parsing.
+// Must be called before Parse. If not called, no external defines are used.
+func (ia *IncrementalAnalyzer) SetDefines(defines map[string]bool) {
+	ia.defines = defines
 }
 
 // Stats returns the statistics from the most recent Parse call.
@@ -103,10 +111,10 @@ func (ia *IncrementalAnalyzer) Parse(filenames []string) IncrResult {
 	for i := range entries {
 		e := &entries[i]
 		if e.stale {
-			result := parser.Parse(e.filename, string(e.content))
+			result := ia.parseFile(e.filename, string(e.content))
 			ia.cache.Store(e.filename, e.hash, &result)
 		} else if ia.cache.NeedsParse(e.filename) {
-			result := parser.Parse(e.filename, string(e.content))
+			result := ia.parseFile(e.filename, string(e.content))
 			ia.cache.Store(e.filename, e.hash, &result)
 		}
 	}
@@ -142,4 +150,14 @@ func (ia *IncrementalAnalyzer) Parse(filenames []string) IncrResult {
 		Diags: allDiags,
 		Stats: ia.stats,
 	}
+}
+
+// parseFile runs preprocessing (if defines are set) then parsing on a single file.
+// Returns a parser.ParseResult compatible with the file cache.
+func (ia *IncrementalAnalyzer) parseFile(filename, content string) parser.ParseResult {
+	if ia.defines != nil {
+		pr := pipeline.Parse(filename, content, ia.defines)
+		return pr.ParseResult
+	}
+	return parser.Parse(filename, content)
 }

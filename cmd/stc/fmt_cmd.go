@@ -8,7 +8,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/format"
-	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +33,7 @@ and spacing. Comments attached to AST nodes are preserved.`,
 
 	cmd.Flags().String("indent", "    ", "Indentation string (default: 4 spaces)")
 	cmd.Flags().Bool("uppercase-keywords", true, "Use uppercase keywords (default: true)")
+	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
 
 	return cmd
 }
@@ -49,6 +50,8 @@ func runFmt(cmd *cobra.Command, args []string) error {
 	outputFormat, _ := cmd.Flags().GetString("format")
 	indent, _ := cmd.Flags().GetString("indent")
 	uppercaseKeywords, _ := cmd.Flags().GetBool("uppercase-keywords")
+	defineFlags, _ := cmd.Flags().GetStringSlice("define")
+	defines := pipeline.ParseDefines(defineFlags)
 
 	opts := format.FormatOptions{
 		Indent:            indent,
@@ -66,7 +69,7 @@ func runFmt(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		result := parser.Parse(filename, string(content))
+		result := pipeline.Parse(filename, string(content), defines)
 
 		// Check for parse errors
 		fileHasErrors := false

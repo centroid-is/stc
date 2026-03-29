@@ -9,6 +9,7 @@ import (
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/incremental"
+	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,7 @@ and vendor compatibility warnings. Exit code 1 if errors found, 0 otherwise.`,
 	}
 
 	cmd.Flags().String("vendor", "", "Vendor target for compatibility checking (beckhoff, schneider, portable)")
+	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
 
 	return cmd
 }
@@ -32,6 +34,8 @@ and vendor compatibility warnings. Exit code 1 if errors found, 0 otherwise.`,
 func runCheck(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
 	vendorFlag, _ := cmd.Flags().GetString("vendor")
+	defineFlags, _ := cmd.Flags().GetStringSlice("define")
+	defines := pipeline.ParseDefines(defineFlags)
 
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "error: no input files specified")
@@ -65,6 +69,9 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	// Run incremental parse (skips parsing unchanged files)
 	ia := incremental.NewIncrementalAnalyzer(cacheDir)
+	if defines != nil {
+		ia.SetDefines(defines)
+	}
 	incrResult := ia.Parse(args)
 	stats := incrResult.Stats
 

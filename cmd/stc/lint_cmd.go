@@ -7,7 +7,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/lint"
-	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
 	"github.com/spf13/cobra"
 )
@@ -32,11 +32,15 @@ Exit code 1 if parse errors exist, 0 otherwise (lint warnings do not cause exit 
 		RunE: runLint,
 	}
 
+	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+
 	return cmd
 }
 
 func runLint(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
+	defineFlags, _ := cmd.Flags().GetStringSlice("define")
+	defines := pipeline.ParseDefines(defineFlags)
 
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "error: no input files specified")
@@ -73,8 +77,8 @@ func runLint(cmd *cobra.Command, args []string) error {
 			os.Exit(1)
 		}
 
-		// Parse the file
-		parseResult := parser.Parse(filename, string(content))
+		// Parse the file (with preprocessing)
+		parseResult := pipeline.Parse(filename, string(content), defines)
 
 		// Check for parse errors
 		parseErrorCount := 0

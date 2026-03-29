@@ -11,7 +11,7 @@ import (
 	"github.com/centroid-is/stc/pkg/emit"
 	"github.com/centroid-is/stc/pkg/format"
 	"github.com/centroid-is/stc/pkg/lint"
-	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
 	stctesting "github.com/centroid-is/stc/pkg/testing"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -95,7 +95,7 @@ func handleParse(_ context.Context, args parseArgs) (*callToolResult, error) {
 		filename = "input.st"
 	}
 
-	result := parser.Parse(filename, args.Code)
+	result := pipeline.Parse(filename, args.Code, nil)
 
 	astJSON, err := ast.MarshalNode(result.File)
 	if err != nil {
@@ -120,7 +120,7 @@ func handleParse(_ context.Context, args parseArgs) (*callToolResult, error) {
 }
 
 func handleCheck(_ context.Context, args checkArgs) (*callToolResult, error) {
-	result := parser.Parse("input.st", args.Code)
+	result := pipeline.Parse("input.st", args.Code, nil)
 
 	var cfg *project.Config
 	if args.Vendor != "" {
@@ -163,7 +163,7 @@ func handleEmit(_ context.Context, args emitArgs) (*callToolResult, error) {
 		target = "portable"
 	}
 
-	result := parser.Parse("input.st", args.Code)
+	result := pipeline.Parse("input.st", args.Code, nil)
 	output := emit.Emit(result.File, emit.Options{
 		Target:            emit.LookupTarget(target),
 		Indent:            "    ",
@@ -174,7 +174,7 @@ func handleEmit(_ context.Context, args emitArgs) (*callToolResult, error) {
 }
 
 func handleLint(_ context.Context, args lintArgs) (*callToolResult, error) {
-	result := parser.Parse("input.st", args.Code)
+	result := pipeline.Parse("input.st", args.Code, nil)
 	lintResult := lint.LintFile(result.File, lint.DefaultLintOptions())
 
 	diagJSON, err := json.Marshal(lintResult.Diags)
@@ -186,7 +186,7 @@ func handleLint(_ context.Context, args lintArgs) (*callToolResult, error) {
 }
 
 func handleFormat(_ context.Context, args formatArgs) (*callToolResult, error) {
-	result := parser.Parse("input.st", args.Code)
+	result := pipeline.Parse("input.st", args.Code, nil)
 	formatted := format.Format(result.File, format.FormatOptions{
 		Indent:            "    ",
 		UppercaseKeywords: true,

@@ -8,7 +8,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/emit"
-	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +34,7 @@ formatting and filtering. Supports Beckhoff (full CODESYS OOP), Schneider
 	}
 
 	cmd.Flags().String("target", "portable", "Vendor target: beckhoff, schneider, portable")
+	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
 
 	return cmd
 }
@@ -49,6 +50,8 @@ func runEmit(cmd *cobra.Command, args []string) error {
 
 	format, _ := cmd.Flags().GetString("format")
 	targetName, _ := cmd.Flags().GetString("target")
+	defineFlags, _ := cmd.Flags().GetStringSlice("define")
+	defines := pipeline.ParseDefines(defineFlags)
 
 	target := emit.LookupTarget(targetName)
 	opts := emit.Options{
@@ -68,7 +71,7 @@ func runEmit(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		result := parser.Parse(filename, string(content))
+		result := pipeline.Parse(filename, string(content), defines)
 
 		// Check for parse errors
 		fileHasErrors := false

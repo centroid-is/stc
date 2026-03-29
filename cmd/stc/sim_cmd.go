@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
-	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/sim"
 	"github.com/spf13/cobra"
 )
@@ -30,6 +30,7 @@ scan cycle for a specified number of iterations at a fixed time step.`,
 	cmd.Flags().StringSlice("wave", nil, `Waveform bindings: INPUT_NAME:KIND:AMPLITUDE:FREQUENCY
   KIND: step, ramp, sine, square
   Example: --wave "SENSOR:sine:100.0:0.5"`)
+	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
 
 	return cmd
 }
@@ -38,13 +39,16 @@ func runSim(cmd *cobra.Command, args []string) error {
 	filename := args[0]
 	format, _ := cmd.Flags().GetString("format")
 
-	// Read and parse the ST file
+	defineFlags, _ := cmd.Flags().GetStringSlice("define")
+	defines := pipeline.ParseDefines(defineFlags)
+
+	// Read and parse the ST file (with preprocessing)
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("cannot read file: %w", err)
 	}
 
-	result := parser.Parse(filename, string(content))
+	result := pipeline.Parse(filename, string(content), defines)
 
 	// Find the first ProgramDecl
 	var prog *ast.ProgramDecl

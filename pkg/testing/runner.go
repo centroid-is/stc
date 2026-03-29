@@ -10,7 +10,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/interp"
-	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 )
 
 // DiscoverTestFiles finds all *_test.st files under dir recursively.
@@ -75,7 +75,7 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 		return nil, fmt.Errorf("reading %s: %w", filePath, err)
 	}
 
-	parseResult := parser.Parse(filePath, string(content))
+	parseResult := pipeline.Parse(filePath, string(content), nil)
 
 	// Extract TestCaseDecl nodes
 	var testCases []*ast.TestCaseDecl

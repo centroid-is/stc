@@ -10,6 +10,7 @@ import (
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/pipeline"
 )
 
 // Document represents an open text document with its current content,
@@ -86,7 +87,8 @@ func (s *DocumentStore) Get(uri string) *Document {
 // analysis across all open documents for multi-file symbol resolution.
 func (s *DocumentStore) analyzeDocument(doc *Document) {
 	filename := uriToFilename(doc.URI)
-	result := parser.Parse(filename, doc.Content)
+	pipeResult := pipeline.Parse(filename, doc.Content, nil)
+	result := pipeResult.ParseResult
 	doc.ParseResult = &result
 
 	// Collect all open documents for cross-file analysis
