@@ -1,0 +1,72 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+  status:
+    project:
+      default:
+        target: 85%
+        threshold: 1%   # allow 1% drop without failing
+    patch:
+      default:
+        target: 80%
+
+# Per-component coverage requirements for critical packages.
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+
+  individual_components:
+    - component_id: parser
+      name: Parser
+      paths:
+        - pkg/parser/**
+      statuses:
+        - type: project
+          target: 95%
+    - component_id: checker
+      name: Checker
+      paths:
+        - pkg/checker/**
+      statuses:
+        - type: project
+          target: 95%
+    - component_id: interp
+      name: Interpreter
+      paths:
+        - pkg/interp/**
+      statuses:
+        - type: project
+          target: 95%
+    - component_id: types
+      name: Types
+      paths:
+        - pkg/types/**
+      statuses:
+        - type: project
+          target: 95%
+    - component_id: lexer
+      name: Lexer
+      paths:
+        - pkg/lexer/**
+      statuses:
+        - type: project
+          target: 95%
+
+comment:
+  layout: "reach,diff,flags,components"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+ignore:
+  - "**/*_test.go"
+  - "cmd/**/main.go"
+  - "pkg/version/**"

@@ -1,0 +1,65 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # ---------- Unit test coverage (standard go test) ----------
+      - name: Run unit tests with coverage
+        run: |
+          go test -race -coverprofile=unit_coverage.txt -covermode=atomic \
+            -coverpkg=./... ./... -count=1 -timeout 5m
+
+      # ---------- Exec-based test coverage (cmd/stc, cmd/stc-mcp) ----------
+      - name: Run exec-based tests with coverage
+        run: |
+          mkdir -p "$RUNNER_TEMP/covdata"
+          export GOCOVERDIR="$RUNNER_TEMP/covdata"
+
+          # Run cmd/stc tests (builds binary with -cover, writes raw data)
+          go test ./cmd/stc/ -count=1 -timeout 5m
+
+          # Merge raw coverage data into text profile if data was produced.
+          if ls "$GOCOVERDIR"/covcounters.* &>/dev/null; then
+            go tool covdata textfmt -i="$GOCOVERDIR" -o=exec_coverage.txt
+          fi
+
+      # ---------- Merge profiles ----------
+      - name: Merge coverage profiles
+        run: |
+          # Start with the unit coverage as the base.
+          cp unit_coverage.txt coverage.txt
+
+          # Append exec coverage if it exists (skip the "mode:" header line).
+          if [ -f exec_coverage.txt ]; then
+            tail -n +2 exec_coverage.txt >> coverage.txt
+          fi
+
+      # ---------- Coverage threshold enforcement ----------
+      - name: Enforce coverage thresholds
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          config: .testcoverage.yml
+          profile: coverage.txt
+
+      # ---------- Upload to Codecov ----------
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.txt
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}

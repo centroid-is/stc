@@ -1,0 +1,32 @@
+# Configuration for vladopajic/go-test-coverage
+# https://github.com/vladopajic/go-test-coverage
+
+# Profile file path (overridden by CI, but useful for local runs).
+profile: coverage.txt
+
+# Overall project threshold.
+threshold:
+  file: 0
+  package: 0
+  total: 85
+
+# Per-package overrides for critical packages.
+override:
+  - path: ^pkg/parser$
+    threshold: 95
+  - path: ^pkg/lexer$
+    threshold: 95
+  - path: ^pkg/checker$
+    threshold: 95
+  - path: ^pkg/interp$
+    threshold: 95
+  - path: ^pkg/types$
+    threshold: 95
+  - path: ^pkg/emit$
+    threshold: 95
+
+# Exclude test helpers and generated code from coverage analysis.
+exclude:
+  paths:
+    - ^cmd/.*/main\.go$
+    - ^pkg/version/
