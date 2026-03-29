@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+            ext: ''
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+            ext: ''
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+            ext: ''
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+            ext: ''
+          - os: windows
+            arch: amd64
+            runner: windows-latest
+            ext: '.exe'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build stc
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+        run: |
+          go build -ldflags "-s -w -X github.com/centroid-is/stc/pkg/version.Version=${{ github.ref_name }} -X github.com/centroid-is/stc/pkg/version.Commit=${{ github.sha }}" -o stc${{ matrix.ext }} ./cmd/stc
+          go build -ldflags "-s -w -X github.com/centroid-is/stc/pkg/version.Version=${{ github.ref_name }} -X github.com/centroid-is/stc/pkg/version.Commit=${{ github.sha }}" -o stc-mcp${{ matrix.ext }} ./cmd/stc-mcp
+
+      - name: Package
+        shell: bash
+        run: |
+          ARCHIVE="stc-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}"
+          mkdir -p "$ARCHIVE"
+          cp stc${{ matrix.ext }} stc-mcp${{ matrix.ext }} "$ARCHIVE/"
+          cp LICENSE README.md 2>/dev/null || true
+          cp -r editors/vscode "$ARCHIVE/vscode-extension" 2>/dev/null || true
+          cp -r .claude/skills "$ARCHIVE/claude-skills" 2>/dev/null || true
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            7z a "${ARCHIVE}.zip" "$ARCHIVE"
+          else
+            tar czf "${ARCHIVE}.tar.gz" "$ARCHIVE"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stc-${{ matrix.os }}-${{ matrix.arch }}
+          path: stc-${{ github.ref_name }}-${{ matrix.os }}-${{ matrix.arch }}.*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec mv {} . \;
+          sha256sum *.tar.gz *.zip > checksums-sha256.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/checksums-sha256.txt
