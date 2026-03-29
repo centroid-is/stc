@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -141,6 +142,9 @@ func TestWrap_Test(t *testing.T) {
 }
 
 func TestWrap_Test_UnreadableFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not honor os.Chmod(0o000) for read restriction")
+	}
 	// Create a directory with a _test.st file that cannot be read,
 	// triggering the error path in handleTest -> stctesting.Run -> runFile.
 	tmpDir := t.TempDir()
