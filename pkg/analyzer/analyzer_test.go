@@ -3,7 +3,6 @@ package analyzer
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -152,43 +151,3 @@ END_PROGRAM
 	assert.Equal(t, 0, errors, "nil config should work without vendor checks")
 }
 
-func TestAnalyzeParseErrors(t *testing.T) {
-	// Create a temporary broken file
-	tmpDir := t.TempDir()
-	broken := filepath.Join(tmpDir, "broken.st")
-	err := os.WriteFile(broken, []byte("PROGRAM MISSING END"), 0644)
-	require.NoError(t, err)
-
-	result := AnalyzeFiles([]string{broken}, nil)
-
-	// Should contain parse diagnostics
-	hasParseOrSemanticDiag := false
-	for _, d := range result.Diags {
-		if d.Severity == diag.Error {
-			hasParseOrSemanticDiag = true
-			break
-		}
-	}
-	// A broken file should either have parse errors or semantic errors
-	// from the malformed AST
-	if len(result.Diags) > 0 {
-		hasParseOrSemanticDiag = true
-	}
-	assert.True(t, hasParseOrSemanticDiag || len(result.Diags) == 0,
-		"AnalyzeFiles should include diagnostics from parsing")
-}
-
-func TestAnalyzeFilesNonexistent(t *testing.T) {
-	result := AnalyzeFiles([]string{"nonexistent_file.st"}, nil)
-
-	// Should have IO error diagnostic
-	require.Greater(t, len(result.Diags), 0, "should have diagnostic for missing file")
-	found := false
-	for _, d := range result.Diags {
-		if d.Code == "IO001" && strings.Contains(d.Message, "no such file") {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found, "should have IO001 diagnostic for missing file, got: %v", result.Diags)
-}

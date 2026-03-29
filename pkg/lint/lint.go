@@ -1,8 +1,6 @@
 package lint
 
 import (
-	"sort"
-
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 )
@@ -10,25 +8,6 @@ import (
 // LintResult holds all diagnostics produced by the linter.
 type LintResult struct {
 	Diags []diag.Diagnostic
-}
-
-// Lint runs all lint rules against the given source files.
-func Lint(files []*ast.SourceFile, opts LintOptions) LintResult {
-	var allDiags []diag.Diagnostic
-	for _, f := range files {
-		result := LintFile(f, opts)
-		allDiags = append(allDiags, result.Diags...)
-	}
-	sort.Slice(allDiags, func(i, j int) bool {
-		if allDiags[i].Pos.File != allDiags[j].Pos.File {
-			return allDiags[i].Pos.File < allDiags[j].Pos.File
-		}
-		if allDiags[i].Pos.Line != allDiags[j].Pos.Line {
-			return allDiags[i].Pos.Line < allDiags[j].Pos.Line
-		}
-		return allDiags[i].Pos.Col < allDiags[j].Pos.Col
-	})
-	return LintResult{Diags: allDiags}
 }
 
 // LintFile runs all lint rules against a single source file.

@@ -5,14 +5,9 @@
 package analyzer
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/checker"
 	"github.com/centroid-is/stc/pkg/diag"
-	"github.com/centroid-is/stc/pkg/parser"
 	"github.com/centroid-is/stc/pkg/project"
 	"github.com/centroid-is/stc/pkg/symbols"
 )
@@ -62,65 +57,3 @@ func Analyze(files []*ast.SourceFile, cfg *project.Config) AnalysisResult {
 	}
 }
 
-// AnalyzeFiles is a convenience function that reads files from disk,
-// parses each with the parser, and then runs Analyze on the parsed ASTs.
-// Parse errors are included in the returned diagnostics.
-//
-// If filenames is empty and cfg has source roots configured, it discovers
-// .st files from those source roots automatically.
-func AnalyzeFiles(filenames []string, cfg *project.Config) AnalysisResult {
-	// If no filenames given, try to discover from source roots
-	if len(filenames) == 0 && cfg != nil && len(cfg.Build.SourceRoots) > 0 {
-		filenames = discoverSTFiles(cfg.Build.SourceRoots)
-	}
-
-	var files []*ast.SourceFile
-	var parseDiags []diag.Diagnostic
-
-	for _, filename := range filenames {
-		content, err := os.ReadFile(filename)
-		if err != nil {
-			parseDiags = append(parseDiags, diag.Diagnostic{
-				Severity: diag.Error,
-				Code:     "IO001",
-				Message:  err.Error(),
-			})
-			continue
-		}
-
-		result := parser.Parse(filename, string(content))
-		files = append(files, result.File)
-		parseDiags = append(parseDiags, result.Diags...)
-	}
-
-	// Run semantic analysis on parsed files
-	analysisResult := Analyze(files, cfg)
-
-	// Combine parse diagnostics with analysis diagnostics
-	allDiags := make([]diag.Diagnostic, 0, len(parseDiags)+len(analysisResult.Diags))
-	allDiags = append(allDiags, parseDiags...)
-	allDiags = append(allDiags, analysisResult.Diags...)
-
-	return AnalysisResult{
-		Symbols: analysisResult.Symbols,
-		Diags:   allDiags,
-	}
-}
-
-// discoverSTFiles walks the given source root directories and returns
-// all .st files found.
-func discoverSTFiles(roots []string) []string {
-	var files []string
-	for _, root := range roots {
-		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return nil
-			}
-			if !info.IsDir() && strings.EqualFold(filepath.Ext(path), ".st") {
-				files = append(files, path)
-			}
-			return nil
-		})
-	}
-	return files
-}
