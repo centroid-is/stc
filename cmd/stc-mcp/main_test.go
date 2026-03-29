@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -18,9 +19,17 @@ func TestBuild(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		binName = "stc-mcp.exe"
 	}
-	outPath := tmpDir + "/" + binName
+	outPath := filepath.Join(tmpDir, binName)
 
-	cmd := exec.Command("go", "build", "-o", outPath, "./cmd/stc-mcp")
+	// When GOCOVERDIR is set, build with -cover for coverage collection.
+	var buildArgs []string
+	if os.Getenv("GOCOVERDIR") != "" {
+		buildArgs = []string{"build", "-cover", "-o", outPath, "./cmd/stc-mcp"}
+	} else {
+		buildArgs = []string{"build", "-o", outPath, "./cmd/stc-mcp"}
+	}
+
+	cmd := exec.Command("go", buildArgs...)
 	cmd.Dir = findProjectRoot(t)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "go build failed: %s", string(output))

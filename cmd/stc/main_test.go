@@ -13,6 +13,9 @@ import (
 
 var stcBinary string
 
+// coverDir holds the GOCOVERDIR path when running under coverage mode.
+var coverDir string
+
 func TestMain(m *testing.M) {
 	// Build the binary once for all tests.
 	dir, err := os.MkdirTemp("", "stc-test")
@@ -25,13 +28,35 @@ func TestMain(m *testing.M) {
 		binName = "stc.exe"
 	}
 	stcBinary = filepath.Join(dir, binName)
-	cmd := exec.Command("go", "build", "-o", stcBinary, ".")
+
+	// When GOCOVERDIR is set, build with -cover so the exec'd binary
+	// writes raw coverage data. Otherwise build normally for speed.
+	coverDir = os.Getenv("GOCOVERDIR")
+	var buildArgs []string
+	if coverDir != "" {
+		buildArgs = []string{"build", "-cover", "-o", stcBinary, "."}
+	} else {
+		buildArgs = []string{"build", "-o", stcBinary, "."}
+	}
+
+	cmd := exec.Command("go", buildArgs...)
 	cmd.Dir = "."
 	if out, err := cmd.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to build stc: %v\n%s\n", err, string(out))
 		os.Exit(1)
 	}
+
 	code := m.Run()
+
+	// Convert raw coverage data to textfmt if available.
+	if coverDir != "" {
+		outProfile := filepath.Join(coverDir, "stc_exec_coverage.txt")
+		convert := exec.Command("go", "tool", "covdata", "textfmt", "-i="+coverDir, "-o="+outProfile)
+		if out, err := convert.CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: covdata textfmt failed: %v\n%s\n", err, string(out))
+		}
+	}
+
 	os.RemoveAll(dir)
 	os.Exit(code)
 }
@@ -43,6 +68,10 @@ func runStc(t *testing.T, args ...string) (stdout, stderr string, exitCode int) 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
+	// Pass GOCOVERDIR to the subprocess so it writes coverage data.
+	if coverDir != "" {
+		cmd.Env = append(os.Environ(), "GOCOVERDIR="+coverDir)
+	}
 	err := cmd.Run()
 	exitCode = 0
 	if err != nil {
