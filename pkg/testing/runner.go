@@ -154,6 +154,7 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	// Register user-defined functions from the file context
 	if ctx != nil {
 		registerUserFunctions(interpreter, ctx)
+		registerEnumTypes(interpreter, ctx)
 	}
 
 	// Create isolated environment
@@ -360,6 +361,46 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 			}
 		}
 	}
+}
+
+// registerEnumTypes registers enum type declarations from the file context
+// with the interpreter so that typed enum literals (e.g., Color#Green) can
+// be resolved at runtime.
+func registerEnumTypes(interpreter *interp.Interpreter, ctx *fileContext) {
+	for typeName, typeSpec := range ctx.typeDecls {
+		if enumType, ok := typeSpec.(*ast.EnumType); ok {
+			values := make(map[string]int64)
+			for i, ev := range enumType.Values {
+				if ev.Name == nil {
+					continue
+				}
+				memberName := strings.ToUpper(ev.Name.Name)
+				// Use explicit init value if present, otherwise use position index
+				if ev.Value != nil {
+					if lit, ok := ev.Value.(*ast.Literal); ok && lit.LitKind == ast.LitInt {
+						if n, err := parseInt(lit.Value); err == nil {
+							values[memberName] = n
+							continue
+						}
+					}
+				}
+				values[memberName] = int64(i)
+			}
+			interpreter.RegisterEnumType(typeName, values)
+		}
+	}
+}
+
+// parseInt parses an integer string, used for enum init values.
+func parseInt(s string) (int64, error) {
+	s = strings.ReplaceAll(s, "_", "")
+	n := int64(0)
+	for _, ch := range s {
+		if ch >= '0' && ch <= '9' {
+			n = n*10 + int64(ch-'0')
+		}
+	}
+	return n, nil
 }
 
 // typeNameFromSpec extracts the type name string from an AST TypeSpec.

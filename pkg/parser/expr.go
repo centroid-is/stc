@@ -362,6 +362,31 @@ func (p *Parser) parsePostfix(expr ast.Expr) ast.Expr {
 				Operand: expr,
 			}
 
+		case lexer.Hash:
+			// TypeName#Value — typed enum literal (e.g., Color#Green)
+			// Only valid when expression so far is a simple identifier
+			if ident, ok := expr.(*ast.Ident); ok {
+				p.advance() // consume #
+				valueTok := p.peek()
+				if valueTok.Kind == lexer.Ident {
+					p.advance()
+					expr = &ast.Literal{
+						NodeBase: ast.NodeBase{
+							NodeKind: ast.KindLiteral,
+							NodeSpan: ast.SpanFrom(ident.Span().Start, astPos(valueTok.EndPos)),
+						},
+						LitKind:    ast.LitTyped,
+						Value:      valueTok.Text,
+						TypePrefix: ident.Name,
+					}
+				} else {
+					// Not an ident after #, treat as error
+					return expr
+				}
+			} else {
+				return expr
+			}
+
 		default:
 			return expr
 		}

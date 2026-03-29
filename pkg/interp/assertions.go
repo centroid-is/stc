@@ -3,6 +3,7 @@ package interp
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -133,6 +134,15 @@ func (interp *Interpreter) RegisterFunction(name string, fn func(args []Value, p
 		interp.LocalFunctions = make(map[string]func(args []Value, pos ast.Pos) (Value, error))
 	}
 	interp.LocalFunctions[name] = fn
+}
+
+// RegisterEnumType registers an enum type with the interpreter so that
+// typed enum literals like Color#Green can be resolved at runtime.
+func (interp *Interpreter) RegisterEnumType(typeName string, values map[string]int64) {
+	if interp.EnumTypes == nil {
+		interp.EnumTypes = make(map[string]map[string]int64)
+	}
+	interp.EnumTypes[strings.ToUpper(typeName)] = values
 }
 
 // RegisterAdvanceTime adds ADVANCE_TIME to LocalFunctions. It expects 1 arg

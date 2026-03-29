@@ -29,6 +29,10 @@ type Interpreter struct {
 	// Collector gathers assertion results during test execution.
 	// Each test case gets its own collector via RegisterAssertions.
 	Collector *AssertionCollector
+
+	// EnumTypes maps uppercase type names to their enum value maps.
+	// Each enum value map is uppercase enum member name -> integer value.
+	EnumTypes map[string]map[string]int64
 }
 
 // New creates a new Interpreter with default settings.
@@ -225,6 +229,16 @@ func (interp *Interpreter) parseLitTyped(value string, prefix string) (Value, er
 	case "BOOL":
 		return interp.parseLitBool(value)
 	default:
+		// Check if this is an enum typed literal (e.g., Color#Green)
+		if interp.EnumTypes != nil {
+			if enumMap, ok := interp.EnumTypes[upper]; ok {
+				upperVal := strings.ToUpper(value)
+				if intVal, found := enumMap[upperVal]; found {
+					return Value{Kind: ValInt, Int: intVal, IECType: types.KindDINT}, nil
+				}
+				return Value{}, &RuntimeError{Msg: fmt.Sprintf("unknown enum value '%s' for type '%s'", value, prefix)}
+			}
+		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported typed literal prefix: %s", prefix)}
 	}
 }
