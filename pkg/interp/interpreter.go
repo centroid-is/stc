@@ -244,6 +244,7 @@ func (interp *Interpreter) parseLitTyped(value string, prefix string) (Value, er
 }
 
 // evalIdent resolves an identifier in the environment.
+// If the value is a REFERENCE TO, it auto-dereferences to the target.
 func (interp *Interpreter) evalIdent(env *Env, id *ast.Ident) (Value, error) {
 	v, ok := env.Get(id.Name)
 	if !ok {
@@ -251,6 +252,17 @@ func (interp *Interpreter) evalIdent(env *Env, id *ast.Ident) (Value, error) {
 			Msg: fmt.Sprintf("undefined variable: %s", id.Name),
 			Pos: id.Span().Start,
 		}
+	}
+	// Auto-dereference REFERENCE TO values
+	if v.Kind == ValReference && v.PtrEnv != nil && v.PtrVar != "" {
+		target, found := v.PtrEnv.Get(v.PtrVar)
+		if !found {
+			return Value{}, &RuntimeError{
+				Msg: fmt.Sprintf("dangling reference: variable '%s' no longer exists", v.PtrVar),
+				Pos: id.Span().Start,
+			}
+		}
+		return target, nil
 	}
 	return v, nil
 }
@@ -540,6 +552,18 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 
 	switch target := s.Target.(type) {
 	case *ast.Ident:
+		// Check if this variable is a REFERENCE TO — if so, write through
+		if existing, ok := env.Get(target.Name); ok && existing.Kind == ValReference && existing.PtrEnv != nil && existing.PtrVar != "" {
+			// Check if the RHS is also a reference (REF assignment)
+			if val.Kind == ValReference {
+				// Assigning a new reference target
+				env.Set(target.Name, val)
+			} else {
+				// Write through the reference to the target variable
+				existing.PtrEnv.Set(existing.PtrVar, val)
+			}
+			return nil
+		}
 		if !env.Set(target.Name, val) {
 			// If variable doesn't exist, define it (for compatibility)
 			env.Define(target.Name, val)
