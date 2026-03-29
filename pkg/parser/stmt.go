@@ -17,9 +17,15 @@ func (p *Parser) parseStatements(stop ...lexer.TokenKind) []ast.Statement {
 		if stopSet[p.peek().Kind] {
 			break
 		}
+		savedPos := p.pos
 		stmt := p.parseStatement()
 		if stmt != nil {
 			stmts = append(stmts, stmt)
+		}
+		// Guard against infinite loops: if parseStatement made no forward
+		// progress, skip the offending token.
+		if p.pos == savedPos {
+			p.advance()
 		}
 	}
 	return stmts
@@ -271,9 +277,13 @@ func (p *Parser) parseCaseBranchBody() []ast.Statement {
 		if p.isCaseLabelStart() {
 			break
 		}
+		savedPos := p.pos
 		stmt := p.parseStatement()
 		if stmt != nil {
 			stmts = append(stmts, stmt)
+		}
+		if p.pos == savedPos {
+			p.advance()
 		}
 	}
 	return stmts

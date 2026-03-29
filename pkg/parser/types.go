@@ -175,9 +175,14 @@ func (p *Parser) parseStructType() *ast.StructType {
 
 	var members []*ast.StructMember
 	for !p.atEnd() && !p.at(lexer.KwEndStruct) {
+		savedPos := p.pos
 		member := p.parseStructMember()
 		if member != nil {
 			members = append(members, member)
+		}
+		// Guard against infinite loops when parseStructMember makes no progress.
+		if p.pos == savedPos {
+			p.advance()
 		}
 	}
 

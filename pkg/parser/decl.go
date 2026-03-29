@@ -91,6 +91,7 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 	var properties []*ast.PropertyDecl
 
 	for !p.atEnd() && !p.at(lexer.KwEndFunctionBlock) {
+		savedPos := p.pos
 		switch p.peek().Kind {
 		case lexer.KwMethod, lexer.KwPublic, lexer.KwPrivate, lexer.KwProtected, lexer.KwInternal,
 			lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride:
@@ -109,6 +110,10 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 				lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride,
 			)
 			body = append(body, stmts...)
+		}
+		// Guard against infinite loops.
+		if p.pos == savedPos {
+			p.advance()
 		}
 	}
 

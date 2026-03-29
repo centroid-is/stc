@@ -64,6 +64,9 @@ func (p *Parser) synchronize(stopAt ...lexer.TokenKind) {
 
 // recoverDeclaration wraps the current error into an ErrorNode and synchronizes
 // to the next declaration keyword. Returns the error as a Declaration.
+// It always advances at least one token to guarantee forward progress and
+// prevent infinite loops when the current token is an unrecognised identifier
+// (e.g. vendor-specific keywords like UNIT or IMPLEMENTATION).
 func (p *Parser) recoverDeclaration() ast.Declaration {
 	cur := p.peek()
 	msg := fmt.Sprintf("unexpected %s in declaration context", cur.Kind.String())
@@ -75,6 +78,11 @@ func (p *Parser) recoverDeclaration() ast.Declaration {
 		Message: msg,
 	}
 	p.diags.Add(diag.Error, tokenPos(cur.Pos), source.Pos{}, "P002", msg)
+	// Always consume at least the offending token so the parser makes forward
+	// progress. Without this, an unknown identifier (which is a "statement
+	// start") would cause synchronize() to return immediately, and the
+	// parseSourceFile loop would call us again on the same token forever.
+	p.advance()
 	p.synchronize()
 	return node
 }

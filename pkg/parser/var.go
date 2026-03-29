@@ -78,9 +78,16 @@ func (p *Parser) parseVarBlock() *ast.VarBlock {
 	// Parse variable declarations until END_VAR
 	var decls []*ast.VarDecl
 	for !p.atEnd() && !p.at(lexer.KwEndVar) {
+		savedPos := p.pos
 		decl := p.parseVarDecl()
 		if decl != nil {
 			decls = append(decls, decl)
+		}
+		// Guard against infinite loops: if parseVarDecl made no forward
+		// progress (e.g. when facing a token it cannot handle at all),
+		// skip the offending token so the loop eventually terminates.
+		if p.pos == savedPos {
+			p.advance()
 		}
 	}
 
