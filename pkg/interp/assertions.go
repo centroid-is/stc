@@ -126,6 +126,15 @@ func (interp *Interpreter) RegisterAssertions(collector *AssertionCollector) {
 	}
 }
 
+// RegisterFunction adds a named function to LocalFunctions.
+// This is used by the test runner to register user-defined functions.
+func (interp *Interpreter) RegisterFunction(name string, fn func(args []Value, pos ast.Pos) (Value, error)) {
+	if interp.LocalFunctions == nil {
+		interp.LocalFunctions = make(map[string]func(args []Value, pos ast.Pos) (Value, error))
+	}
+	interp.LocalFunctions[name] = fn
+}
+
 // RegisterAdvanceTime adds ADVANCE_TIME to LocalFunctions. It expects 1 arg
 // of Kind==ValTime and calls the provided tick function with that duration.
 func (interp *Interpreter) RegisterAdvanceTime(tickFn func(time.Duration)) {

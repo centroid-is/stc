@@ -943,6 +943,11 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 // evalCall evaluates a function call expression.
 // It dispatches to StdlibFunctions first, then falls back to user-defined functions.
 func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
+	// Handle method calls: fb.Method()
+	if memberAccess, ok := e.Callee.(*ast.MemberAccessExpr); ok {
+		return interp.evalMethodCall(env, memberAccess, e.Args)
+	}
+
 	// Resolve callee name
 	calleeName := ""
 	switch c := e.Callee.(type) {
@@ -981,4 +986,119 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 	}
 
 	return Value{}, &RuntimeError{Msg: fmt.Sprintf("undefined function: %s", calleeName)}
+}
+
+// evalMethodCall evaluates a method call on an object (e.g., fb.GetValue()).
+// It resolves the object, finds the method declaration, and executes it.
+func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAccessExpr, argExprs []ast.Expr) (Value, error) {
+	obj, err := interp.evalExpr(env, memberAccess.Object)
+	if err != nil {
+		return Value{}, err
+	}
+
+	methodName := memberAccess.Member.Name
+
+	if obj.Kind != ValFBInstance || obj.FBRef == nil {
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot call method '%s' on %s", methodName, obj.Kind)}
+	}
+
+	fbInst := obj.FBRef
+
+	// Find the method in the FB declaration (including inherited methods)
+	method := findMethod(fbInst, methodName)
+	if method == nil {
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("method '%s' not found on FB '%s'", methodName, fbInst.TypeName)}
+	}
+
+	// Create method environment with access to FB instance variables
+	methodEnv := NewEnv(fbInst.Env)
+
+	// Define return variable (method name holds the return value)
+	retVal := ZeroFromTypeSpec(method.ReturnType)
+	methodEnv.Define(method.Name.Name, retVal)
+
+	// Map arguments to VAR_INPUT parameters
+	args := make([]Value, 0, len(argExprs))
+	for _, argExpr := range argExprs {
+		v, err := interp.evalExpr(env, argExpr)
+		if err != nil {
+			return Value{}, err
+		}
+		args = append(args, v)
+	}
+
+	argIdx := 0
+	for _, vb := range method.VarBlocks {
+		if vb.Section == ast.VarInput {
+			for _, vd := range vb.Declarations {
+				for _, n := range vd.Names {
+					if argIdx < len(args) {
+						methodEnv.Define(n.Name, args[argIdx])
+						argIdx++
+					} else {
+						methodEnv.Define(n.Name, ZeroFromTypeSpec(vd.Type))
+					}
+				}
+			}
+		} else {
+			for _, vd := range vb.Declarations {
+				val := ZeroFromTypeSpec(vd.Type)
+				if vd.InitValue != nil {
+					if iv, err := interp.evalExpr(methodEnv, vd.InitValue); err == nil {
+						val = iv
+					}
+				}
+				for _, n := range vd.Names {
+					methodEnv.Define(n.Name, val)
+				}
+			}
+		}
+	}
+
+	// Execute method body
+	err = interp.execStatements(methodEnv, method.Body)
+	if err != nil {
+		if _, ok := err.(*ErrReturn); !ok {
+			return Value{}, err
+		}
+	}
+
+	// Read return value
+	if method.Name != nil {
+		if v, ok := methodEnv.Get(method.Name.Name); ok {
+			return v, nil
+		}
+	}
+
+	return retVal, nil
+}
+
+// findMethod looks up a method by name in the FB declaration hierarchy.
+// It checks the FB's own methods first, then walks up the EXTENDS chain
+// if parent declarations are available.
+func findMethod(inst *FBInstance, name string) *ast.MethodDecl {
+	if inst.Decl == nil {
+		return nil
+	}
+	upperName := strings.ToUpper(name)
+
+	// Search in the FB's own methods
+	for _, m := range inst.Decl.Methods {
+		if m.Name != nil && strings.ToUpper(m.Name.Name) == upperName {
+			return m
+		}
+	}
+
+	// If the FB extends another, search parent's methods via ParentDecl
+	if inst.Decl.Extends != nil && inst.ParentDecl != nil {
+		parentInst := &FBInstance{
+			TypeName:   inst.Decl.Extends.Name,
+			Decl:       inst.ParentDecl,
+			Env:        inst.Env,
+			ParentDecl: inst.ParentDecl, // propagate further up the chain
+		}
+		return findMethod(parentInst, name)
+	}
+
+	return nil
 }

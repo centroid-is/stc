@@ -66,6 +66,17 @@ func Run(dir string) (*RunResult, error) {
 	return result, nil
 }
 
+// fileContext holds parsed declarations from a test file that are
+// available to all TEST_CASE blocks in that file.
+type fileContext struct {
+	// typeDecls maps upper-case type names to their TypeSpec from TYPE blocks.
+	typeDecls map[string]ast.TypeSpec
+	// fbDecls maps upper-case FB names to their FunctionBlockDecl.
+	fbDecls map[string]*ast.FunctionBlockDecl
+	// funcDecls maps upper-case function names to their FunctionDecl.
+	funcDecls map[string]*ast.FunctionDecl
+}
+
 // runFile parses a single .st file and executes all TEST_CASE blocks.
 func runFile(filePath, baseDir string) (*SuiteResult, error) {
 	start := time.Now()
@@ -77,11 +88,30 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 
 	parseResult := pipeline.Parse(filePath, string(content), nil)
 
-	// Extract TestCaseDecl nodes
+	// Build file context: collect TYPE, FUNCTION_BLOCK, and FUNCTION declarations
+	ctx := &fileContext{
+		typeDecls: make(map[string]ast.TypeSpec),
+		fbDecls:   make(map[string]*ast.FunctionBlockDecl),
+		funcDecls: make(map[string]*ast.FunctionDecl),
+	}
+
 	var testCases []*ast.TestCaseDecl
 	for _, decl := range parseResult.File.Declarations {
-		if tc, ok := decl.(*ast.TestCaseDecl); ok {
-			testCases = append(testCases, tc)
+		switch d := decl.(type) {
+		case *ast.TestCaseDecl:
+			testCases = append(testCases, d)
+		case *ast.TypeDecl:
+			if d.Name != nil {
+				ctx.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
+			}
+		case *ast.FunctionBlockDecl:
+			if d.Name != nil {
+				ctx.fbDecls[strings.ToUpper(d.Name.Name)] = d
+			}
+		case *ast.FunctionDecl:
+			if d.Name != nil {
+				ctx.funcDecls[strings.ToUpper(d.Name.Name)] = d
+			}
 		}
 	}
 
@@ -95,7 +125,7 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 	}
 
 	for _, tc := range testCases {
-		tr := executeTestCase(tc, filePath)
+		tr := executeTestCase(tc, filePath, ctx)
 		suite.Tests = append(suite.Tests, tr)
 	}
 
@@ -105,7 +135,7 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 
 // executeTestCase runs a single TEST_CASE in isolation with its own
 // interpreter, environment, and assertion collector.
-func executeTestCase(tc *ast.TestCaseDecl, filePath string) TestResult {
+func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) TestResult {
 	start := time.Now()
 
 	// Fresh interpreter and collector per test case
@@ -121,11 +151,16 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string) TestResult {
 		interpreter.SetDt(dt)
 	})
 
+	// Register user-defined functions from the file context
+	if ctx != nil {
+		registerUserFunctions(interpreter, ctx)
+	}
+
 	// Create isolated environment
 	env := interp.NewEnv(nil)
 
 	// Initialize variables from VarBlocks
-	initializeTestEnv(interpreter, env, tc.VarBlocks)
+	initializeTestEnv(interpreter, env, tc.VarBlocks, ctx)
 
 	// Execute test body
 	var runtimeErr string
@@ -162,9 +197,88 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string) TestResult {
 	return tr
 }
 
+// registerUserFunctions registers user-defined FUNCTION declarations as
+// callable functions in the interpreter.
+func registerUserFunctions(interpreter *interp.Interpreter, ctx *fileContext) {
+	for name, decl := range ctx.funcDecls {
+		funcDecl := decl // capture for closure
+		funcName := name
+		interpreter.RegisterFunction(funcName, func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
+			return callUserFunction(interpreter, funcDecl, args)
+		})
+	}
+}
+
+// callUserFunction executes a user-defined FUNCTION with the given arguments.
+func callUserFunction(parentInterp *interp.Interpreter, decl *ast.FunctionDecl, args []interp.Value) (interp.Value, error) {
+	// Create a new environment for the function call
+	env := interp.NewEnv(nil)
+
+	// Initialize return variable (function name holds the return value)
+	retTypeName := ""
+	if decl.ReturnType != nil {
+		retTypeName = typeNameFromSpec(decl.ReturnType)
+	}
+	retVal := interp.ZeroFromTypeSpec(decl.ReturnType)
+	if decl.Name != nil {
+		env.Define(decl.Name.Name, retVal)
+	}
+
+	// Map arguments to VAR_INPUT parameters
+	argIdx := 0
+	for _, vb := range decl.VarBlocks {
+		if vb.Section == ast.VarInput {
+			for _, vd := range vb.Declarations {
+				for _, n := range vd.Names {
+					if argIdx < len(args) {
+						env.Define(n.Name, args[argIdx])
+						argIdx++
+					} else {
+						env.Define(n.Name, interp.ZeroFromTypeSpec(vd.Type))
+					}
+				}
+			}
+		} else {
+			// Initialize other var blocks
+			for _, vd := range vb.Declarations {
+				val := interp.ZeroFromTypeSpec(vd.Type)
+				if vd.InitValue != nil {
+					if iv, err := parentInterp.EvalExpr(env, vd.InitValue); err == nil {
+						val = iv
+					}
+				}
+				for _, n := range vd.Names {
+					env.Define(n.Name, val)
+				}
+			}
+		}
+	}
+
+	// Execute function body
+	err := parentInterp.ExecStatements(env, decl.Body)
+	if err != nil {
+		// ErrReturn is normal function termination
+		if err.Error() == "RETURN" {
+			// Normal return
+		} else {
+			return interp.Value{}, err
+		}
+	}
+
+	// Read return value from the function name variable
+	if decl.Name != nil {
+		if v, ok := env.Get(decl.Name.Name); ok {
+			return v, nil
+		}
+	}
+
+	_ = retTypeName
+	return retVal, nil
+}
+
 // initializeTestEnv populates the environment from VarBlocks, following the
 // same pattern as ScanCycleEngine.initializeEnv for FB and variable creation.
-func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBlocks []*ast.VarBlock) {
+func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBlocks []*ast.VarBlock, ctx *fileContext) {
 	for _, vb := range varBlocks {
 		for _, vd := range vb.Declarations {
 			typeName := typeNameFromSpec(vd.Type)
@@ -178,6 +292,57 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 					env.Define(n.Name, val)
 				}
 				continue
+			}
+
+			// Check if the type is a user-defined FB from the file context
+			if ctx != nil {
+				if fbDecl, ok := ctx.fbDecls[upperTypeName]; ok {
+					for _, n := range vd.Names {
+						inst := interp.NewUserFBInstance(typeName, fbDecl, interpreter, env)
+						// Wire up parent FB declaration for EXTENDS chain
+						if fbDecl.Extends != nil {
+							parentName := strings.ToUpper(fbDecl.Extends.Name)
+							if parentDecl, ok2 := ctx.fbDecls[parentName]; ok2 {
+								inst.ParentDecl = parentDecl
+								// Initialize parent variables in the instance env
+								for _, pvb := range parentDecl.VarBlocks {
+									for _, pvd := range pvb.Declarations {
+										pval := interp.ZeroFromTypeSpec(pvd.Type)
+										if pvd.InitValue != nil {
+											if iv, err := interpreter.EvalExpr(inst.Env, pvd.InitValue); err == nil {
+												pval = iv
+											}
+										}
+										for _, pn := range pvd.Names {
+											if _, exists := inst.Env.Get(pn.Name); !exists {
+												inst.Env.Define(pn.Name, pval)
+											}
+										}
+									}
+								}
+							}
+						}
+						val := interp.Value{Kind: interp.ValFBInstance, FBRef: inst}
+						env.Define(n.Name, val)
+					}
+					continue
+				}
+			}
+
+			// Check if the type is a user-defined TYPE (struct, enum, etc.)
+			if ctx != nil {
+				if typeSpec, ok := ctx.typeDecls[upperTypeName]; ok {
+					val := interp.ZeroFromTypeSpec(typeSpec)
+					if vd.InitValue != nil {
+						if iv, err := interpreter.EvalExpr(env, vd.InitValue); err == nil {
+							val = iv
+						}
+					}
+					for _, n := range vd.Names {
+						env.Define(n.Name, val)
+					}
+					continue
+				}
 			}
 
 			// Resolve zero value from the type spec

@@ -34,8 +34,9 @@ type FBInstance struct {
 	// For user-defined FBs
 	Env         *Env
 	Decl        *ast.FunctionBlockDecl
-	inputNames  []string // VAR_INPUT variable names (uppercase)
-	outputNames []string // VAR_OUTPUT variable names (uppercase)
+	ParentDecl  *ast.FunctionBlockDecl // parent FB decl for EXTENDS chain
+	inputNames  []string               // VAR_INPUT variable names (uppercase)
+	outputNames []string               // VAR_OUTPUT variable names (uppercase)
 }
 
 // NewUserFBInstance creates an FBInstance for a user-defined function block.
@@ -211,15 +212,101 @@ func typeNameFromSpec(ts ast.TypeSpec) string {
 
 // zeroFromTypeSpec resolves a TypeSpec to its zero Value.
 // For NamedType, it looks up the elementary type by name.
+// For ArrayType, it creates a zero-filled array of the appropriate size.
+// For StructType, it creates a struct with zero-valued fields.
 func zeroFromTypeSpec(ts ast.TypeSpec) Value {
-	if nt, ok := ts.(*ast.NamedType); ok && nt.Name != nil {
-		name := strings.ToUpper(nt.Name.Name)
-		if typ, found := types.LookupElementaryType(name); found {
-			return Zero(typ.Kind())
+	switch t := ts.(type) {
+	case *ast.NamedType:
+		if t.Name != nil {
+			name := strings.ToUpper(t.Name.Name)
+			if name == "STRING" || name == "WSTRING" {
+				return Value{Kind: ValString, Str: ""}
+			}
+			if typ, found := types.LookupElementaryType(name); found {
+				return Zero(typ.Kind())
+			}
 		}
 		// Unknown type name; default to INT zero
 		return Zero(types.KindDINT)
+	case *ast.ArrayType:
+		return zeroArray(t)
+	case *ast.StructType:
+		return zeroStruct(t)
+	case *ast.StringType:
+		return Value{Kind: ValString, Str: ""}
+	case *ast.SubrangeType:
+		// Use the base type's zero
+		return zeroFromTypeSpec(t.BaseType)
+	default:
+		return Zero(types.KindDINT)
 	}
-	// Default fallback
-	return Zero(types.KindDINT)
+}
+
+// zeroArray creates a zero-filled array Value from an ArrayType AST node.
+// The interpreter uses direct indexing (arr[i] maps to slice index i),
+// so for ARRAY[1..10] we allocate high+1 elements to support 1-based indexing.
+func zeroArray(at *ast.ArrayType) Value {
+	if len(at.Ranges) == 0 {
+		return Value{Kind: ValArray, Array: []Value{}}
+	}
+	// Evaluate the first dimension range
+	_, high := evalSubrangeConst(at.Ranges[0])
+	size := high + 1 // allocate enough for direct indexing
+	if size <= 0 {
+		size = 1
+	}
+	if size > 10000 {
+		size = 10000 // safety cap
+	}
+	elemZero := zeroFromTypeSpec(at.ElementType)
+	arr := make([]Value, size)
+	for i := range arr {
+		arr[i] = elemZero
+	}
+	return Value{Kind: ValArray, Array: arr}
+}
+
+// zeroStruct creates a zero-valued struct Value from a StructType AST node.
+func zeroStruct(st *ast.StructType) Value {
+	fields := make(map[string]Value, len(st.Members))
+	for _, m := range st.Members {
+		if m.Name != nil {
+			fields[m.Name.Name] = zeroFromTypeSpec(m.Type)
+		}
+	}
+	return Value{Kind: ValStruct, Struct: fields}
+}
+
+// evalSubrangeConst extracts integer bounds from a SubrangeSpec.
+// Only handles literal integer expressions; defaults to 0..0 otherwise.
+func evalSubrangeConst(sr *ast.SubrangeSpec) (int, int) {
+	low := evalConstInt(sr.Low)
+	high := evalConstInt(sr.High)
+	return low, high
+}
+
+// evalConstInt extracts an integer value from a constant expression.
+func evalConstInt(expr ast.Expr) int {
+	if lit, ok := expr.(*ast.Literal); ok {
+		switch lit.LitKind {
+		case ast.LitInt:
+			n := 0
+			for _, ch := range lit.Value {
+				if ch >= '0' && ch <= '9' {
+					n = n*10 + int(ch-'0')
+				}
+			}
+			if len(lit.Value) > 0 && lit.Value[0] == '-' {
+				n = -n
+			}
+			return n
+		}
+	}
+	// Handle unary minus on a literal
+	if unary, ok := expr.(*ast.UnaryExpr); ok {
+		if unary.Op.Text == "-" {
+			return -evalConstInt(unary.Operand)
+		}
+	}
+	return 0
 }
