@@ -75,6 +75,8 @@ type fileContext struct {
 	fbDecls map[string]*ast.FunctionBlockDecl
 	// funcDecls maps upper-case function names to their FunctionDecl.
 	funcDecls map[string]*ast.FunctionDecl
+	// ifaceDecls maps upper-case interface names to their InterfaceDecl.
+	ifaceDecls map[string]*ast.InterfaceDecl
 }
 
 // runFile parses a single .st file and executes all TEST_CASE blocks.
@@ -90,9 +92,10 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 
 	// Build file context: collect TYPE, FUNCTION_BLOCK, and FUNCTION declarations
 	ctx := &fileContext{
-		typeDecls: make(map[string]ast.TypeSpec),
-		fbDecls:   make(map[string]*ast.FunctionBlockDecl),
-		funcDecls: make(map[string]*ast.FunctionDecl),
+		typeDecls:  make(map[string]ast.TypeSpec),
+		fbDecls:    make(map[string]*ast.FunctionBlockDecl),
+		funcDecls:  make(map[string]*ast.FunctionDecl),
+		ifaceDecls: make(map[string]*ast.InterfaceDecl),
 	}
 
 	var testCases []*ast.TestCaseDecl
@@ -111,6 +114,10 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 		case *ast.FunctionDecl:
 			if d.Name != nil {
 				ctx.funcDecls[strings.ToUpper(d.Name.Name)] = d
+			}
+		case *ast.InterfaceDecl:
+			if d.Name != nil {
+				ctx.ifaceDecls[strings.ToUpper(d.Name.Name)] = d
 			}
 		}
 	}
@@ -361,6 +368,39 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 			}
 		}
 	}
+}
+
+// validateImplements checks that an FB declares all methods required by
+// its IMPLEMENTS interfaces. Returns a list of error messages, empty if valid.
+func validateImplements(fbDecl *ast.FunctionBlockDecl, ctx *fileContext) []string {
+	if ctx == nil || len(fbDecl.Implements) == 0 {
+		return nil
+	}
+	var errors []string
+	fbMethods := make(map[string]bool)
+	for _, m := range fbDecl.Methods {
+		if m.Name != nil {
+			fbMethods[strings.ToUpper(m.Name.Name)] = true
+		}
+	}
+
+	for _, iface := range fbDecl.Implements {
+		ifaceName := strings.ToUpper(iface.Name)
+		ifaceDecl, ok := ctx.ifaceDecls[ifaceName]
+		if !ok {
+			continue // Interface not found; skip (could be externally defined)
+		}
+		for _, m := range ifaceDecl.Methods {
+			if m.Name != nil {
+				methodName := strings.ToUpper(m.Name.Name)
+				if !fbMethods[methodName] {
+					errors = append(errors, fmt.Sprintf("FB '%s' missing method '%s' required by interface '%s'",
+						fbDecl.Name.Name, m.Name.Name, iface.Name))
+				}
+			}
+		}
+	}
+	return errors
 }
 
 // registerEnumTypes registers enum type declarations from the file context
