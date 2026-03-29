@@ -1,0 +1,40 @@
+name: ST Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  st-tests:
+    name: ST Test Suites
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run motor_control tests
+        run: go run ./cmd/stc test tests/motor_control
+
+      - name: Run conveyor tests
+        run: go run ./cmd/stc test tests/conveyor
+
+      - name: Run batch_process tests
+        run: go run ./cmd/stc test tests/batch_process
+
+      - name: Run type_system tests
+        run: go run ./cmd/stc test tests/type_system
+
+      - name: Run stdlib_comprehensive tests
+        run: go run ./cmd/stc test tests/stdlib_comprehensive
+
+      - name: Run corpus parse test
+        run: go test ./tests/ -run TestCorpusParse -v -count=1 -timeout 5m
