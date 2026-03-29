@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -13,7 +14,11 @@ import (
 func TestBuild(t *testing.T) {
 	// Build the stc-mcp binary and verify it compiles without errors.
 	tmpDir := t.TempDir()
-	outPath := tmpDir + "/stc-mcp"
+	binName := "stc-mcp"
+	if runtime.GOOS == "windows" {
+		binName = "stc-mcp.exe"
+	}
+	outPath := tmpDir + "/" + binName
 
 	cmd := exec.Command("go", "build", "-o", outPath, "./cmd/stc-mcp")
 	cmd.Dir = findProjectRoot(t)

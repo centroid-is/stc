@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -19,7 +20,11 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "Failed to create temp dir: %v\n", err)
 		os.Exit(1)
 	}
-	stcBinary = filepath.Join(dir, "stc")
+	binName := "stc"
+	if runtime.GOOS == "windows" {
+		binName = "stc.exe"
+	}
+	stcBinary = filepath.Join(dir, binName)
 	cmd := exec.Command("go", "build", "-o", stcBinary, ".")
 	cmd.Dir = "."
 	if out, err := cmd.CombinedOutput(); err != nil {
