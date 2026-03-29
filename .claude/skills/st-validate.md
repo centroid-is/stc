@@ -116,3 +116,6 @@ Always run all 3 stages even if earlier stages produce warnings. Only stop the p
 - **Parse errors block pipeline**: Fix syntax first, then re-run full pipeline
 - **Vendor-specific errors**: Use `--vendor` flag on `stc check` to catch vendor compatibility issues early
 - **Multiple files**: Run pipeline on each file individually, or use directory mode if supported
+
+---
+**MCP equivalents:** parse→`stc_parse`, check→`stc_check`, lint→`stc_lint`

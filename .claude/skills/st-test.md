@@ -138,3 +138,6 @@ stc test <directory> --format junit
 - **Missing source file**: Ensure the POU under test is available (in the same directory or imported)
 - **Timer tests flaky**: Always use `ADVANCE_TIME` for deterministic behavior -- never rely on wall-clock time
 - **Assertion position**: Failed assertions report `file:line:col` for precise location
+
+---
+**MCP equivalents:** test→`stc_test`

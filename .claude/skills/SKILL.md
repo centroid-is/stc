@@ -18,6 +18,21 @@ These skills activate automatically when working with `*.st` files in this proje
 | Emit | [st-emit.md](st-emit.md) | Emit vendor-specific ST for Beckhoff, Schneider, or portable targets |
 | Review | [st-review.md](st-review.md) | Review ST code against IEC 61131-3 best practices and PLCopen guidelines |
 
+## MCP Tools
+
+When using stc via MCP server (`stc-mcp`), tools are available with these names:
+
+| CLI Command | MCP Tool | Description |
+|-------------|----------|-------------|
+| `stc parse` | `stc_parse` | Parse ST, return AST or diagnostics |
+| `stc check` | `stc_check` | Type check, return diagnostics |
+| `stc test` | `stc_test` | Run tests, return results |
+| `stc emit` | `stc_emit` | Emit vendor-specific ST |
+| `stc lint` | `stc_lint` | Lint, return suggestions |
+| `stc fmt` | `stc_format` | Format ST code |
+
+Build MCP server: `go build -o stc-mcp ./cmd/stc-mcp`
+
 ## Prerequisites
 
 - **stc binary** must be built and on PATH, or use `go run ./cmd/stc/...` from the project root

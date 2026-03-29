@@ -110,3 +110,6 @@ stc emit myprogram.st --target beckhoff --format json
 - **Type errors in source**: Emission may produce invalid output. Run `stc check` first.
 - **Round-trip failure**: If emitted code fails to parse, report as a bug -- emitted ST should always be valid.
 - **Default target**: If no `--target` specified, defaults to `portable` (safest cross-vendor subset).
+
+---
+**MCP equivalents:** check→`stc_check`, emit→`stc_emit`

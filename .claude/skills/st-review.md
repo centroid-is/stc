@@ -130,3 +130,6 @@ Organize findings by severity with actionable fix suggestions:
 - **Parse errors prevent linting**: Fix syntax errors first with `stc parse`, then re-run lint
 - **Vendor check not needed**: Skip step 4 if writing portable-only code
 - **Large codebase**: Run lint on changed files first, then expand to full codebase review
+
+---
+**MCP equivalents:** lint→`stc_lint`, check→`stc_check`

@@ -99,3 +99,6 @@ If type errors occur:
 - **Parse errors**: Fix syntax issues, re-run `stc parse`
 - **Type errors**: Fix type mismatches, re-run `stc check`
 - **Multiple POUs**: Each POU in its own file or all in one file -- both are valid
+
+---
+**MCP equivalents:** parse→`stc_parse`, check→`stc_check`
