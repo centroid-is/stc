@@ -267,11 +267,12 @@ func zeroArray(at *ast.ArrayType) Value {
 }
 
 // zeroStruct creates a zero-valued struct Value from a StructType AST node.
+// Keys are stored in UPPER case to match the interpreter's member access logic.
 func zeroStruct(st *ast.StructType) Value {
 	fields := make(map[string]Value, len(st.Members))
 	for _, m := range st.Members {
 		if m.Name != nil {
-			fields[m.Name.Name] = zeroFromTypeSpec(m.Type)
+			fields[strings.ToUpper(m.Name.Name)] = zeroFromTypeSpec(m.Type)
 		}
 	}
 	return Value{Kind: ValStruct, Struct: fields}
