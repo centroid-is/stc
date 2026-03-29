@@ -87,6 +87,17 @@ type callToolResult struct {
 	Content []interface{}
 }
 
+// mustMarshalJSON marshals v to JSON, panicking on failure.
+// json.Marshal only fails on unmarshalable types (channels, funcs, etc.),
+// which our well-typed structs never contain.
+func mustMarshalJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(fmt.Sprintf("json.Marshal: %v", err))
+	}
+	return b
+}
+
 // --- Handler functions (testable without MCP transport) ---
 
 func handleParse(_ context.Context, args parseArgs) (*callToolResult, error) {
@@ -102,10 +113,7 @@ func handleParse(_ context.Context, args parseArgs) (*callToolResult, error) {
 		return nil, fmt.Errorf("marshaling AST: %w", err)
 	}
 
-	diagJSON, err := json.Marshal(result.Diags)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling diagnostics: %w", err)
-	}
+	diagJSON := mustMarshalJSON(result.Diags)
 
 	hasErrors := false
 	for _, d := range result.Diags {
@@ -135,11 +143,7 @@ func handleCheck(_ context.Context, args checkArgs) (*callToolResult, error) {
 	allDiags = append(allDiags, result.Diags...)
 	allDiags = append(allDiags, analysis.Diags...)
 
-	diagJSON, err := json.Marshal(allDiags)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling diagnostics: %w", err)
-	}
-
+	diagJSON := mustMarshalJSON(allDiags)
 	return &callToolResult{Content: []interface{}{&textContent{Text: string(diagJSON)}}}, nil
 }
 
@@ -177,11 +181,7 @@ func handleLint(_ context.Context, args lintArgs) (*callToolResult, error) {
 	result := pipeline.Parse("input.st", args.Code, nil)
 	lintResult := lint.LintFile(result.File, lint.DefaultLintOptions())
 
-	diagJSON, err := json.Marshal(lintResult.Diags)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling lint diagnostics: %w", err)
-	}
-
+	diagJSON := mustMarshalJSON(lintResult.Diags)
 	return &callToolResult{Content: []interface{}{&textContent{Text: string(diagJSON)}}}, nil
 }
 
@@ -195,74 +195,88 @@ func handleFormat(_ context.Context, args formatArgs) (*callToolResult, error) {
 	return &callToolResult{Content: []interface{}{&textContent{Text: formatted}}}, nil
 }
 
+// --- MCP wrapper functions (named for testability) ---
+
+func wrapParse(ctx context.Context, _ *mcp.CallToolRequest, args parseArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleParse(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapCheck(ctx context.Context, _ *mcp.CallToolRequest, args checkArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleCheck(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapTest(ctx context.Context, _ *mcp.CallToolRequest, args testArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleTest(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapEmit(ctx context.Context, _ *mcp.CallToolRequest, args emitArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleEmit(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapLint(ctx context.Context, _ *mcp.CallToolRequest, args lintArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleLint(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapFormat(ctx context.Context, _ *mcp.CallToolRequest, args formatArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleFormat(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
 // --- MCP registration ---
 
 func registerTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "stc_parse",
 		Description: descParse,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args parseArgs) (*mcp.CallToolResult, any, error) {
-		r, err := handleParse(ctx, args)
-		if err != nil {
-			return nil, nil, err
-		}
-		return toMCPResult(r), nil, nil
-	})
+	}, wrapParse)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "stc_check",
 		Description: descCheck,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args checkArgs) (*mcp.CallToolResult, any, error) {
-		r, err := handleCheck(ctx, args)
-		if err != nil {
-			return nil, nil, err
-		}
-		return toMCPResult(r), nil, nil
-	})
+	}, wrapCheck)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "stc_test",
 		Description: descTest,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args testArgs) (*mcp.CallToolResult, any, error) {
-		r, err := handleTest(ctx, args)
-		if err != nil {
-			return nil, nil, err
-		}
-		return toMCPResult(r), nil, nil
-	})
+	}, wrapTest)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "stc_emit",
 		Description: descEmit,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args emitArgs) (*mcp.CallToolResult, any, error) {
-		r, err := handleEmit(ctx, args)
-		if err != nil {
-			return nil, nil, err
-		}
-		return toMCPResult(r), nil, nil
-	})
+	}, wrapEmit)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "stc_lint",
 		Description: descLint,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args lintArgs) (*mcp.CallToolResult, any, error) {
-		r, err := handleLint(ctx, args)
-		if err != nil {
-			return nil, nil, err
-		}
-		return toMCPResult(r), nil, nil
-	})
+	}, wrapLint)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "stc_format",
 		Description: descFormat,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args formatArgs) (*mcp.CallToolResult, any, error) {
-		r, err := handleFormat(ctx, args)
-		if err != nil {
-			return nil, nil, err
-		}
-		return toMCPResult(r), nil, nil
-	})
+	}, wrapFormat)
 }
 
 // toMCPResult converts our internal result to MCP SDK result type.
