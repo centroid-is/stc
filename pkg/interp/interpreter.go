@@ -909,6 +909,10 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 			return Value{}, &RuntimeError{Msg: "nil FB instance reference"}
 		}
 		fbInst := obj.FBRef
+		// Check for property getter
+		if prop := findProperty(fbInst, memberName); prop != nil && prop.Getter != nil {
+			return interp.execPropertyGetter(fbInst, prop)
+		}
 		return fbInst.GetMember(memberName), nil
 	case ValStruct:
 		if obj.Struct != nil {
@@ -938,6 +942,10 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 			return &RuntimeError{Msg: "nil FB instance reference"}
 		}
 		fbInst := obj.FBRef
+		// Check for property setter
+		if prop := findProperty(fbInst, memberName); prop != nil && prop.Setter != nil {
+			return interp.execPropertySetter(fbInst, prop, val)
+		}
 		fbInst.SetInput(memberName, val)
 		return nil
 	case ValStruct:
@@ -1195,5 +1203,122 @@ func findMethod(inst *FBInstance, name string) *ast.MethodDecl {
 		return findMethod(parentInst, name)
 	}
 
+	return nil
+}
+
+// findProperty looks up a property by name in the FB declaration hierarchy.
+func findProperty(inst *FBInstance, name string) *ast.PropertyDecl {
+	if inst.Decl == nil {
+		return nil
+	}
+	upperName := strings.ToUpper(name)
+	for _, p := range inst.Decl.Properties {
+		if p.Name != nil && strings.ToUpper(p.Name.Name) == upperName {
+			return p
+		}
+	}
+	// Walk EXTENDS chain
+	if inst.Decl.Extends != nil && inst.ParentDecl != nil {
+		parentInst := &FBInstance{
+			TypeName:   inst.Decl.Extends.Name,
+			Decl:       inst.ParentDecl,
+			Env:        inst.Env,
+			ParentDecl: inst.ParentDecl,
+		}
+		return findProperty(parentInst, name)
+	}
+	return nil
+}
+
+// execPropertyGetter executes a property's GET accessor and returns the result.
+func (interp *Interpreter) execPropertyGetter(inst *FBInstance, prop *ast.PropertyDecl) (Value, error) {
+	getter := prop.Getter
+	getterEnv := NewEnv(inst.Env)
+
+	// Define return variable (getter method name, typically "GET" or the property name)
+	retVal := ZeroFromTypeSpec(prop.Type)
+	if getter.Name != nil {
+		getterEnv.Define(getter.Name.Name, retVal)
+	}
+	// Also define the property name as the return variable
+	if prop.Name != nil {
+		getterEnv.Define(prop.Name.Name, retVal)
+	}
+
+	// Initialize local variables
+	for _, vb := range getter.VarBlocks {
+		for _, vd := range vb.Declarations {
+			val := ZeroFromTypeSpec(vd.Type)
+			if vd.InitValue != nil {
+				if iv, err := interp.evalExpr(getterEnv, vd.InitValue); err == nil {
+					val = iv
+				}
+			}
+			for _, n := range vd.Names {
+				getterEnv.Define(n.Name, val)
+			}
+		}
+	}
+
+	err := interp.execStatements(getterEnv, getter.Body)
+	if err != nil {
+		if _, ok := err.(*ErrReturn); !ok {
+			return Value{}, err
+		}
+	}
+
+	// Read return value: try getter name first, then property name
+	if getter.Name != nil {
+		if v, ok := getterEnv.Get(getter.Name.Name); ok {
+			return v, nil
+		}
+	}
+	if prop.Name != nil {
+		if v, ok := getterEnv.Get(prop.Name.Name); ok {
+			return v, nil
+		}
+	}
+	return retVal, nil
+}
+
+// execPropertySetter executes a property's SET accessor with the given value.
+func (interp *Interpreter) execPropertySetter(inst *FBInstance, prop *ast.PropertyDecl, val Value) error {
+	setter := prop.Setter
+	setterEnv := NewEnv(inst.Env)
+
+	// Define the property name variable for assignment
+	if prop.Name != nil {
+		setterEnv.Define(prop.Name.Name, val)
+	}
+
+	// Initialize VAR_INPUT parameters (the value being set)
+	for _, vb := range setter.VarBlocks {
+		if vb.Section == ast.VarInput {
+			for _, vd := range vb.Declarations {
+				for _, n := range vd.Names {
+					setterEnv.Define(n.Name, val)
+				}
+			}
+		} else {
+			for _, vd := range vb.Declarations {
+				v := ZeroFromTypeSpec(vd.Type)
+				if vd.InitValue != nil {
+					if iv, err := interp.evalExpr(setterEnv, vd.InitValue); err == nil {
+						v = iv
+					}
+				}
+				for _, n := range vd.Names {
+					setterEnv.Define(n.Name, v)
+				}
+			}
+		}
+	}
+
+	err := interp.execStatements(setterEnv, setter.Body)
+	if err != nil {
+		if _, ok := err.(*ErrReturn); !ok {
+			return err
+		}
+	}
 	return nil
 }

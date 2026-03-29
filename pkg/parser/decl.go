@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/lexer"
 )
@@ -369,7 +371,7 @@ func (p *Parser) parseMethod() *ast.MethodDecl {
 	}
 }
 
-// parseProperty parses PROPERTY name : type ... END_PROPERTY
+// parseProperty parses PROPERTY name : type GET...END_GET SET...END_SET END_PROPERTY
 func (p *Parser) parseProperty() *ast.PropertyDecl {
 	startTok := p.advance() // consume PROPERTY
 	name := p.parseIdent()
@@ -377,9 +379,22 @@ func (p *Parser) parseProperty() *ast.PropertyDecl {
 	typeSpec := p.parseTypeSpec()
 	p.match(lexer.Semicolon)
 
-	// Parse getter/setter (they look like METHOD GET / METHOD SET)
-	// For now, just skip to END_PROPERTY
+	var getter *ast.MethodDecl
+	var setter *ast.MethodDecl
+
+	// Parse GET/SET blocks until END_PROPERTY
 	for !p.atEnd() && !p.at(lexer.KwEndProperty) {
+		if p.at(lexer.Ident) {
+			identText := strings.ToUpper(p.peek().Text)
+			if identText == "GET" {
+				getter = p.parsePropertyAccessor("GET", "END_GET", name, typeSpec)
+				continue
+			} else if identText == "SET" {
+				setter = p.parsePropertyAccessor("SET", "END_SET", name, typeSpec)
+				continue
+			}
+		}
+		// Skip unknown tokens
 		p.advance()
 	}
 
@@ -391,8 +406,57 @@ func (p *Parser) parseProperty() *ast.PropertyDecl {
 			NodeKind: ast.KindPropertyDecl,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Name: name,
-		Type: typeSpec,
+		Name:   name,
+		Type:   typeSpec,
+		Getter: getter,
+		Setter: setter,
+	}
+}
+
+// parsePropertyAccessor parses a GET...END_GET or SET...END_SET block.
+// It treats them like anonymous methods with the property's return type.
+func (p *Parser) parsePropertyAccessor(startKw, endKw string, propName *ast.Ident, propType ast.TypeSpec) *ast.MethodDecl {
+	startTok := p.advance() // consume GET or SET
+
+	p.match(lexer.Semicolon)
+	varBlocks := p.parseVarBlocks()
+
+	// Parse statements until we see the end keyword (an Ident with matching text)
+	var body []ast.Statement
+	for !p.atEnd() {
+		if p.at(lexer.Ident) && strings.ToUpper(p.peek().Text) == endKw {
+			break
+		}
+		if p.at(lexer.KwEndProperty) {
+			break
+		}
+		savedPos := p.pos
+		stmt := p.parseStatement()
+		if stmt != nil {
+			body = append(body, stmt)
+		}
+		if p.pos == savedPos {
+			p.advance()
+		}
+	}
+
+	// Consume end keyword
+	var endTok lexer.Token
+	if p.at(lexer.Ident) && strings.ToUpper(p.peek().Text) == endKw {
+		endTok = p.advance()
+	} else {
+		endTok = startTok
+	}
+	p.match(lexer.Semicolon)
+
+	return &ast.MethodDecl{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindMethodDecl,
+			NodeSpan: spanFromTokens(startTok, endTok),
+		},
+		Name:      propName,
+		VarBlocks: varBlocks,
+		Body:      body,
 	}
 }
 
