@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vendor Libraries & I/O
-status: executing
-stopped_at: Completed 14-01-PLAN.md
-last_updated: "2026-03-30T11:59:32.211Z"
+status: verifying
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-30T12:06:16.384Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 18
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 38
-  completed_plans: 37
+  completed_plans: 38
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 Phase: 14 (mock-framework) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-30
 
 Progress: [░░░░░░░░░░] 0%
@@ -66,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 13]: Variadic AnalyzeOpts pattern preserves backward compatibility for all existing Analyze callers
 - [Phase 13]: Cross-vendor detection uses string-contains heuristic on library path keys (VEND010)
 - [Phase 14]: Mock symbols registered with isLibrary=false so they override library stubs as real implementations
+- [Phase 14-mock-framework]: SET_IO/GET_IO use string area identifiers for ST developer ergonomics
+- [Phase 14-mock-framework]: IOTable created per test case for isolation; auto-stub warnings aggregated at run level
 
 ### Pending Todos
 
@@ -78,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T11:59:32.208Z
-Stopped at: Completed 14-01-PLAN.md
+Last session: 2026-03-30T12:06:16.382Z
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None

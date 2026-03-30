@@ -269,7 +269,7 @@ Plans:
 
 Plans:
 - [x] 14-01-PLAN.md -- Mock infrastructure: config, loader, resolver MockFiles, signature validation
-- [ ] 14-02-PLAN.md -- Test runner integration, auto-stub warnings, I/O injection, CLI wiring
+- [x] 14-02-PLAN.md -- Test runner integration, auto-stub warnings, I/O injection, CLI wiring
 
 
 
@@ -352,7 +352,7 @@ Phases execute in numeric order: 12 -> 13 -> 14 -> 15/16 (parallel) -> 17 -> 18
 | 11. MCP Server & Claude Code Skills | v1.0 | 2/2 | Complete | 2026-03-28 |
 | 12. I/O Address Parser & Table | v1.1 | 2/2 | Complete    | 2026-03-30 |
 | 13. Vendor Stub Loading | v1.1 | 2/2 | Complete    | 2026-03-30 |
-| 14. Mock Framework | v1.1 | 1/2 | In Progress|  |
+| 14. Mock Framework | v1.1 | 2/2 | Complete   | 2026-03-30 |
 | 15. Shipped Stubs -- Beckhoff | v1.1 | 0/0 | Not started | - |
 | 16. Shipped Stubs -- Schneider & AB | v1.1 | 0/0 | Not started | - |
 | 17. Behavioral Mocks | v1.1 | 0/0 | Not started | - |

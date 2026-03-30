@@ -20,7 +20,7 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 - [x] **IO-01**: Parser handles AT %IX0.0, %QX0.0, %IW0, %QW0, %MW0, %MD0 address syntax in VAR blocks
 - [x] **IO-02**: Interpreter maintains a mock I/O table mapping addresses to values
 - [x] **IO-03**: I/O values sync at scan cycle boundaries (inputs copied before execution, outputs copied after)
-- [ ] **IO-04**: Tests can inject I/O values via the mock I/O table before assertions
+- [x] **IO-04**: Tests can inject I/O values via the mock I/O table before assertions
 - [x] **IO-05**: Address overlap detection warns when byte and bit addresses conflict
 
 ### Mock Framework
@@ -29,7 +29,7 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 - [x] **MOCK-02**: Mock paths configured via `[test.mock_paths]` in stc.toml
 - [x] **MOCK-03**: FBs without explicit mocks auto-generate zero-value instances (accept inputs, return zeros)
 - [x] **MOCK-04**: Mock signatures validated against stub signatures (parameter count and types must match)
-- [ ] **MOCK-05**: Zero-value auto-stubs emit fidelity warnings in test output
+- [x] **MOCK-05**: Zero-value auto-stubs emit fidelity warnings in test output
 
 ### Shipped Stubs -- Beckhoff
 
@@ -111,8 +111,8 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 | MOCK-02 | Phase 14 | Complete |
 | MOCK-03 | Phase 14 | Complete |
 | MOCK-04 | Phase 14 | Complete |
-| MOCK-05 | Phase 14 | Pending |
-| IO-04 | Phase 14 | Pending |
+| MOCK-05 | Phase 14 | Complete |
+| IO-04 | Phase 14 | Complete |
 | STUB-01 | Phase 15 | Pending |
 | STUB-02 | Phase 15 | Pending |
 | STUB-03 | Phase 15 | Pending |
