@@ -129,6 +129,123 @@ func TestTestCmd_EmptyDir(t *testing.T) {
 	}
 }
 
+func TestTestCmd_MockFBIntegration(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create stc.toml with mock_paths
+	stcToml := `[project]
+name = "mock-test"
+version = "0.1.0"
+
+[build]
+library_paths = { "mc" = "lib" }
+
+[test]
+mock_paths = ["mocks"]
+`
+	writeTestFixture(t, dir, "stc.toml", stcToml)
+
+	// Create lib directory with stub
+	os.MkdirAll(filepath.Join(dir, "lib"), 0755)
+	stub := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Execute : BOOL;
+    Position : LREAL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+    Error : BOOL;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	writeTestFixture(t, filepath.Join(dir, "lib"), "mc.st", stub)
+
+	// Create mocks directory with mock
+	os.MkdirAll(filepath.Join(dir, "mocks"), 0755)
+	mock := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Execute : BOOL;
+    Position : LREAL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+    Error : BOOL;
+END_VAR
+    Done := Execute;
+    Error := FALSE;
+END_FUNCTION_BLOCK
+`
+	writeTestFixture(t, filepath.Join(dir, "mocks"), "mc_mock.st", mock)
+
+	// Create test file
+	testST := `TEST_CASE 'Mock FB works'
+VAR
+    mover : MC_MoveAbsolute;
+END_VAR
+    mover(Execute := TRUE, Position := 50.0);
+    ASSERT_TRUE(mover.Done);
+END_TEST_CASE
+`
+	writeTestFixture(t, dir, "mock_test.st", testST)
+
+	stdout, stderr, exitCode := runStc(t, "test", dir)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 for mock test, got %d; stdout: %s; stderr: %s", exitCode, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "1 passed") {
+		t.Errorf("expected '1 passed' in output, got: %s", stdout)
+	}
+}
+
+func TestTestCmd_FidelityWarnings(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create stc.toml with library but no mocks
+	stcToml := `[project]
+name = "fidelity-test"
+version = "0.1.0"
+
+[build]
+library_paths = { "mc" = "lib" }
+`
+	writeTestFixture(t, dir, "stc.toml", stcToml)
+
+	// Create lib directory with stub
+	os.MkdirAll(filepath.Join(dir, "lib"), 0755)
+	stub := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Execute : BOOL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	writeTestFixture(t, filepath.Join(dir, "lib"), "mc.st", stub)
+
+	// Create test file that uses the stub
+	testST := `TEST_CASE 'Auto-stub test'
+VAR
+    mover : MC_MoveAbsolute;
+END_VAR
+    mover(Execute := TRUE);
+    ASSERT_FALSE(mover.Done);
+END_TEST_CASE
+`
+	writeTestFixture(t, dir, "stub_test.st", testST)
+
+	stdout, stderr, exitCode := runStc(t, "test", dir)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stdout: %s; stderr: %s", exitCode, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[fidelity]") {
+		t.Errorf("expected fidelity warning in output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "MC_MoveAbsolute") {
+		t.Errorf("expected MC_MoveAbsolute in warning, got: %s", stdout)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
