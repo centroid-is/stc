@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/pipeline"
 )
 
 func testdataDir(t *testing.T) string {
@@ -244,6 +247,116 @@ func TestFormatJSON(t *testing.T) {
 	}
 }
 
+func TestRunWithOpts_MockFB(t *testing.T) {
+	dir := t.TempDir()
+	copyFile(t, filepath.Join(testdataDir(t), "mock_fb_test.st"), filepath.Join(dir, "mock_fb_test.st"))
+
+	// Parse mock FB file
+	mockPath := filepath.Join(testdataDir(t), "mock_mc_moveabsolute.st")
+	mockFiles := parseFiles(t, mockPath)
+
+	// Parse stub (library) file
+	stubPath := filepath.Join(testdataDir(t), "stub_mc_moveabsolute.st")
+	libFiles := parseFiles(t, stubPath)
+
+	result, err := RunWithOpts(dir, RunOpts{
+		LibraryFiles: libFiles,
+		MockFiles:    mockFiles,
+	})
+	if err != nil {
+		t.Fatalf("RunWithOpts failed: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("expected 1 test, got %d", result.Total)
+	}
+	if result.Passed != 1 {
+		t.Errorf("expected 1 passed, got %d; failures: %v", result.Passed, describeFailures(result))
+	}
+}
+
+func TestRunWithOpts_AutoStubZeroValues(t *testing.T) {
+	dir := t.TempDir()
+	copyFile(t, filepath.Join(testdataDir(t), "autostub_test.st"), filepath.Join(dir, "autostub_test.st"))
+
+	// Only library stubs, no mocks -- should auto-stub with zero values
+	stubPath := filepath.Join(testdataDir(t), "stub_mc_moveabsolute.st")
+	libFiles := parseFiles(t, stubPath)
+
+	result, err := RunWithOpts(dir, RunOpts{
+		LibraryFiles: libFiles,
+	})
+	if err != nil {
+		t.Fatalf("RunWithOpts failed: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("expected 1 test, got %d", result.Total)
+	}
+	if result.Passed != 1 {
+		t.Errorf("expected 1 passed (auto-stub zero values), got %d; failures: %v", result.Passed, describeFailures(result))
+	}
+}
+
+func TestRunWithOpts_AutoStubWarning(t *testing.T) {
+	dir := t.TempDir()
+	copyFile(t, filepath.Join(testdataDir(t), "autostub_test.st"), filepath.Join(dir, "autostub_test.st"))
+
+	stubPath := filepath.Join(testdataDir(t), "stub_mc_moveabsolute.st")
+	libFiles := parseFiles(t, stubPath)
+
+	result, err := RunWithOpts(dir, RunOpts{
+		LibraryFiles: libFiles,
+	})
+	if err != nil {
+		t.Fatalf("RunWithOpts failed: %v", err)
+	}
+	if len(result.Warnings) == 0 {
+		t.Fatal("expected fidelity warnings for auto-stubbed FB, got none")
+	}
+	found := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w, "MC_MoveAbsolute") && strings.Contains(w, "auto-stub") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected auto-stub warning mentioning MC_MoveAbsolute, got: %v", result.Warnings)
+	}
+}
+
+func TestRunWithOpts_SetIO_GetIO(t *testing.T) {
+	dir := t.TempDir()
+	copyFile(t, filepath.Join(testdataDir(t), "io_inject_test.st"), filepath.Join(dir, "io_inject_test.st"))
+
+	result, err := RunWithOpts(dir, RunOpts{})
+	if err != nil {
+		t.Fatalf("RunWithOpts failed: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("expected 1 test, got %d", result.Total)
+	}
+	if result.Passed != 1 {
+		t.Errorf("expected 1 passed, got %d; failures: %v", result.Passed, describeFailures(result))
+	}
+}
+
+func TestRun_BackwardCompatible(t *testing.T) {
+	// Run (no opts) should still work exactly as before
+	dir := t.TempDir()
+	copyFile(t, filepath.Join(testdataDir(t), "passing_test.st"), filepath.Join(dir, "passing_test.st"))
+
+	result, err := Run(dir)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if result.Total != 2 {
+		t.Errorf("expected 2 tests, got %d", result.Total)
+	}
+	if result.Passed != 2 {
+		t.Errorf("expected 2 passed, got %d", result.Passed)
+	}
+}
+
 // --- helpers ---
 
 func copyFile(t *testing.T, src, dst string) {
@@ -274,6 +387,22 @@ func containsName(names []string, name string) bool {
 		}
 	}
 	return false
+}
+
+func parseFiles(t *testing.T, paths ...string) []*ast.SourceFile {
+	t.Helper()
+	var result []*ast.SourceFile
+	for _, p := range paths {
+		content, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("failed to read %s: %v", p, err)
+		}
+		parsed := pipeline.Parse(p, string(content), nil)
+		if parsed.File != nil {
+			result = append(result, parsed.File)
+		}
+	}
+	return result
 }
 
 func describeFailures(r *RunResult) []string {
