@@ -55,8 +55,9 @@ type Symbol struct {
 	Kind     SymbolKind     // What this symbol represents
 	Pos      source.Pos     // Declaration site position
 	Span     source.Span    // Full declaration span
-	Used     bool           // Whether this symbol has been referenced
-	ParamDir ast.VarSection // Parameter direction (VAR_INPUT, VAR_OUTPUT, etc.)
+	Used      bool           // Whether this symbol has been referenced
+	IsLibrary bool           // Whether this symbol was loaded from a vendor library stub
+	ParamDir  ast.VarSection // Parameter direction (VAR_INPUT, VAR_OUTPUT, etc.)
 	Type     any            // Type info — will be type-asserted by checker
 }
 
