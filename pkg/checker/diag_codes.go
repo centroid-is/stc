@@ -23,6 +23,11 @@ const (
 	CodeNoMember         = "SEMA024" // type has no member with this name
 	CodeInOutRequiresVar = "SEMA025" // VAR_IN_OUT requires variable, not literal
 
+	// I/O address validation
+	CodeInvalidATAddress = "SEMA030" // invalid AT address format
+	CodeATNotAllowedHere = "SEMA031" // AT address in wrong POU type
+	CodeATOverlap        = "SEMA032" // overlapping AT address ranges
+
 	// Vendor warnings
 	CodeVendorOOP       = "VEND001" // OOP not supported by target vendor
 	CodeVendorPointer   = "VEND002" // POINTER TO not supported

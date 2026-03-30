@@ -466,9 +466,10 @@ END_FUNCTION`
 }
 
 func TestATAddressInvalidFormat(t *testing.T) {
+	// %IX0.9 has bit offset 9, which is out of range 0-7
 	src := `PROGRAM P
 VAR
-    x AT %ZZ0 : BOOL;
+    x AT %IX0.9 : BOOL;
 END_VAR
 END_PROGRAM`
 	allDiags := runChecker(src)
@@ -478,7 +479,7 @@ END_PROGRAM`
 			found = true
 		}
 	}
-	assert.True(t, found, "expected InvalidATAddress error for %%ZZ0")
+	assert.True(t, found, "expected InvalidATAddress error for %%IX0.9 (bit offset out of range)")
 }
 
 func TestATOverlapWordAndBit(t *testing.T) {

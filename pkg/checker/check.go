@@ -5,6 +5,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/iomap"
 	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/centroid-is/stc/pkg/types"
 )
@@ -31,14 +32,17 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 			switch d := decl.(type) {
 			case *ast.ProgramDecl:
 				if d.Name != nil {
+					c.checkATAddresses(d.VarBlocks, "PROGRAM")
 					c.checkPOUBody(d.Name.Name, d.Body)
 				}
 			case *ast.FunctionBlockDecl:
 				if d.Name != nil {
+					c.checkATAddresses(d.VarBlocks, "FUNCTION_BLOCK")
 					c.checkPOUBody(d.Name.Name, d.Body)
 				}
 			case *ast.FunctionDecl:
 				if d.Name != nil {
+					c.checkATAddresses(d.VarBlocks, "FUNCTION")
 					// Set return type for RETURN checks
 					if sym := c.table.LookupGlobal(d.Name.Name); sym != nil {
 						if fnType, ok := sym.Type.(*types.FunctionType); ok {
@@ -48,6 +52,95 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 					c.checkPOUBody(d.Name.Name, d.Body)
 					c.currentReturnType = nil
 				}
+			}
+		}
+	}
+}
+
+// atBinding pairs a variable name with its parsed AT address for overlap detection.
+type atBinding struct {
+	varName string
+	addr    iomap.IOAddress
+}
+
+// checkATAddresses validates AT address declarations in var blocks.
+// It checks format validity, POU type restrictions, and address overlap.
+func (c *Checker) checkATAddresses(varBlocks []*ast.VarBlock, pouType string) {
+	var bindings []atBinding
+
+	for _, vb := range varBlocks {
+		for _, vd := range vb.Declarations {
+			if vd.AtAddress == nil {
+				continue
+			}
+
+			pos := astPosToSource(vd.AtAddress.Span().Start)
+
+			// Validate address format
+			addr, err := iomap.ParseAddress(vd.AtAddress.Name)
+			if err != nil {
+				c.diags.Errorf(pos, CodeInvalidATAddress,
+					"invalid I/O address %q: %s", vd.AtAddress.Name, err)
+				continue
+			}
+
+			// Check POU type restriction
+			if pouType != "PROGRAM" {
+				c.diags.Warnf(pos, CodeATNotAllowedHere,
+					"AT address declarations are only valid in PROGRAM blocks, not %s", pouType)
+			}
+
+			// Collect for overlap detection (skip wildcards)
+			if !addr.IsWildcard {
+				varName := ""
+				if len(vd.Names) > 0 {
+					varName = vd.Names[0].Name
+				}
+				bindings = append(bindings, atBinding{varName: varName, addr: addr})
+			}
+		}
+	}
+
+	// Check for overlapping addresses within the same area
+	for i := 0; i < len(bindings); i++ {
+		for j := i + 1; j < len(bindings); j++ {
+			a := bindings[i]
+			b := bindings[j]
+
+			// Only check within the same area
+			if a.addr.Area != b.addr.Area {
+				continue
+			}
+
+			offA, lenA := a.addr.ByteSpan()
+			offB, lenB := b.addr.ByteSpan()
+
+			endA := offA + lenA
+			endB := offB + lenB
+
+			// Check byte range overlap: [offA, endA) intersects [offB, endB)
+			if offA < endB && offB < endA {
+				// For two bit addresses in the same byte but different bits: no overlap
+				if a.addr.Size == iomap.SizeBit && b.addr.Size == iomap.SizeBit &&
+					a.addr.ByteOffset == b.addr.ByteOffset &&
+					a.addr.BitOffset != b.addr.BitOffset {
+					continue
+				}
+
+				overlapStart := offA
+				if offB > overlapStart {
+					overlapStart = offB
+				}
+				overlapEnd := endA
+				if endB < overlapEnd {
+					overlapEnd = endB
+				}
+
+				c.diags.Warnf(astPosToSource(ast.Pos{}), CodeATOverlap,
+					"AT addresses %s (%s) and %s (%s) overlap in byte range [%d..%d]",
+					a.addr.String(), a.varName,
+					b.addr.String(), b.varName,
+					overlapStart, overlapEnd-1)
 			}
 		}
 	}
