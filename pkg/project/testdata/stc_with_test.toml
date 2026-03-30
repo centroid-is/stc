@@ -1,0 +1,13 @@
+[project]
+name = "test-project"
+version = "1.0.0"
+
+[build]
+source_roots = ["src/"]
+vendor_target = "beckhoff"
+
+[lint]
+naming_convention = "PascalCase"
+
+[test]
+mock_paths = ["mocks/", "test/mocks/"]

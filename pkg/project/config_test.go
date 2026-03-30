@@ -24,3 +24,18 @@ func TestLoadConfigMissing(t *testing.T) {
 	_, err := LoadConfig("nonexistent/stc.toml")
 	assert.Error(t, err)
 }
+
+func TestLoadConfig_TestSection_MockPaths(t *testing.T) {
+	cfg, err := LoadConfig(filepath.Join("testdata", "stc_with_test.toml"))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"mocks/", "test/mocks/"}, cfg.Test.MockPaths)
+}
+
+func TestLoadConfig_TestSection_Missing(t *testing.T) {
+	// The standard stc.toml has no [test] section; MockPaths should be nil
+	cfg, err := LoadConfig(filepath.Join("testdata", "stc.toml"))
+	require.NoError(t, err)
+
+	assert.Nil(t, cfg.Test.MockPaths)
+}

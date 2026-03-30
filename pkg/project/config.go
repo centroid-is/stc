@@ -15,6 +15,12 @@ type Config struct {
 	Project ProjectConfig `toml:"project"`
 	Build   BuildConfig   `toml:"build"`
 	Lint    LintConfig    `toml:"lint"`
+	Test    TestConfig    `toml:"test"`
+}
+
+// TestConfig holds test-related configuration.
+type TestConfig struct {
+	MockPaths []string `toml:"mock_paths"`
 }
 
 // ProjectConfig holds project metadata.
