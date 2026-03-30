@@ -1,219 +1,305 @@
-# Stack Research
+# Stack Research: Vendor Libraries, I/O Mapping & Mock Framework
 
-**Domain:** IEC 61131-3 Structured Text Compiler Toolchain
-**Researched:** 2026-03-26
-**Confidence:** HIGH (core stack), MEDIUM (LSP library choice)
+**Domain:** IEC 61131-3 vendor library integration, PLC I/O address mapping, host-based mock framework
+**Researched:** 2026-03-30
+**Confidence:** MEDIUM-HIGH (I/O addressing from IEC standard + Beckhoff docs; library formats from vendor docs; AB dialect from multiple community sources)
 
 ## Recommended Stack
 
-### Core Technologies
+### Core Technologies (No New Dependencies)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| Go | 1.23+ | Implementation language | Single static binary, fast compilation, excellent for LLM agent iteration, cross-compiles trivially. The Go compiler itself uses hand-written recursive descent -- a proven pattern for this exact use case. |
-| Hand-written recursive descent parser | N/A | ST parsing with error recovery | Go, Clang, Rust, and TypeScript all use hand-written parsers for their compilers. Full control over error recovery is essential for LSP partial ASTs from broken code. Participle and ANTLR both impose constraints that fight the error-recovery requirement. |
-| C++17 | Standard | Code generation target | STruC++ validates this target: function blocks become classes, interfaces use virtual methods, generics use templates. C++17 is the sweet spot -- universally supported by g++/clang++/MSVC without requiring bleeding-edge compiler features. |
-| `text/template` | stdlib | C++ code emission | Go's built-in template engine is sufficient for emitting C++. No external dependency needed. Templates keep generated code readable and the emission logic maintainable. |
+| Go `encoding/xml` | stdlib | Parse TwinCAT `.TcPOU` XML for stub extraction | No external dep needed; TcPOU is simple XML with CDATA |
+| Go `encoding/json` | stdlib | I/O table serialization for mock framework | Already used throughout stc for `--format json` |
+| Existing stc parser | v1.0 | Parse `.st` stub files for vendor library loading | Stubs use plain ST syntax -- no new parser needed |
+| Existing stc interpreter | v1.0 | Execute mock FBs written in ST | `FBInstance` + `StandardFB` interface already handles user-defined FBs |
 
-### Parser & Compiler Infrastructure
+**Key insight: This milestone requires ZERO new Go dependencies.** Everything builds on `encoding/xml` (stdlib) and existing stc infrastructure.
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| Hand-written lexer | N/A | Tokenization | Write a custom lexer that emits ERROR tokens for invalid sequences and keeps scanning. Critical for LSP -- the lexer must never crash on malformed input. Model after Go's `scanner` package. |
-| Hand-written Pratt parser | N/A | Expression parsing | Use Pratt parsing (operator-precedence) for the expression sub-grammar. Recursive descent for statements and declarations, Pratt for expressions. This is the standard approach for languages with complex operator precedence. |
-| `text/template` | stdlib | C++ code templates | Emit generated C++ through templates. One template per major construct (function block, program, function). Keep templates in embedded files via `embed`. |
+### Supporting Libraries (None Required)
 
-### CLI Framework
+No external Go packages are needed. The entire feature set builds on:
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `spf13/cobra` | v1.10.x | CLI command framework | The standard for Go CLIs. Used by kubectl, docker, gh, hugo. Provides subcommands, flags, help generation, shell completion. Use for all `stc` subcommands (parse, check, test, emit, lint, format, lsp, mcp). |
-| `spf13/viper` | v1.19.x | Configuration management | Pairs with Cobra for config files, env vars, and flag binding. Use for project-level `.stc.yaml` configuration. |
+1. **Parser** -- already handles `FUNCTION_BLOCK` with empty body, `AT` keyword, `VarConfig` section
+2. **Checker** -- already has `VendorProfile` with feature gates, `BuiltinFunctions` map
+3. **Interpreter** -- already has `StdlibFBFactory`, `FBInstance`, `ScanCycleEngine`
+4. **Project config** -- already has `[build.library_paths]` in `stc.toml`
 
-### LSP Server
+### New Internal Packages/Files
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `tliron/glsp` | latest (March 2024) | LSP protocol SDK | Best available Go LSP SDK. Supports LSP 3.16/3.17, stdio/TCP/WebSocket transports, provides ready-to-run JSON-RPC 2.0 server with all message structures pre-built. Use as the foundation, but expect to extend or patch for newer LSP features. |
+| Package/File | Purpose | Notes |
+|--------------|---------|-------|
+| `pkg/iomap/iomap.go` | I/O address table: `%I*`, `%Q*`, `%M*` areas with typed read/write | Flat byte arrays with typed access, not a full PLC memory model |
+| `pkg/iomap/address.go` | Parse AT addresses: `%IX0.0`, `%QW4`, `%MD12`, `%I*` | Regex-based parser for `%[IQM][XBWD]?(\*\|\d+(\.\d+)*)` |
+| `pkg/vendor/loader.go` | Load `.st` stub files from `[build.library_paths]` config | Calls parser, registers declarations in symbol table before user code |
+| `pkg/vendor/extract.go` | Extract FB signatures from TwinCAT `.TcPOU` XML files | `stc vendor extract` command |
+| `pkg/interp/mock.go` | Auto-stub generation for declaration-only FBs | Zero-value outputs, no-op Execute |
 
-### MCP Server
+## I/O Memory Model: %I, %Q, %M Areas
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `modelcontextprotocol/go-sdk` | v1.4.1 | MCP server implementation | The official Go SDK, maintained in collaboration with Google. Supports MCP spec 2025-11-25 with backward compatibility. Use this over `mark3labs/mcp-go` -- it is now the canonical implementation. |
+### IEC 61131-3 Address Format (HIGH confidence -- from standard)
 
-### Testing
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `testing` | stdlib | Test framework | Use Go's built-in testing for all unit and integration tests. No external framework needed. Go convention is table-driven tests, which map perfectly to parser test cases. |
-| `stretchr/testify` | v1.10.x | Assertions and mocking | Use `assert` and `require` packages for cleaner test assertions. Use `mock` package sparingly -- prefer real implementations where possible. |
-| `encoding/json` | stdlib | JSON output verification | For testing `--format json` CLI output and MCP protocol messages. |
-| `os/exec` | stdlib | CLI integration tests | For end-to-end tests that invoke the `stc` binary and verify output. |
-
-### Supporting Libraries
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `encoding/xml` | stdlib | PLCopen XML import/export | Parse and generate PLCopen XML format for vendor interop. |
-| `embed` | stdlib | Embedded templates and test fixtures | Embed C++ templates and standard library definitions into the binary. |
-| `go.uber.org/zap` | v1.27.x | Structured logging | Fast structured logging for compiler diagnostics, LSP events, MCP communication. |
-| `github.com/google/go-cmp` | v0.6.x | Test comparison | Deep equality comparison for AST nodes in tests. Better diff output than `reflect.DeepEqual`. |
-| `github.com/jstemmer/go-junit-report` | v2.1.x | JUnit XML output | Convert `go test` output to JUnit XML for CI integration. Required by project spec. |
-
-### Development Tools
-
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| `golangci-lint` | Linting | Run the standard suite: `govet`, `staticcheck`, `errcheck`, `ineffassign`. Configure via `.golangci.yml`. |
-| `gofumpt` | Formatting | Stricter than `gofmt`. Enforces consistent style across codebase. |
-| `goreleaser` | Release builds | Cross-compile for Linux/macOS/Windows from CI. Single binary distribution. |
-| `clang-format` | C++ output formatting | Format generated C++ code. Ship a `.clang-format` config targeting C++17 style. |
-| `g++` / `clang++` | C++ compilation | For compiling generated C++ in host test mode. Require C++17 support. |
-
-## Installation
-
-```bash
-# Initialize Go module
-go mod init github.com/jonb/stc
-
-# Core dependencies
-go get github.com/spf13/cobra@latest
-go get github.com/spf13/viper@latest
-go get github.com/tliron/glsp@latest
-go get github.com/modelcontextprotocol/go-sdk@latest
-go get go.uber.org/zap@latest
-
-# Test dependencies
-go get github.com/stretchr/testify@latest
-go get github.com/google/go-cmp@latest
-
-# Dev tools (install globally)
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-go install mvdan.cc/gofumpt@latest
-go install github.com/goreleaser/goreleaser@latest
-go install github.com/jstemmer/go-junit-report/v2@latest
 ```
+%<area><size><position>
+
+Area:  I = Input, Q = Output, M = Memory (flag/marker)
+Size:  X = Bit, B = Byte, W = Word (16-bit), D = Double word (32-bit)
+       (omitted = Bit for BOOL, Byte for others -- vendor-dependent)
+Position: <byte>[.<bit>]  or  * (auto-assign)
+```
+
+**Examples:**
+
+| Address | Meaning | Data Width |
+|---------|---------|------------|
+| `%IX0.0` | Input bit 0 of byte 0 | 1 bit |
+| `%IX0.7` | Input bit 7 of byte 0 | 1 bit |
+| `%IB0` | Input byte 0 | 8 bits |
+| `%IW0` | Input word at byte 0 | 16 bits |
+| `%IW2` | Input word at byte 2 | 16 bits |
+| `%ID0` | Input double word at byte 0 | 32 bits |
+| `%QX0.0` | Output bit 0 of byte 0 | 1 bit |
+| `%QB4` | Output byte 4 | 8 bits |
+| `%QW8` | Output word at byte 8 | 16 bits |
+| `%MD48` | Memory double word at byte 48 | 32 bits |
+| `%I*` | Auto-assigned input (TwinCAT/CODESYS wildcard) | Per variable type |
+| `%Q*` | Auto-assigned output | Per variable type |
+
+**Overlap rules:** `%IW0` occupies bytes 0-1. `%IW2` occupies bytes 2-3. `%ID0` occupies bytes 0-3 and overlaps with `%IW0` and `%IW2`. This is intentional and how real PLCs work.
+
+### AT Keyword Semantics (HIGH confidence -- from IEC 61131-3 + Beckhoff InfoSys)
+
+The `AT` keyword binds a symbolic variable name to a physical I/O address:
+
+```iec
+VAR
+    startButton AT %IX0.0 : BOOL;        (* Input bit 0.0 *)
+    motorSpeed  AT %QW4   : INT;         (* Output word at byte 4 *)
+    recipe      AT %MD100 : DWORD;       (* Memory double word at byte 100 *)
+END_VAR
+```
+
+**Where AT is valid (per IEC 61131-3):**
+- `VAR` blocks in `PROGRAM` declarations
+- `VAR_GLOBAL` blocks (GVL in TwinCAT)
+- `VAR_CONFIG` blocks (configuration-level linking)
+- NOT valid in `FUNCTION_BLOCK` or `FUNCTION` VAR blocks (FBs are hardware-independent)
+
+**TwinCAT wildcard addressing:**
+```iec
+VAR
+    sensor1 AT %I* : BOOL;   (* TwinCAT assigns address at link time *)
+    output1 AT %Q* : BOOL;   (* Linked to PDO via System Manager *)
+END_VAR
+```
+
+The wildcard `*` means "allocate from the I/O image but let the IDE link it to specific hardware." In stc, wildcards should allocate from the mock I/O table sequentially.
+
+### Memory Model for stc Mock I/O
+
+Use three flat byte arrays, one per area:
+
+```go
+type IOTable struct {
+    I []byte // Input image  (default 1024 bytes, growable)
+    Q []byte // Output image (default 1024 bytes, growable)
+    M []byte // Memory/flag area (default 4096 bytes, growable)
+}
+
+// Typed access methods
+func (t *IOTable) GetBit(area byte, byteOffset, bitOffset int) bool
+func (t *IOTable) SetBit(area byte, byteOffset, bitOffset int, v bool)
+func (t *IOTable) GetByte(area byte, offset int) byte
+func (t *IOTable) SetByte(area byte, offset int, v byte)
+func (t *IOTable) GetWord(area byte, offset int) uint16
+func (t *IOTable) SetWord(area byte, offset int, v uint16)
+func (t *IOTable) GetDWord(area byte, offset int) uint32
+func (t *IOTable) SetDWord(area byte, offset int, v uint32)
+```
+
+This mirrors how real PLCs work: the I/O image is a contiguous byte buffer. Variables declared with AT addresses are views into this buffer. The scan cycle copies physical I/O into/out of these buffers.
+
+## EtherCAT Terminal I/O Mapping (MEDIUM confidence -- from Beckhoff product docs)
+
+### How TwinCAT Maps Terminals to Addresses
+
+EtherCAT terminals are mapped to the PLC I/O image through Process Data Objects (PDOs). The mapping is done in the TwinCAT System Manager, not in ST code. The ST code only sees AT addresses.
+
+| Terminal | Type | Channels | Process Data | Typical AT Address |
+|----------|------|----------|-------------|-------------------|
+| EL1008 | 8-ch digital input | 8 x BOOL | 1 byte (8 bits packed) | `%IB0` or `%IX0.0` thru `%IX0.7` |
+| EL2008 | 8-ch digital output | 8 x BOOL | 1 byte (8 bits packed) | `%QB0` or `%QX0.0` thru `%QX0.7` |
+| EL3064 | 4-ch analog input 0-10V, 12-bit | 4 x INT | 8 bytes (4 x 16-bit) | `%IW0`, `%IW2`, `%IW4`, `%IW6` |
+| EL4034 | 4-ch analog output, 16-bit | 4 x INT | 8 bytes (4 x 16-bit) | `%QW0`, `%QW2`, `%QW4`, `%QW6` |
+
+**EL3064 detail:** Each channel has a 16-bit value (12-bit ADC, upper 4 bits = status in compact mode or zero-padded). The mapping puts Channel 1 at the first word, Channel 2 at the next, etc. With compact PDO mapping, it is 4 x INT (8 bytes total).
+
+**What stc needs:** stc does not need to know about specific terminal models. The user declares AT addresses in their GVL, and stc maps them to the IOTable. The terminal model determines what addresses exist, but that is a TwinCAT System Manager concern, not an stc concern. stc just needs to handle `AT %IX0.0 : BOOL` and `AT %IW4 : INT` correctly.
+
+### Implications for stc
+
+Do NOT model EtherCAT terminals. Model the I/O image (byte arrays) that terminals write to. Users declare AT addresses and stc resolves them to offsets in the I/O table. During testing, users set I/O values via `SetInput` on the scan cycle engine or via a mock I/O table API.
+
+## Beckhoff .library File Format (MEDIUM confidence -- from Beckhoff InfoSys + CODESYS docs)
+
+### Format Assessment
+
+| Format | Internal Structure | Extractable? | Notes |
+|--------|-------------------|-------------|-------|
+| `.library` (source) | Proprietary binary container with embedded ST source | Partially -- CODESYS scripting API can export | Contains full source but format is undocumented |
+| `.compiled-library` | Proprietary binary, source stripped | NO -- signatures present but binary format undocumented | Used for distribution, no public parser exists |
+| `.TcPOU` (TwinCAT) | Simple XML with CDATA-wrapped ST | YES -- trivial to parse | Each POU in its own file, declaration in `<Declaration>` element |
+| `.plcproj` (TwinCAT) | MSBuild XML | YES -- lists all `.TcPOU` references | Standard XML, references POU files |
+| PLCopen XML | Standardized IEC 61131-10 XML | YES -- public XSD schema | Can represent POUs with or without bodies |
+
+### Recommended Extraction Path
+
+**Primary:** Parse `.TcPOU` files directly. Structure is trivial:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="FB_MyBlock" Id="{guid}" SpecialFunc="None">
+    <Declaration><![CDATA[
+FUNCTION_BLOCK FB_MyBlock
+VAR_INPUT
+    bExecute : BOOL;
+    nValue   : INT;
+END_VAR
+VAR_OUTPUT
+    bDone  : BOOL;
+    bError : BOOL;
+END_VAR
+    ]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+        (* implementation code *)
+      ]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
+```
+
+Go parsing is trivial with `encoding/xml`:
+
+```go
+type TcPlcObject struct {
+    XMLName xml.Name `xml:"TcPlcObject"`
+    POU     struct {
+        Name        string `xml:"Name,attr"`
+        Declaration string `xml:"Declaration"`
+        Implementation struct {
+            ST string `xml:"ST"`
+        } `xml:"Implementation"`
+    } `xml:"POU"`
+}
+```
+
+Extract `Declaration` CDATA, strip/ignore `Implementation`, write to `.st` stub file. The stc parser then handles the stub file natively.
+
+**Secondary:** PLCopen XML import (already planned as a future feature).
+
+**Do NOT attempt:** Parsing `.library` or `.compiled-library` files. The binary format is proprietary, undocumented, and changes between CODESYS versions. The cost/benefit is terrible.
+
+## Allen Bradley Dialect Differences (MEDIUM confidence -- from Rockwell docs + community sources)
+
+### Feature Comparison: AB Logix 5000 vs IEC 61131-3 / CODESYS
+
+| Feature | Beckhoff (CODESYS) | Schneider (CODESYS-derived) | Allen Bradley (Logix 5000) |
+|---------|-------------------|---------------------------|---------------------------|
+| `FUNCTION_BLOCK` | Full support | Full support | **NO** -- uses Add-On Instructions (AOI) |
+| `FUNCTION` | Full support | Full support | Full support |
+| `PROGRAM` | Full support | Full support | **Tasks + Routines** model instead |
+| OOP (METHOD, INTERFACE, PROPERTY) | Full support | No | **No** |
+| POINTER TO | Yes | No | **No** |
+| REFERENCE TO | Yes | No | **No** |
+| ENUM types | Full support | Full support | **No native ENUM** -- use DINT constants |
+| LREAL (64-bit float) | Yes | Yes | **Yes** (newer firmware v31+) |
+| LINT/ULINT (64-bit int) | Yes | Yes | **LINT yes, ULINT no** |
+| WSTRING | Yes | Yes | **No** |
+| STRING literal assignment | Yes | Yes | **No** -- cannot assign `'hello'` to STRING tag directly |
+| AT %I/%Q/%M addressing | Yes | Yes | **No** -- tag-based, no direct addresses |
+| VAR_GLOBAL (GVL) | Yes | Yes | **Controller-scoped tags** instead |
+| REPEAT..UNTIL | Yes | Yes | **Not documented** |
+| CASE with ranges | Yes | Yes | **Integer values only, no ranges** |
+| Multi-dimensional arrays | Yes | Yes | **3 dimensions max** |
+| Timer types | TON, TOF, TP (IEC) | TON, TOF, TP (IEC) | **TONR, TOF** -- different names/behavior |
+
+### AB-Specific Concepts Needing Stubs
+
+| AB Concept | IEC Equivalent | Stub Strategy |
+|------------|---------------|---------------|
+| Add-On Instruction (AOI) | FUNCTION_BLOCK | Declare as FUNCTION_BLOCK in stub, note in metadata |
+| User-Defined Type (UDT) | TYPE..STRUCT..END_TYPE | Same syntax, no change needed |
+| Controller-scoped tag | VAR_GLOBAL | Use VAR_GLOBAL in stubs |
+| MSG instruction | ADSREAD/ADSWRITE equivalent | Stub as FUNCTION_BLOCK with Done/Error/EN/DN outputs |
+| PID instruction | PID FB | Stub with AB-specific parameters (SP, PV, CV, etc.) |
+| TONR (retentive timer) | No IEC equivalent | Custom stub FB |
+| GSV/SSV (Get/Set System Value) | No IEC equivalent | Stub as FUNCTION with class/attribute params |
+
+### Implications for stc Stubs
+
+AB stubs should be written as standard IEC 61131-3 FUNCTION_BLOCK declarations even though AB uses AOIs internally. The stub provides the type signature for stc's checker. When emitting for AB target, the emitter maps FUNCTION_BLOCK to AOI syntax. This is already the pattern used for Beckhoff/Schneider FB differences.
+
+## Go XML Parsing for TwinCAT Files (HIGH confidence -- Go stdlib)
+
+No external libraries needed. `encoding/xml` handles TcPOU files perfectly:
+
+```go
+// Parse a .TcPOU file
+func ParseTcPOU(r io.Reader) (*TcPOU, error) {
+    var obj TcPlcObject
+    if err := xml.NewDecoder(r).Decode(&obj); err != nil {
+        return nil, err
+    }
+    return &obj.POU, nil
+}
+
+// Parse a .plcproj file to find all .TcPOU references
+func ParsePlcProj(r io.Reader) ([]string, error) {
+    // .plcproj is MSBuild XML with <Compile Include="path.TcPOU" /> elements
+    // Use xml.Decoder to extract Include attributes
+}
+```
+
+For walking a TwinCAT project directory: `filepath.WalkDir` + filter for `.TcPOU` extension.
 
 ## Alternatives Considered
 
-### Parser Approach
-
 | Recommended | Alternative | Why Not |
 |-------------|-------------|---------|
-| Hand-written recursive descent | `alecthomas/participle` v2.1.4 | Participle uses struct tags to define grammars -- elegant for simple DSLs but fundamentally wrong for a compiler-grade parser. It is LL(k) only (no left recursion), provides no control over error recovery, and cannot produce partial ASTs from malformed input. The LSP requirement kills this option. |
-| Hand-written recursive descent | ANTLR4 Go target (`antlr4-go/antlr` v4.13.1) | ANTLR generates parsers from `.g4` grammars. Existing IEC 61131-3 grammars exist (vlsi/iec61131-parser, TUM-AIS). However: (1) ANTLR requires Java at build time (acceptable per constraints but adds friction), (2) generated Go code is verbose and hard to debug, (3) error recovery is possible but requires custom error strategies that fight the generated code, (4) the Go target is the least mature ANTLR target. The project constraint "hand-written recursive descent parser" in KEY DECISIONS already settles this. |
-
-### LSP Library
-
-| Recommended | Alternative | Why Not |
-|-------------|-------------|---------|
-| `tliron/glsp` | `go.lsp.dev/protocol` v0.12.0 | Last published March 2022. Implements LSP 3.15.3 (two major versions behind current 3.17). Low-level protocol types only -- you must build the entire server yourself. Not actively maintained. |
-| `tliron/glsp` | `TobiasYin/go-lsp` | Smaller community, less feature coverage. GLSP provides more complete transport support (stdio, TCP, WebSocket, Node IPC). |
-| `tliron/glsp` | Hand-written LSP from scratch | Possible (gopls does this internally) but enormous effort. LSP spec has hundreds of message types. GLSP gives you the message structures and JSON-RPC plumbing; you focus on language features. |
-
-### MCP Library
-
-| Recommended | Alternative | Why Not |
-|-------------|-------------|---------|
-| `modelcontextprotocol/go-sdk` | `mark3labs/mcp-go` | mcp-go was the community standard before the official SDK. Now that the official SDK exists (maintained with Google collaboration), use the official one. It tracks the spec more closely and will be better maintained long-term. |
-
-### CLI Framework
-
-| Recommended | Alternative | Why Not |
-|-------------|-------------|---------|
-| `spf13/cobra` | `urfave/cli` v2 | Both are mature. Cobra wins on ecosystem: more examples, better documentation, used by more Go CLI tools. The `stc` tool will have many subcommands (parse, check, test, emit, lint, format, lsp, mcp) -- Cobra handles this cleanly. |
-| `spf13/cobra` | `alecthomas/kong` | Kong is newer and cleaner for simple CLIs. But Cobra's extensive documentation and community examples matter when LLM agents need to modify CLI code. |
-
-### Testing
-
-| Recommended | Alternative | Why Not |
-|-------------|-------------|---------|
-| stdlib `testing` + `testify` | `onsi/ginkgo` + `gomega` | BDD-style is unnecessary complexity for a compiler test suite. Table-driven tests with `testify/assert` are the Go standard pattern. Ginkgo adds a test runner that replaces `go test`, which complicates CI. |
+| Plain `.st` stubs | YAML/TOML/JSON stub format | Engineers know ST syntax; parser already handles it; zero new formats |
+| Go `encoding/xml` | `github.com/beevik/etree` | etree is nicer API but adds dependency for simple XML; stdlib is sufficient |
+| Flat byte array I/O table | Structured I/O model per terminal | Over-engineering; real PLCs use flat byte images too |
+| Zero-value auto-stubs | Require explicit mocks for all FBs | Too much friction; most tests only care about a few FBs |
+| Extract from `.TcPOU` XML | Parse `.library` binary files | `.library` format is proprietary and undocumented; `.TcPOU` is trivial XML |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `alecthomas/participle` | Cannot produce partial ASTs from broken code. LL(k) limitation prevents natural expression of ST grammar. Struct-tag grammars become unmaintainable at compiler scale. | Hand-written recursive descent with Pratt expression parsing |
-| ANTLR4 Go target at runtime | Requires Java toolchain for grammar compilation. Generated Go code is verbose, hard to debug, and the Go target is ANTLR's weakest. Error recovery fights the generated structure. | Hand-written recursive descent. Reference existing ANTLR `.g4` grammars (vlsi/iec61131-parser) for grammar specification only. |
-| `go.lsp.dev/protocol` | Stale (2022), implements LSP 3.15.3 (obsolete). No server infrastructure -- just types. | `tliron/glsp` for LSP 3.17 with full server support |
-| `mark3labs/mcp-go` | Community library superseded by official SDK. Will diverge from spec over time. | `modelcontextprotocol/go-sdk` (official, Google-maintained) |
-| `onsi/ginkgo` | BDD overhead adds complexity without value for compiler testing. Replaces `go test` runner. | stdlib `testing` with `testify/assert` |
-| CGo for C++ integration | Couples the Go binary to a C toolchain at build time. Breaks cross-compilation. Makes the binary non-static. | Shell out to `g++`/`clang++` to compile generated C++. The compiler emits `.cpp` files; a separate step compiles them. |
-| LLVM Go bindings | Premature optimization. LLVM adds massive complexity and binary size. C++ transpilation gets tests running months earlier. | Transpile to C++17 first. LLVM is a future optimization, not a starting point. |
-
-## Stack Patterns by Variant
-
-**For parser testing (most common test type):**
-- Table-driven tests with `testify/assert`
-- One test case per ST construct
-- Golden file tests for C++ output comparison
-- Use `go-cmp` for AST deep comparison with readable diffs
-
-**For C++ code generation:**
-- `text/template` with `embed` for template files
-- Templates organized per construct: `function_block.cpp.tmpl`, `program.cpp.tmpl`, etc.
-- `clang-format` as post-processing step for readable output
-- Golden file tests comparing expected vs actual C++ output
-
-**For LSP development:**
-- `tliron/glsp` provides the server skeleton
-- Implement handlers incrementally: diagnostics first, then hover, then completion
-- Test via VS Code extension development host
-- Use stdio transport for development, add TCP/WebSocket later
-
-**For MCP server:**
-- `modelcontextprotocol/go-sdk` for the server
-- Expose tools: `stc_parse`, `stc_check`, `stc_test`, `stc_emit`, `stc_lint`
-- JSON schema for tool parameters auto-generated from Go structs
-- Test with Claude Desktop or MCP Inspector
-
-## Version Compatibility
-
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| cobra v1.10.x | viper v1.19.x | Official pairing. Cobra uses viper for flag binding. |
-| glsp (latest) | LSP 3.16-3.17 | Check for 3.18 updates as LSP evolves. |
-| go-sdk v1.4.x | MCP spec 2025-11-25 | Backward compatible with 2025-06-18, 2025-03-26. |
-| Go 1.23+ | All listed packages | Use latest stable Go. Generics available since 1.18. |
-| C++17 | g++ 7+, clang++ 5+, MSVC 19.14+ | Universal C++17 support across all major compilers. |
-
-## Key Architecture Decisions Driven by Stack
-
-1. **Parser produces a Concrete Syntax Tree (CST) first, then lowered to AST.** The hand-written parser preserves all tokens (whitespace, comments) in the CST for formatting and LSP features. A second pass produces a clean AST for semantic analysis and code generation. This is the pattern used by `rust-analyzer` and newer `gopls`.
-
-2. **C++ emission via templates, not string concatenation.** Using `text/template` keeps the generated C++ readable and the emission code maintainable. Templates can be tested independently by rendering them with test data.
-
-3. **No CGo. Ever.** The `stc` binary must be a static single binary. All C++ compilation happens by shelling out to the system C++ compiler. This preserves cross-compilation and keeps the binary small.
-
-4. **MCP and LSP share the same compiler core.** Both the LSP server and MCP server call the same `parse()`, `check()`, `emit()` functions. The compiler core is a library; CLI/LSP/MCP are thin wrappers.
-
-## Reference Prior Art
-
-| Project | Language | Relevance | License |
-|---------|----------|-----------|---------|
-| STruC++ | TypeScript | Validates ST-to-C++17 architecture. 1400+ tests. Function blocks as classes, virtual methods for interfaces. | GPL-3.0 (cannot reuse code) |
-| MATIEC | C | Proven IEC 61131-3 compiler. Ed.2 only. | LGPL |
-| blark | Python | Beckhoff TwinCAT ST parser using Lark (Earley). Good reference for TwinCAT dialect specifics. | BSD-2 |
-| vlsi/iec61131-parser | ANTLR4/Java | ANTLR4 grammar for IEC 61131-3. Useful as grammar reference even though we hand-write the parser. | Apache-2.0 |
-| TUM-AIS/IEC611313ANTLRParser | ANTLR4/Java | Parses both IEC 61131-3 ST and TIA Portal SCL. Good reference for vendor dialect differences. | GPL-3.0 |
-| iec-checker | OCaml | Static analysis of IEC 61131-3 programs. Reference for analysis patterns. | LGPL-3.0 |
+| EtherCAT terminal models in stc | stc is not a System Manager; terminal config is IDE concern | Model I/O image (byte arrays) only |
+| `.library` binary parsing | Proprietary format, undocumented, changes between CODESYS versions | `.TcPOU` XML extraction or hand-written `.st` stubs |
+| Complex mock framework in Go | Forces engineers to learn Go for testing | ST-based mocks using existing parser/interpreter |
+| Address validation against hardware config | stc has no hardware config file | Trust AT addresses; validate format only |
+| Allen Bradley tag-based addressing in stc | Fundamentally different paradigm from IEC %I/%Q/%M | AB stubs use standard IEC FUNCTION_BLOCK; no AT addresses |
 
 ## Sources
 
-- [Participle v2 on pkg.go.dev](https://pkg.go.dev/github.com/alecthomas/participle/v2) -- v2.1.4, published March 24, 2025 (MEDIUM confidence)
-- [ANTLR4 Go target](https://pkg.go.dev/github.com/antlr4-go/antlr/v4) -- v4.13.1, published May 15, 2024 (HIGH confidence)
-- [GLSP on GitHub](https://github.com/tliron/glsp) -- LSP 3.16/3.17, last updated March 2024 (MEDIUM confidence -- early release)
-- [go.lsp.dev/protocol on pkg.go.dev](https://pkg.go.dev/go.lsp.dev/protocol) -- v0.12.0, published March 2022, LSP 3.15.3 (HIGH confidence -- verified stale)
-- [MCP Go SDK releases](https://github.com/modelcontextprotocol/go-sdk/releases) -- v1.4.1, published March 2026 (HIGH confidence)
-- [Cobra on pkg.go.dev](https://pkg.go.dev/github.com/spf13/cobra) -- v1.10.2+, published December 2025 (HIGH confidence)
-- [STruC++ on GitHub](https://github.com/Autonomy-Logic/STruCpp) -- Architecture reference for ST-to-C++17 (HIGH confidence)
-- [vlsi/iec61131-parser](https://github.com/vlsi/iec61131-parser) -- ANTLR4 grammar reference (MEDIUM confidence)
-- [Go compiler uses hand-written recursive descent](https://news.ycombinator.com/item?id=19008781) -- Pattern validation (HIGH confidence)
-- [Resilient recursive descent parsing](https://thunderseethe.dev/posts/parser-base/) -- Error recovery patterns (MEDIUM confidence)
-- [Eli Bendersky on ungrammar and resilient parsing in Go](https://eli.thegreenplace.net/2023/ungrammar-in-go-and-resilient-parsing/) -- Implementation reference (HIGH confidence)
+- [Beckhoff InfoSys: AT-Declaration](https://infosys.beckhoff.com/content/1033/tc3_plc_intro/11948825611.html) -- AT syntax grammar, wildcard addressing (HIGH confidence)
+- [Beckhoff InfoSys: Addresses](https://infosys.beckhoff.com/content/1033/tc3_plc_intro/2529360523.html) -- %I/%Q/%M format, size prefixes (HIGH confidence)
+- [Beckhoff InfoSys: Library creation](https://infosys.beckhoff.com/content/1033/tc3_plc_intro/4189255051.html) -- .library vs .compiled-library formats (MEDIUM confidence)
+- [Beckhoff EL1008 product page](https://www.beckhoff.com/en-us/products/i-o/ethercat-terminals/el-ed1xxx-digital-input/el1008.html) -- 8-ch DI process data (HIGH confidence)
+- [Beckhoff EL3064 product page](https://www.beckhoff.com/en-us/products/i-o/ethercat-terminals/el-ed3xxx-analog-input/el3064.html) -- 4-ch AI 0-10V 12-bit (HIGH confidence)
+- [Rockwell Logix 5000 IEC 61131-3 Compliance (1756-PM018)](https://literature.rockwellautomation.com/idc/groups/literature/documents/pm/1756-pm018_-en-p.pdf) -- AB dialect restrictions (MEDIUM confidence, PDF partially accessible)
+- [IEC 61131-3 Wikipedia](https://en.wikipedia.org/wiki/IEC_61131-3) -- Standard addressing overview (MEDIUM confidence)
+- [Fernhill Software IEC 61131-3 Variable Declarations](https://www.fernhillsoftware.com/help/iec-61131/common-elements/variable-declaration.html) -- AT keyword syntax (MEDIUM confidence)
+- [CODESYS Library Development](https://content.helpme-codesys.com/en/CODESYS%20Development%20System/_cds_library_development_information.html) -- Library file types (MEDIUM confidence)
+- [PLCopen XML Exchange](https://www.plcopen.org/standards/xml-echange/) -- IEC 61131-10 format (MEDIUM confidence)
+- [GitHub: Beckhoff-PLC-TwinCAT TcPOU example](https://github.com/a-m-shotorbani/Beckhoff-PLC-TwinCAT/blob/main/FB_myFileRead.TcPOU) -- TcPOU XML structure (HIGH confidence)
+- [Solisplc: Add-On Instructions](https://www.solisplc.com/tutorials/add-on-instructions-programming-aoi-rslogix-studio-5000-plc-programming-tutorial-example-logic) -- AOI vs FUNCTION_BLOCK (MEDIUM confidence)
 
 ---
-*Stack research for: IEC 61131-3 Structured Text Compiler Toolchain in Go*
-*Researched: 2026-03-26*
+*Stack research for: Vendor Libraries, I/O Mapping & Mock Framework*
+*Researched: 2026-03-30*

@@ -1,388 +1,505 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** IEC 61131-3 Structured Text Compiler Toolchain
-**Researched:** 2026-03-26
-**Confidence:** HIGH (compiler domain well-documented; IEC 61131-3 pitfalls confirmed across MATIEC, OpenPLC, STruC++ projects)
+**Domain:** Vendor Library Stubs, I/O Mapping, and Mock Framework for IEC 61131-3 ST Compiler
+**Researched:** 2026-03-30
+**Confidence:** HIGH for vendor FB differences (verified against Beckhoff Infosys and Schneider product-help docs), MEDIUM for AB limitations (no OOP features confirmed but specifics from training data), MEDIUM for EtherCAT stubbing limits (architectural reasoning, not empirical)
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: The IEC 61131-3 Grammar Is Not LALR(1)-Parseable As Specified
-
-**What goes wrong:**
-The IEC 61131-3 specification defines a grammar riddled with reduce/reduce and shift/reduce conflicts. Identifiers are ambiguous -- the parser cannot tell if `FOO` is a variable name, an enumerated value, a function name, a function block type, or a user-defined type without consulting a symbol table. Teams that try to implement the grammar directly from the specification hit a wall of conflicts. MATIEC's documentation explicitly states: "the syntax cannot be parsed by a LALR(1) parser as presented in the specification."
-
-**Why it happens:**
-The IEC standard was written for human understanding, not parser-generator consumption. The same identifier syntax appears in variable declarations, function calls, type references, and enumerated values with no syntactic disambiguation.
-
-**How to avoid:**
-Use a hand-written recursive descent parser (already decided in PROJECT.md). Build symbol tables during parsing, not as a separate pass. The parser must know whether an identifier refers to a type, a function, or a variable to parse correctly. This means a multi-pass or interleaved approach: scan declarations first (or resolve forward references lazily), then parse bodies. STruC++ and MATIEC both solve this with symbol-table-augmented parsing.
-
-**Warning signs:**
-- Parser accepting syntactically ambiguous constructs without errors
-- Test cases where `TYPE foo` and `VAR foo` in the same scope produce wrong AST nodes
-- Inability to parse production code that uses type names as identifiers in different scopes
-
-**Phase to address:**
-Phase 1 (Parser). Get this right from the start. Retrofitting symbol-table-aware parsing into a naive parser is effectively a rewrite.
+Mistakes that cause rewrites, silent correctness bugs, or broken user trust.
 
 ---
 
-### Pitfall 2: MATIEC's Edition 2 Trap -- Supporting Only Old Standard Features
+### Pitfall 1: PLCopen "Same Name, Different Signature" Across Vendors
 
 **What goes wrong:**
-MATIEC supports only IEC 61131-3 Edition 2 (2003). It lacks Edition 3 OOP features (INTERFACE, METHOD, EXTENDS, IMPLEMENTS, access modifiers, ABSTRACT, FINAL, OVERRIDE), REFERENCE TO, namespaces, and Edition 4 features (UTF-8 strings). Any compiler that starts with only Edition 2 features cannot parse real-world production code from Beckhoff/CODESYS environments, which heavily use OOP and REFERENCE TO. This is exactly what killed MATIEC's relevance for modern use cases.
+Users write code against `MC_MoveAbsolute` using Beckhoff stubs, then switch to Schneider stubs. The code that compiled and tested fine now fails type-checking because the FB signatures are fundamentally different despite sharing the same PLCopen name.
+
+Verified differences for `MC_MoveAbsolute`:
+
+| Parameter | Beckhoff TwinCAT (Tc2_MC2) | Schneider EcoStruxure |
+|-----------|---------------------------|----------------------|
+| Position | **LREAL** | **DINT** |
+| Velocity | **LREAL** | **DINT** |
+| Acceleration | LREAL (optional, 0 = axis default) | **Not a parameter** (set via separate FB) |
+| Deceleration | LREAL (optional, 0 = axis default) | **Not a parameter** (set via separate FB) |
+| Jerk | LREAL (optional) | **Not a parameter** |
+| BufferMode | MC_BufferMode (vendor extension) | **Not present** |
+| Options | ST_MoveOptions (vendor extension) | **Not present** |
+| Axis | AXIS_REF (VAR_IN_OUT) | Axis_Ref (VAR_IN_OUT, different struct) |
+| ErrorID output | **UDINT** | **WORD** |
+
+This is not a minor difference -- Position is LREAL (64-bit float) on Beckhoff vs DINT (32-bit int) on Schneider. Code that passes `100.5` as Position compiles on Beckhoff and fails on Schneider. Acceleration and deceleration are direct parameters on Beckhoff but handled by separate vendor-specific FBs (`SetDriveRamp_LXM32`) on Schneider.
+
+PLCopen explicitly permits this: "implementations may exchange basic data types like SINT, INT, DINT or LREAL without being non-compliant, as long as they are consistent for the whole set of Function Blocks." This means the *standard itself* encourages vendor divergence.
 
 **Why it happens:**
-OOP in IEC 61131-3 is genuinely complex. It adds methods (with their own VAR sections), properties (GET/SET), inheritance hierarchies, interface tables, and virtual dispatch. Teams underestimate the scope and defer it, then discover that 60-80% of production TwinCAT/CODESYS code uses these features.
+PLCopen Part 1 defines FB names, input/output names, and behavioral contracts -- but allows vendors to choose concrete data types. Every vendor optimizes for their drive ecosystem: Beckhoff uses LREAL because TwinCAT NC uses floating-point internally; Schneider uses DINT because their drives use integer-unit positions.
 
-**How to avoid:**
-Design the AST, type system, and symbol tables for OOP from day one, even if OOP type-checking is deferred. The parser must handle FUNCTION_BLOCK with EXTENDS, IMPLEMENTS, METHOD, PROPERTY from the first milestone. STruC++ demonstrates this is achievable -- it supports the full OOP surface including access modifiers. Parse early, type-check incrementally.
+**Consequences:**
+- User writes portable-looking code that is silently vendor-locked
+- Switching vendor stubs breaks compilation with confusing type errors
+- Mock FBs written against one vendor's signature are wrong for another
+- Tests pass with wrong-vendor mocks, production code fails
 
-**Warning signs:**
-- Parser tests only cover simple PROGRAM/FUNCTION/FUNCTION_BLOCK without methods
-- AST node types have no place for methods, properties, or inheritance
-- Test corpus excludes OOP-heavy production files
-- "We'll add OOP later" appears in planning docs
+**Prevention:**
+1. **Namespace stubs by vendor.** Never have two vendors' `MC_MoveAbsolute` in the same symbol table. Stubs live in `vendor/beckhoff/tc2_mc2.st` and `vendor/schneider/motion.st` -- the user picks one via `stc.toml`. The resolver must reject loading stubs from two vendors that define the same FB name.
+2. **Emit a clear error on vendor mismatch.** If the user's `vendor_target` is `schneider` but they load `vendor/beckhoff/tc2_mc2.st`, emit a warning: "stub library tc2_mc2 is for Beckhoff, but vendor_target is schneider."
+3. **Document the differences.** Each shipped stub file should include a comment header listing vendor-specific deviations from PLCopen.
+4. **Do NOT attempt a vendor-abstraction layer.** An `MC_MoveAbsolute_Portable` wrapper that hides differences will always leak. Users who need portability should use conditional compilation (`{IF defined(VENDOR_BECKHOFF)}`).
 
-**Phase to address:**
-Phase 1 (Parser) for syntax. Phase 2 (Type System) for semantic checking. Do not defer OOP parsing to a later phase.
+**Detection:**
+- User loads vendor stubs that don't match `vendor_target` in `stc.toml`
+- Type errors appear on FB parameters that "should work" per PLCopen standard
+- Same test file fails when switching vendor stub libraries
+
+**Phase to address:** Phase 1 (Stub Loading). Vendor-namespaced loading must be designed from the start. Adding it later means retroactively breaking projects that assumed vendor-agnostic stubs.
 
 ---
 
-### Pitfall 3: The ANY Type Hierarchy and Overloaded Function Resolution
+### Pitfall 2: I/O Address Syntax Edge Cases (%I/%Q/%M Addressing)
 
 **What goes wrong:**
-IEC 61131-3 standard functions like ADD, MUL, SEL, MUX operate on ANY_NUM, ANY_INT, ANY_REAL, etc. These are not concrete types -- they are type classes. Resolving which concrete function to call when given `ADD(myInt, myReal)` requires a multi-pass type inference algorithm. MATIEC implements this as a two-pass system: `fill_candidate_datatypes` (enumerate all possible types per expression node) then `narrow_candidate_datatypes` (resolve to a single type per node). Getting this wrong means either rejecting valid code or silently allowing type errors.
+The IEC 61131-3 direct addressing syntax `%IX0.0`, `%IW4`, `%QD2`, `%MB100` has more complexity than it appears. Implementations that handle the "happy path" (`%IX0.0` for a bit, `%IW0` for a word) fail on real production code.
+
+**Edge cases that break naive parsers:**
+
+| Syntax | Meaning | Gotcha |
+|--------|---------|--------|
+| `%I0.0` | Input bit 0.0 | **X is optional for bits.** `%I0.0` = `%IX0.0`. Many parsers only accept `%IX`. |
+| `%IW1.2` | Input word, module 1, channel 2 | **Hierarchical addressing.** The `.` is NOT a bit separator here -- it's a path separator. `%IW1.2` is word 2 of module 1, not "bit 2 of word 1." |
+| `%QB0` | Output byte 0 | Valid, but **byte 0 overlaps with bits %QX0.0 through %QX0.7 and word %QW0 bits 0-7.** Overlapping I/O addresses are a major source of bugs in production. |
+| `%MD100` | Memory double-word 100 | **Memory addresses have no module hierarchy** on most vendors. `%MD1.2` is invalid on Beckhoff but valid on some CODESYS platforms. |
+| `%I*` | Incomplete address (AT %I*) | **Wildcard/placeholder.** Used in FB declarations to say "this will be bound to some input address at configuration time." Must parse but cannot be resolved to a concrete address. |
+| `%IL0` | Input long-word (64-bit) | **L prefix for LWORD.** Only valid if vendor supports 64-bit types. Portable profile must reject this. |
+
+**Vendor-specific divergences:**
+
+- **Beckhoff TwinCAT:** Addresses map to EtherCAT process image. `%IB0` is byte 0 of the process image, which corresponds to configured PDO mapping. The same physical terminal can have different addresses depending on configuration. TwinCAT also supports `AT %I*` for automatic address assignment.
+- **Schneider:** Uses CODESYS-style addressing but with different process image layout. Module.channel addressing (`%IW1.2`) is common.
+- **Allen Bradley:** Does **not use direct addressing at all.** AB uses tag-based addressing. There is no `%I` / `%Q` / `%M` syntax. All I/O is accessed through named tags (e.g., `Local:1:I.Data.0`). This is a fundamental incompatibility.
+
+**Overlapping address problem:**
+```
+VAR
+    byteVal AT %QB0 : BYTE;    (* byte at address 0 *)
+    bitVal  AT %QX0.3 : BOOL;  (* bit 3 of the SAME byte *)
+END_VAR
+
+byteVal := 16#FF;  (* Sets all bits including bit 3 *)
+bitVal := FALSE;    (* Clears bit 3 -- but does it? When? *)
+```
+The behavior depends on scan cycle output coercion order. On real PLCs, the last write wins, but "last" depends on task execution order and output update phase. A mock I/O table must define deterministic precedence rules for overlapping addresses.
 
 **Why it happens:**
-The ANY type hierarchy creates a lattice of implicit conversions. An INT literal `42` could be SINT, INT, DINT, LINT, USINT, UINT, UDINT, ULINT, REAL, or LREAL. Combined with overloaded operators, the number of candidate combinations explodes. Implicit promotion rules (smaller to larger type) interact with explicit conversion functions (*_TO_*) in non-obvious ways. CODESYS/TwinCAT are more permissive than the standard about implicit conversions, so code that compiles on a vendor IDE may technically violate the spec.
+The IEC standard defines the syntax but leaves memory layout and overlap behavior to the implementation. Each vendor's process image mapping is different. Developers test with simple `%IX0.0` examples and never encounter hierarchical or overlapping addresses until production.
 
-**How to avoid:**
-Implement MATIEC's proven two-pass approach: candidate enumeration then narrowing. Build the type lattice explicitly as a data structure with clear promotion rules. Test extensively with mixed-type expressions. Support a strict mode (IEC spec) and a permissive mode (CODESYS-compatible) for implicit conversions. Document every conversion rule with a test case.
+**Prevention:**
+1. **Parse the full address syntax** including optional X prefix, hierarchical dotted paths, wildcard `*`, and L prefix. The lexer currently handles `AT` followed by an identifier -- it needs to properly tokenize `%` addresses.
+2. **Build a mock I/O table** that is flat: map each address to a typed memory cell. Detect and warn on overlapping accesses (byte write overlapping with bit access to same region).
+3. **Reject %I/%Q/%M for Allen Bradley vendor target.** Emit a vendor-specific error: "Direct addressing (%I/%Q) is not supported by Allen Bradley. Use tag-based addressing."
+4. **Support AT %I* (wildcard)** in FB declarations for type-checking without requiring concrete addresses.
 
-**Warning signs:**
-- Type checker rejects code that compiles in TwinCAT/CODESYS
-- Literal types are hardcoded rather than inferred from context
-- No test cases for mixed-type arithmetic (INT + REAL, DINT + LINT)
-- Single-pass type resolution
+**Detection:**
+- Parser rejects valid production code containing `%I0.0` (without X)
+- No warning when bit and byte addresses overlap
+- Hierarchical addresses (`%IW1.2`) parsed as floating-point numbers
 
-**Phase to address:**
-Phase 2 (Type System). This is the single hardest part of the semantic analysis. Budget at least 2x the time you think it needs.
+**Phase to address:** Phase 2 (I/O Mapping). The parser already handles `AT` keyword -- the I/O table and overlap detection are new.
 
 ---
 
-### Pitfall 4: Parser Error Recovery That Produces Garbage ASTs
+### Pitfall 3: Mock Fidelity Traps -- Mocks That Create False Confidence
 
 **What goes wrong:**
-LSP requires parsing broken, mid-edit code and producing a usable partial AST. Naive panic-mode recovery (skip to next semicolon) produces ASTs with huge gaps that make completions, hover, and diagnostics useless. The AST becomes technically "partial" but practically worthless -- missing the exact context where the user is typing.
+The default mock behavior (zero-value outputs, no-op Execute) creates subtle false confidence in three specific patterns:
+
+**Trap 1: Instant completion mocks**
+```iec
+(* User's mock: Done := TRUE on first call after Execute *)
+mover(Execute := TRUE, Position := 100.0);
+(* Mock immediately sets Done := TRUE *)
+IF mover.Done THEN
+    (* Test proceeds immediately -- but real motion takes seconds *)
+    StartNextStep();
+END_IF;
+```
+Test passes. Production code enters `StartNextStep()` while axis is still moving, causing a collision or interlock violation. The mock hides the fact that real MC_MoveAbsolute takes 50-5000ms depending on velocity and distance.
+
+**Trap 2: Error-free mocks**
+The zero-value default stub never sets `Error := TRUE` or `ErrorID` to a non-zero value. Tests never exercise error-handling paths. Production code has untested error recovery that fails silently or crashes.
+
+```iec
+(* This error handler is never tested because mock never errors *)
+IF mover.Error THEN
+    CASE mover.ErrorID OF
+        16#4001: HandleAxisNotReady();
+        16#4003: HandleFollowingError();
+    END_CASE;
+END_IF;
+```
+
+**Trap 3: State machine bypass**
+PLCopen motion FBs have a strict state machine: Standstill -> Discrete Motion -> Standstill. Real FBs reject commands that violate the state machine (e.g., MC_MoveAbsolute while axis is in ErrorStop). Zero-value mocks accept any command sequence, so tests pass with illegal state transitions that would fail on real hardware.
+
+**Trap 4: Timer-dependent logic with instant mocks**
+```iec
+(* Production code waits for ADS response with timeout *)
+adsRead(READ := TRUE, TMOUT := T#5S);
+IF adsRead.BUSY THEN
+    (* Wait... *)
+ELSIF adsRead.ERR THEN
+    HandleTimeout();
+END_IF;
+```
+With a zero-value mock, `BUSY` is always FALSE and `ERR` is always FALSE. The read "completes" instantly with no data. The timeout path is never tested.
 
 **Why it happens:**
-Compiler-grade parsers are designed for valid input. Error recovery is bolted on as an afterthought. The fundamental tension: a compiler wants to reject bad code fast; an LSP wants to understand bad code deeply. These goals directly conflict and require different parser architectures.
+Zero-value mocks are the easiest default and the right choice for getting code to compile and run. But they create a "green dashboard" effect where all tests pass, giving engineers confidence that the code works. The gap between "compiles and runs" and "behaves correctly" is exactly where production bugs live.
 
-**How to avoid:**
-Design error recovery as a first-class concern from the start:
-1. Use error nodes in the AST (not null/missing nodes, but explicit `ErrorNode` with the token range and partial children)
-2. Implement statement-level recovery: when a statement fails, consume tokens to the next `;` or `END_*` keyword, wrap them in an ErrorNode, and continue
-3. Implement expression-level recovery: when an expression fails mid-parse, return what you have so far
-4. Track "recovery point" tokens: `;`, `END_IF`, `END_FOR`, `END_WHILE`, `END_FUNCTION`, `END_FUNCTION_BLOCK`, `END_PROGRAM`, `END_VAR`
-5. Test with real editing scenarios: cursor in middle of expression, incomplete IF, missing END_*, unclosed parentheses
+Google's testing blog documents this pattern: "if the actual implementation changes, tests that relied on mocks can still pass, giving a false feeling of safety." In PLC context, this is amplified because the consequences of false confidence are physical -- equipment damage, safety incidents, production downtime.
 
-**Warning signs:**
-- Parser returns empty AST for any syntax error
-- No `ErrorNode` or equivalent in AST types
-- Error recovery tests only cover missing semicolons
-- LSP completions stop working when any error exists in file
+**Prevention:**
+1. **Document mock fidelity levels** in shipped stubs. Each stub should have a comment: `(* MOCK FIDELITY: zero-value. Does NOT simulate timing, errors, or state machine. *)` This forces conscious acknowledgment.
+2. **Ship "behavioral" mocks** alongside zero-value stubs for the top-5 motion FBs. The behavioral mock in `docs/VENDOR_LIBRARIES.md` (MC_MoveAbsolute with 5-cycle completion) is the right pattern. Ship it, don't just document it.
+3. **Add `ASSERT_CALLED` / `ASSERT_NOT_CALLED` intrinsics.** Let tests verify that an FB was actually invoked without needing behavioral fidelity. This catches "dead code" where the FB call is inside an unreachable branch.
+4. **Warn on zero-value mock in test output.** When `stc test` runs and an FB has no user mock (using auto-stub), print a warning: `WARN: MC_MoveAbsolute using zero-value stub (no mock). Error and timing paths untested.`
+5. **Never ship a mock timer that returns Done=TRUE immediately.** Timer mocks must respect simulated time via the existing `ScanCycleEngine`. The interpreter already has deterministic time -- timer stubs must use it.
 
-**Phase to address:**
-Phase 1 (Parser). Error recovery must be baked into the recursive descent parser from the beginning. Adding it later means rewriting every parsing function.
+**Detection:**
+- All tests pass but production code fails on first real hardware run
+- Error handling code has 0% coverage
+- No tests verify timing-dependent behavior
+- No tests exercise FB error outputs
+
+**Phase to address:** Phase 3 (Mock Framework). The zero-value default is fine for Phase 1 (stub loading) but must be augmented with behavioral mocks and fidelity warnings in Phase 3.
 
 ---
 
-### Pitfall 5: Vendor Dialect Differences That Surface Late
+### Pitfall 4: Library Version Mismatch Between Stubs and User's Vendor IDE
 
 **What goes wrong:**
-TwinCAT and CODESYS are "99% compatible" but the 1% is devastating. Specific differences include:
-- **Pragmas:** TwinCAT uses `{attribute 'qualified_only'}`, `{attribute 'strict'}`, conditional pragmas. CODESYS uses different pragma syntax for the same features.
-- **File structure:** TwinCAT wraps ST in XML (`.TcPOU`, `.TcGVL`, `.TcDUT` files). CODESYS uses `.st` or its own project format.
-- **POINTER TO behavior:** Online changes can move variables in memory, breaking pointers. REFERENCE TO has the same problem. Vendor-specific workarounds differ.
-- **64-bit types:** LWORD, LINT, ULINT support varies. Some older CODESYS runtimes lack them.
-- **String handling:** Max string lengths, WSTRING support, and encoding differ.
-- **Property syntax:** Subtle differences in GET/SET property declarations.
+stc ships stubs for Tc2_MC2 based on TwinCAT 3.1 Build 4024 documentation. A user has TwinCAT 3.1 Build 4026, which added two new parameters to `MC_MoveAbsolute` (e.g., `MC_BufferMode` default changed, new `Options` struct fields). Their production code uses the new parameters. stc's stubs don't have them. Type-checking rejects valid code.
+
+The reverse is also possible: stc's stubs declare parameters that an older TwinCAT version doesn't have. Code passes stc check but fails in the vendor IDE.
+
+**Specific version differences observed:**
+
+- **Beckhoff Tc2_MC2:** The `Options` parameter (`ST_MoveOptions`) has grown over TwinCAT versions. Older versions have fewer struct fields. The struct is opaque in the PLCopen standard.
+- **Beckhoff Tc3_EventLogger:** Completely restructured between TwinCAT 3.1.4022 and 3.1.4024.
+- **Schneider SoMachine vs Machine Expert:** Library names changed (`SoMachine Motion` -> `Schneider Electric Motion Control`), FB signatures identical but import paths different.
 
 **Why it happens:**
-CODESYS is a platform licensed by 500+ vendors, each of whom extends it. TwinCAT forked from CODESYS v2 and diverged. Teams build against one vendor's dialect and discover incompatibilities only when they try the second vendor.
+Vendor libraries are living codebases with their own version histories. Beckhoff releases TwinCAT updates 2-3 times per year, each potentially adding or modifying FB signatures. stc's shipped stubs are a snapshot of one version.
 
-**How to avoid:**
-Define a "vendor profile" system from the start. Each profile specifies:
-- Supported pragmas and their syntax
-- Type availability (64-bit types, WSTRING, etc.)
-- Implicit conversion permissiveness
-- File format expectations
-Parse all pragmas as opaque pragma nodes initially; validate against profile during semantic analysis. Test against both TwinCAT and CODESYS production code from day one -- do not defer multi-vendor testing.
+**Consequences:**
+- stc rejects code that compiles fine in the vendor IDE (false positive)
+- stc accepts code that fails in the vendor IDE (false negative -- worse)
+- Users lose trust in stc's type-checking accuracy
+- Maintaining version-accurate stubs for all vendor versions is unsustainable
 
-**Warning signs:**
-- All test files are in one vendor's format
-- Pragma handling is hardcoded rather than configurable
-- No vendor profile/dialect configuration exists
-- Team has only tested with TwinCAT OR CODESYS, not both
+**Prevention:**
+1. **Version stubs explicitly.** Each stub file must have a header comment: `(* Tc2_MC2 stubs for TwinCAT 3.1 Build 4024.47 *)`. stc.toml should optionally accept a version: `tc2_mc2 = { path = "vendor/beckhoff/tc2_mc2.st", version = "3.1.4024" }`.
+2. **Users override shipped stubs.** Make it trivial to regenerate stubs from the user's actual TwinCAT installation. The `stc vendor extract` command (from VENDOR_LIBRARIES.md section 7) should be a v1.1 feature, not a "future extension."
+3. **Warn on unknown parameters, don't error.** If user code calls `mover(NewParam := 42)` and the stub doesn't have `NewParam`, emit a warning (not an error): "Parameter 'NewParam' not found in MC_MoveAbsolute stub (stc stub version: 3.1.4024). The parameter may exist in a newer library version." This lets code pass type-checking with a caveat.
+4. **Ship stubs for the latest stable version** of each vendor library. Document which version the stubs represent.
 
-**Phase to address:**
-Phase 1 (Parser) for pragma parsing. Phase 2 (Type System) for dialect-specific type rules. Phase 3 (Emit) for vendor-specific output. Test with both vendors continuously from Phase 1.
+**Detection:**
+- User reports "stc rejects my code but it compiles in TwinCAT"
+- Stub file has no version header
+- No mechanism to regenerate stubs from user's environment
+
+**Phase to address:** Phase 1 (Stub Loading) for version headers and unknown-parameter warnings. Phase 4 (Future) for `stc vendor extract` from TwinCAT projects.
 
 ---
 
-### Pitfall 6: Scan Cycle Semantics That Don't Match Real PLC Behavior
+### Pitfall 5: Allen Bradley ST Dialect Incompatibilities
 
 **What goes wrong:**
-PLC programs execute in a cyclic scan model: read inputs, execute program top-to-bottom, write outputs, repeat. Timers (TON, TOF, TP) depend on the scan cycle elapsed time. If host simulation uses wall-clock time or ignores scan semantics, tests pass on host but fail on real PLCs. Specific failures:
-- TON timers fire at wrong times because host runs faster/slower than PLC cycle time
-- Variable initialization differs (PLC initializes once at download, not every scan)
-- Output coercion (writing to outputs at end of scan, not immediately) is invisible on host
-- RETAIN/PERSISTENT variables have no host equivalent without explicit simulation
+Allen Bradley (Rockwell) Logix 5000 uses a restricted ST dialect that differs from IEC 61131-3 in fundamental ways. stc's compile-checking and emit features will break or produce misleading results if AB differences are not explicitly handled.
+
+**Confirmed AB limitations and differences:**
+
+| Feature | Beckhoff/CODESYS | Allen Bradley | Impact on stc |
+|---------|-----------------|---------------|---------------|
+| OOP (METHOD, INTERFACE, PROPERTY) | Full support | **Not supported** | Must reject OOP constructs for AB target |
+| POINTER TO | Supported | **Not supported** | Must reject pointer types |
+| REFERENCE TO | Supported | **Not supported** | Must reject reference types |
+| FUNCTION_BLOCK | Standard IEC syntax | **AOI (Add-On Instruction)** -- different declaration syntax, no inheritance | Must emit AOI syntax, not FUNCTION_BLOCK |
+| Direct addressing (%I/%Q/%M) | Standard IEC syntax | **Not supported** -- uses tag-based addressing | Must reject or translate to tag references |
+| WSTRING | Supported | **Not supported** | Must reject WSTRING for AB |
+| Nested comments | Supported | **Varies by firmware version** | May need to flatten comments |
+| FOR loop syntax | `FOR i := 0 TO 10 BY 1 DO` | Same syntax but **no BY clause in some versions** | Must warn on BY clause for AB |
+| CASE with ranges | `1..10:` | **Not supported** -- must enumerate each value | Must reject or expand ranges for AB |
+| Multiple return values | Via VAR_OUTPUT | **Single return tag + parameters** | Structural difference in function design |
+| Online editing of FB | Supported | **AOIs cannot be edited online** | Not an stc concern but affects user workflow |
+| 64-bit types (LINT, LREAL, ULINT, LWORD) | Supported | **Partial** -- LINT/REAL supported since v32, LREAL depends on controller | Must check controller version for AB |
 
 **Why it happens:**
-Developers think of ST as "just another programming language" and execute it like C code. But PLC execution is fundamentally different: it's a periodic real-time loop where time advances discretely per scan. STruC++ handles this with `ADVANCE_TIME` in tests, which is the correct approach.
+AB's Logix platform evolved from relay-replacement ladder logic. ST was added later as a secondary language. The platform's core model is "tags in a flat global namespace" rather than "scoped variables in POUs." AOIs are the closest thing to function blocks but lack inheritance, interfaces, and methods. AB has been slowly adding IEC features over firmware versions but remains the most restrictive major vendor.
 
-**How to avoid:**
-Build a scan cycle simulator that:
-1. Advances time in discrete steps (configurable cycle time, default 10ms)
-2. Calls all program/task instances once per cycle in correct priority order
-3. Updates timer function blocks with elapsed time per cycle, not wall-clock time
-4. Provides `ADVANCE_TIME` or `ADVANCE_CYCLES` primitives for tests
-5. Captures output state only at end of scan, not mid-execution
-6. Simulates RETAIN variables with explicit persistence layer
+**Consequences:**
+- Code written for Beckhoff cannot be checked against AB stubs without massive rewrites
+- Emitting AB-compatible ST requires more than syntax translation -- it requires structural transformation (FUNCTION_BLOCK -> AOI)
+- Users who target AB need a completely different coding style, and stc must enforce this early
 
-**Warning signs:**
-- Timer tests use `time.Sleep()` or wall-clock time
-- Tests call program functions directly without a scan loop wrapper
-- No cycle time configuration exists
-- Timer tests are flaky or platform-dependent
+**Prevention:**
+1. **Extend VendorProfile** in `pkg/checker/vendor.go` with AB-specific flags: `SupportsDirectAddressing: false`, `SupportsCaseRanges: false`, `SupportsForBy: false`, `HasAOINotFB: true`.
+2. **Defer AB emission** to a later milestone. v1.1 should focus on type-checking and stub loading for AB, not emission. The structural transformation (FB -> AOI) is a significant effort.
+3. **Ship AB stubs as AOI-compatible declarations.** AB stubs should only contain FBs that map to common AOIs and built-in instructions. Do not attempt to stub AB's proprietary instruction set (MSG, GSV, SSV, etc.) in v1.1.
+4. **Warn early and loudly** when code uses features unsupported by the AB target. The existing `CheckVendorCompat` function handles OOP and pointer warnings -- extend it for the AB-specific features listed above.
 
-**Phase to address:**
-Phase 3 (Host Execution/Testing). Must be designed correctly before any timer-dependent tests work. Critical for user trust.
+**Detection:**
+- User sets `vendor_target = "allen_bradley"` and gets no warnings on code using POINTER TO, METHOD, etc.
+- AB emit produces FUNCTION_BLOCK syntax instead of AOI format
+- AB stubs include FBs that don't exist on AB platform
+
+**Phase to address:** Phase 1 (Vendor Profile extension) for compile-checking. Phase 4+ for emission. AB stubs are lower priority than Beckhoff/Schneider stubs.
 
 ---
 
-### Pitfall 7: PLCopen XML as a Reliable Interchange Format
+## Moderate Pitfalls
 
-**What goes wrong:**
-PLCopen XML defines a subset of what any vendor actually uses. Importing a TwinCAT project via PLCopen XML loses: task configurations (they get duplicated or mangled on re-import), library references (excluded entirely), vendor-specific pragmas, and proprietary function blocks. Schneider, Beckhoff, and CODESYS all support "extended" PLCopen XML with vendor-specific additions that other tools cannot read. Round-tripping (export then import) loses data.
-
-**Why it happens:**
-PLCopen XML was designed for exchange of program logic, not complete project interchange. Vendor IDEs store far more than just ST code -- they store hardware configurations, library bindings, task mappings, and deployment settings. Teams expect PLCopen XML to be "save/load" when it's actually "share logic snippets."
-
-**How to avoid:**
-1. Support PLCopen XML import for program logic (POUs, data types, global variables) only
-2. Never promise round-trip fidelity -- document what is preserved and what is lost
-3. Implement vendor-specific importers for TwinCAT `.TcPOU`/`.tsproj` and CODESYS `.project` formats separately
-4. Use PLCopen XML as one import path, not the primary project format
-5. Define your own canonical project format (JSON or TOML-based) for the toolchain
-
-**Warning signs:**
-- PLCopen XML is the only import/export format
-- Test suite expects round-trip preservation of all metadata
-- No documentation of what gets lost during import
-- Vendor-specific file parsers are deferred indefinitely
-
-**Phase to address:**
-Phase 4 or later (Interop). PLCopen XML import is nice-to-have, not critical path. Direct `.TcPOU` parsing is more valuable for TwinCAT users.
+Mistakes that cause significant rework or user confusion but don't require architectural changes.
 
 ---
 
-### Pitfall 8: Making Tools Genuinely LLM-Agent-Friendly
+### Pitfall 6: Circular Dependencies Between Vendor Stubs and User Code
 
 **What goes wrong:**
-Research shows that state-of-the-art LLMs (GPT-4, Claude, LLaMA) fail to produce valid IEC 61131-3 programs without tooling support. The Agents4PLC paper documents that even with multi-agent architectures, LLMs struggle with ST's unique syntax (`:=` assignment, `END_IF` blocks, VAR declarations, function block instantiation). Simply having a CLI is not enough -- agents need:
-- Structured error messages that pinpoint exactly what's wrong (not "syntax error on line 42")
-- Fast validation loops (compile in <1s for agent iteration)
-- JSON output with machine-parseable diagnostics
-- Example-driven prompting (the tool should be able to emit canonical examples)
+Vendor stubs define types that user code references, and user code defines types that other user code references. If the resolver processes stubs and user code in the same pass without ordering guarantees, circular references can occur:
 
-**Why it happens:**
-ST is a niche language with very little training data. LLMs confuse ST syntax with Pascal, Ada, or BASIC. Without tight compiler-in-the-loop feedback, agents generate plausible-looking but invalid code. Teams build the CLI for human users and bolt on `--format json` as an afterthought.
+```
+(* vendor/beckhoff/tc2_mc2.st *)
+FUNCTION_BLOCK MC_Power
+VAR_INPUT
+    Axis : AXIS_REF;    (* AXIS_REF is defined in THIS stub file *)
+END_VAR
+END_FUNCTION_BLOCK
 
-**How to avoid:**
-Design the CLI for agents from day one:
-1. Every error includes: file, line, column, error code, message, and a fix suggestion where possible
-2. `--format json` is not optional -- it's tested in CI for every command
-3. Provide a `stc check --stdin` mode for agent piping without temp files
-4. Include a `stc examples` command that emits canonical ST patterns
-5. Keep CLI surface small and consistent -- agents work best with few, predictable commands
-6. Build MCP server early so Claude/agents can call tools directly
-7. Validation must complete in under 1 second for interactive agent loops
+(* src/motion.st *)
+TYPE MyAxisConfig : STRUCT
+    axis : AXIS_REF;          (* References type from vendor stub *)
+    profile : MotionProfile;  (* References type from user code *)
+END_STRUCT
+END_TYPE
 
-**Warning signs:**
-- Error messages are human-readable but not machine-parseable
-- JSON output is untested or inconsistent across commands
-- No stdin input mode
-- Compile times exceed 2 seconds on typical files
-- Agent testing is deferred to "later"
+TYPE MotionProfile : STRUCT
+    maxVel : LREAL;
+    moveType : MC_Direction;  (* References enum from vendor stub *)
+END_STRUCT
+END_TYPE
+```
 
-**Phase to address:**
-Every phase. JSON output and fast validation from Phase 1. MCP server by Phase 3. Agent-specific testing throughout.
+This is fine if stubs are resolved first. But if a user creates a type with the same name as a vendor type (e.g., user defines their own `AXIS_REF` struct), the resolver hits a redeclaration error. The current resolver (`resolve.go` line 76) rejects redeclarations unconditionally.
+
+**Prevention:**
+1. **Load stubs before user code, in a separate resolution pass.** Stub declarations go into the symbol table first. User declarations are resolved second. If a user declares a type with the same name as a stub type, emit a specific error: "Type 'AXIS_REF' conflicts with vendor library declaration from tc2_mc2.st."
+2. **Stubs may NOT reference user-defined types.** This is a hard rule. Stubs reference only IEC elementary types, other stub-defined types, and enum types defined in the same stub file.
+3. **Within a single stub file, forward references must work.** The resolver already handles forward references in user code (two-pass). The same mechanism works for stub files -- no extra work needed.
+
+**Detection:**
+- Redeclaration errors when loading stubs that define types also defined in user code
+- Missing type errors when stub files reference types from other stub files loaded later
+
+**Phase to address:** Phase 1 (Stub Loading). The loading order (stubs -> user code) must be established from the start.
 
 ---
 
-### Pitfall 9: Underestimating the Standard Library Surface Area
+### Pitfall 7: AXIS_REF and Other Opaque Vendor Structs
 
 **What goes wrong:**
-IEC 61131-3 defines 80+ standard functions and function blocks. STruC++ implements them as compiled ST with a header-only C++ runtime. But the devil is in the details:
-- String functions (FIND, INSERT, DELETE, REPLACE, MID, LEFT, RIGHT) have edge cases around empty strings, out-of-range indices, and max string length
-- Timer FBs (TON, TOF, TP) have specific edge cases around elapsed time rollover, re-triggering while active, and Q output behavior at exact boundary conditions
-- Type conversion functions (*_TO_*) have 100+ combinations with rounding, truncation, and overflow rules that differ subtly between vendors
-- Math functions (EXPT, LOG, LN, SQRT) must handle edge cases (negative inputs, zero, overflow) per the standard
+Beckhoff's `AXIS_REF` is a complex struct with dozens of fields (`NcToPlc`, `PlcToNc`, `Status`, `NcBits`, etc.). The stub in `docs/VENDOR_LIBRARIES.md` simplifies it to two DINT fields. User code that accesses `myAxis.NcToPlc.nActVelo` (a nested struct field) fails type-checking because the stub's `AXIS_REF` doesn't have nested structs.
+
+Schneider's `Axis_Ref` is a completely different struct. Same name (case-insensitive in ST), different contents.
 
 **Why it happens:**
-Teams implement the "happy path" for each function and move on. Production code exercises every edge case. Timer FBs alone have 15+ documented behavioral edge cases in the specification.
+Opaque vendor structs are implementation details that leak through the FB interface. In theory, users should only pass `AXIS_REF` between motion FBs and never access its fields directly. In practice, every TwinCAT project accesses `AXIS_REF.NcToPlc.ActPos` directly because it's the fastest way to read actual position without using `MC_ReadActualPosition`.
 
-**How to avoid:**
-1. Implement standard library functions in ST where possible (self-hosting validates the compiler)
-2. Write property-based tests for type conversions (test all 100+ *_TO_* combinations)
-3. Use K-ST formal semantics research as a reference for edge case behavior
-4. Compare behavior against TwinCAT and CODESYS simulators for every function
-5. Start with the 20 most-used functions (ADD, SUB, MUL, DIV, MOD, TON, TOF, TP, CTU, CTD, R_TRIG, F_TRIG, AND, OR, XOR, NOT, SEL, MUX, MOVE, basic string ops)
+**Prevention:**
+1. **Stub AXIS_REF with sufficient fields for common access patterns.** Include `NcToPlc.ActPos`, `NcToPlc.ActVelo`, `NcToPlc.nStateDWord`, `PlcToNc.nCommand` at minimum for Beckhoff. This covers 90% of direct access patterns.
+2. **Warn on access to unstubbed fields.** If user accesses `myAxis.NcToPlc.SomeObscureField` and the stub doesn't have it, emit a warning: "Field 'SomeObscureField' not found in AXIS_REF stub. May exist in vendor library."
+3. **Document that stubs are approximations.** The stub file header should say: `(* Simplified AXIS_REF. For full struct, use stc vendor extract from your TwinCAT project. *)`
 
-**Warning signs:**
-- Standard library functions only have 2-3 test cases each
-- Timer tests don't cover re-trigger, elapsed rollover, or boundary conditions
-- Type conversion tests only cover happy-path conversions
-- No cross-vendor behavioral comparison
+**Detection:**
+- Type errors on direct AXIS_REF field access that works in TwinCAT
+- User code accesses deeply nested struct fields not present in stub
 
-**Phase to address:**
-Phase 3 (Host Execution/Testing) for initial implementation. Ongoing refinement through all later phases.
+**Phase to address:** Phase 1 (Stub Definition). Ship more complete AXIS_REF stubs than the current two-field version.
 
 ---
 
-### Pitfall 10: LSP Performance Death by Full Re-Parse
+### Pitfall 8: Mock Override Redeclaration Semantics
 
 **What goes wrong:**
-On every keystroke, the LSP server receives a textDocument/didChange notification. If the server re-parses the entire file (and all its dependencies) on every change, latency spikes to 200ms+ for large files (1000+ lines of ST, common in production). Users perceive this as "laggy" and abandon the tool. Worse, if semantic analysis (type checking, reference resolution) also runs on every keystroke, it can take 500ms+.
+The current resolver rejects redeclarations (`resolve.go` line 76-79). Mock loading requires overriding stub declarations with mock declarations (same name, same signature, but with a body). If the override mechanism is not carefully scoped, it can introduce bugs:
+
+1. **Signature mismatch:** Mock declares `MC_MoveAbsolute` with fewer parameters than the stub. Tests compile, but calling code passes parameters that the mock ignores. Silent data loss.
+2. **Scope leakage:** Mock override leaks into non-test compilation. `stc check` (not `stc test`) accidentally picks up mocks, and type-checking passes against mock signatures instead of production stubs.
+3. **Partial override:** User mocks one FB but not its dependencies. `MC_MoveAbsolute` mock works, but it internally references `MC_ReadActualPosition` (which is still a zero-value stub). The mock's behavior depends on the uncontrolled zero-value stub.
+
+**Prevention:**
+1. **Validate mock signature matches stub signature.** When a mock overrides a stub, verify that all declared inputs and outputs match (same names, same types). Extra `VAR` variables are fine (implementation detail). Missing or type-changed parameters are an error.
+2. **Mock loading is test-only.** `[test.mock_paths]` in `stc.toml` is only processed by `stc test`, never by `stc check` or `stc emit`. The resolver needs a flag or mode to control whether mock overrides are active.
+3. **Emit a log message for each override.** `stc test --verbose` should print: "Mock: MC_MoveAbsolute from mocks/mc_mock.st overrides stub from vendor/beckhoff/tc2_mc2.st"
+
+**Detection:**
+- Tests pass with a mock that has a different parameter list than the stub
+- `stc check` behavior changes based on files in `mocks/` directory
+- No log output indicating which FBs are mocked vs. stubbed
+
+**Phase to address:** Phase 3 (Mock Framework). Signature validation is critical for preventing silent mock/stub divergence.
+
+---
+
+### Pitfall 9: EtherCAT Terminal Configuration Cannot Be Stubbed
+
+**What goes wrong:**
+Users expect vendor stubs to cover everything they need for host testing. But EtherCAT terminal configuration involves concepts that exist outside ST code and cannot be represented as FB stubs:
+
+| Concept | Why It Can't Be Stubbed | Impact |
+|---------|------------------------|--------|
+| **PDO mapping** | Configured in TwinCAT System Manager (XML), not in ST. Defines which process data objects appear in the process image. Changes the meaning of `%IB0`. | Mock I/O table can't validate that addresses match PDO config. |
+| **Distributed clocks (DC)** | EtherCAT synchronization mechanism. Configured per-slave. Affects timing of I/O updates relative to PLC task cycle. | Simulated time can't replicate DC sync jitter or phase shifts. |
+| **CoE (CANopen over EtherCAT)** | SDO read/write for terminal parameters (e.g., filter settings, scaling factors). Done via `FB_EcCoeSdoRead/Write` at runtime. | The FB can be stubbed, but what value should the mock return for a specific SDO index? |
+| **EtherCAT state machine** | INIT -> PREOP -> SAFEOP -> OP. Transitions affect I/O availability. | A stub can simulate states, but the transition conditions depend on hardware. |
+| **Terminal-specific I/O mapping** | An EL3064 (4-channel analog input) maps to specific offsets in the process image. Different terminal = different offsets. | Mock I/O table can provide addresses but can't validate they match actual hardware config. |
 
 **Why it happens:**
-The compiler is designed for batch processing: parse entire file, analyze, report errors. LSP demands incremental processing: update the part that changed, re-analyze only affected scopes. These are fundamentally different architectures. Research shows 13 of 28 surveyed LSP servers re-parse on every change; only the performant ones use incremental approaches.
+ST code and EtherCAT configuration are two separate domains that interact at the process image boundary. TwinCAT projects couple them tightly (`.tsproj` and `.xti` files define the hardware config that determines I/O addresses). stc only sees the ST code.
 
-**How to avoid:**
-1. Use incremental document sync (LSP supports sending only changed ranges, not full file content)
-2. Parse at statement/declaration granularity -- when a change occurs within a function body, only re-parse that function
-3. Cache symbol tables and type information per-scope; invalidate only affected scopes on change
-4. Debounce semantic analysis (run type checking 200ms after last keystroke, not on every keystroke)
-5. Separate fast operations (syntax highlighting, bracket matching) from slow operations (type checking, reference resolution)
-6. Profile early -- if parse takes >50ms on a 1000-line file, investigate before it gets worse
+**Prevention:**
+1. **Clearly document the stubbing boundary.** "stc stubs provide type-checking and behavioral mocking for ST-level function blocks. Hardware configuration (PDO mapping, DC, terminal parameters) is outside stc's scope and must be validated on the target platform."
+2. **Do NOT attempt to parse or simulate EtherCAT configuration.** This is a rabbit hole that leads to reimplementing TwinCAT System Manager.
+3. **Provide a simple mock I/O table** that maps addresses to typed values. Let users define expected I/O values in test files or TOML config. Don't try to derive addresses from hardware config.
+4. **Stub EtherCAT diagnostic FBs** (`FB_EcCoeSdoRead`, `FB_EcGetSlaveState`, etc.) as zero-value stubs with a clear fidelity warning. Users who need EtherCAT-level testing should use Beckhoff's TwinCAT simulation.
 
-**Warning signs:**
-- LSP re-parses entire file on every didChange notification
-- No caching of parse results or symbol tables
-- Completion requests take >100ms
-- Performance has never been measured on files >200 lines
-- No debouncing of expensive operations
+**Detection:**
+- Users open issues asking "why doesn't stc simulate my EtherCAT network?"
+- Scope creep into hardware simulation during development
+- I/O address validation that depends on knowledge stc doesn't have
 
-**Phase to address:**
-Phase 1 (Parser) for incremental-friendly AST design. Phase 4 (LSP) for implementation. Design for incrementality from the start even if LSP comes later.
+**Phase to address:** Phase 2 (I/O Mapping) for documenting the boundary. This pitfall is about scope management, not implementation.
 
-## Technical Debt Patterns
+---
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Skip OOP in parser | Faster initial parser delivery | Cannot parse production code; requires parser rewrite to add | Never -- parse OOP syntax from day one |
-| Hardcode type promotion rules | Simpler type checker | Cannot support vendor-specific conversion permissiveness | Never -- build type lattice as data, not code |
-| Use wall-clock time in tests | Timer tests "work" on host | Flaky tests, non-deterministic failures, wrong timer behavior | Never -- use simulated time from first timer test |
-| Single-vendor test corpus | Faster test development | Vendor-specific assumptions baked into parser/analyzer | Only in first 2 weeks of development |
-| String-based error messages | Faster error reporting | Cannot machine-parse errors; agent integration breaks | Only for first prototype; add structured errors within 1 month |
-| Parse entire file for LSP | Simpler LSP implementation | Unusable latency on production files | Only for initial LSP demo; must fix before public release |
-| PLCopen XML as primary format | Standards-compliant interchange | Lossy round-trips, missing vendor metadata | Never as primary -- use as one import option |
+## Minor Pitfalls
 
-## Integration Gotchas
+Issues that cause inconvenience or confusion but are easily fixed.
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| TwinCAT `.TcPOU` files | Treating them as plain ST | They are XML-wrapped ST; parse the XML envelope first, extract ST body |
-| CODESYS project files | Expecting PLCopen XML compatibility | CODESYS uses its own binary/XML project format; PLCopen XML export loses data |
-| VS Code extension | Bundling the Go binary inside the extension | Ship Go binary separately; extension spawns it as a child process via LSP |
-| CI/CD pipelines | Requiring vendor IDE for validation | Toolchain must validate independently; JUnit XML output for CI integration |
-| MCP server | Exposing every CLI command as a tool | Curate a small tool surface; agents need validate, format, and emit -- not 30 commands |
+---
 
-## Performance Traps
+### Pitfall 10: Case Sensitivity in FB Names Across Vendors
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Full file re-parse on each edit | LSP latency >200ms, CPU spikes during typing | Incremental parsing, scope-level invalidation | Files >500 lines |
-| Unbounded type candidate explosion | Type checker hangs on deeply nested expressions | Limit candidate set size, prune early in narrowing pass | Expressions with 5+ mixed-type operands |
-| Naive symbol table lookup | Slow completions, go-to-definition lag | Hash-based symbol tables with scope chains | Projects with 100+ POUs and global variables |
-| Synchronous semantic analysis in LSP | Editor freezes during type checking | Async analysis with cancellation on new edits | Any file with type errors |
-| Loading all project files at LSP start | 5-10s startup delay, high memory | Lazy loading -- parse files on first reference | Projects with 50+ files |
+**What goes wrong:**
+IEC 61131-3 specifies case-insensitive identifiers. But vendor library documentation and code examples use specific casing conventions:
 
-## UX Pitfalls
+- Beckhoff: `MC_MoveAbsolute`, `ADSREAD`, `FB_FileOpen` (mixed conventions)
+- Schneider: `MC_MoveAbsolute`, `READ_VAR` (all caps for system FBs)
+- User code: any casing
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Cryptic error messages ("unexpected token") | Engineers waste time guessing what's wrong | Include expected tokens, context, and suggestion: "Expected `:=` after variable name, found `=`. Did you mean `:=`?" |
-| No location info in errors | Cannot find the problem in large files | Always include file:line:column, even for semantic errors |
-| Reporting only first error | User fixes one error, gets another, repeats 20 times | Report all errors per scope/function; stop at 50 to avoid noise |
-| Different behavior than vendor IDE | Engineers distrust the tool | Document every intentional difference; provide `--strict` vs `--vendor` modes |
-| Silent acceptance of vendor extensions | Code works in STC but fails in target PLC | Warn on non-standard features; show which vendors support each extension |
+If the symbol table uses case-sensitive lookup, `mc_moveabsolute` won't match `MC_MoveAbsolute`. If it uses case-insensitive lookup, it must normalize consistently.
 
-## "Looks Done But Isn't" Checklist
+**Prevention:**
+The existing resolver should already handle case-insensitive lookup (IEC requirement from v1.0). Verify that stub-loaded symbols follow the same normalization. Add test cases: stub declares `MC_MoveAbsolute`, user code references `mc_moveAbsolute`.
 
-- [ ] **Parser:** Handles nested comments (`(* (* inner *) outer *)`) -- many parsers fail on these
-- [ ] **Parser:** Handles multi-line string literals with embedded quotes correctly
-- [ ] **Parser:** Handles CASE with ranges (`1..10:`) and comma-separated values (`1, 3, 5:`)
-- [ ] **Type System:** Handles ANY_NUM resolution when literals and variables are mixed in one expression
-- [ ] **Type System:** Handles ARRAY indexing with expressions (not just constants)
-- [ ] **Type System:** Handles STRUCT member access chained with method calls (`myFB.myStruct.member`)
-- [ ] **Timers:** TON.Q stays TRUE after ET reaches PT (does not pulse)
-- [ ] **Timers:** TON resets correctly when IN goes FALSE while timer is running
-- [ ] **Timers:** TOF behavior when IN toggles faster than PT
-- [ ] **Standard Library:** MID/LEFT/RIGHT with length exceeding string length (vendor behavior varies)
-- [ ] **PLCopen XML:** Handles vendor-extended XML namespaces without crashing
-- [ ] **Emit:** Generated vendor ST compiles without modification in target IDE
-- [ ] **LSP:** Works correctly with unsaved/modified files (dirty buffer content, not disk content)
-- [ ] **LSP:** Handles files with BOM (TwinCAT exports with UTF-8 BOM)
+**Phase to address:** Phase 1 (Stub Loading). Quick verification, not new work.
 
-## Recovery Strategies
+---
 
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| No OOP in parser | HIGH | Redesign AST node types, add METHOD/PROPERTY/INTERFACE nodes, update all visitors and transformations |
-| Wrong type inference approach | HIGH | Replace type checker with two-pass candidate/narrow system; affects all semantic analysis |
-| Wall-clock timer tests | MEDIUM | Add simulated time layer, update all timer tests to use ADVANCE_TIME, audit for remaining non-determinism |
-| Single-vendor assumptions | MEDIUM | Add vendor profile system, audit all hardcoded assumptions, add second vendor's test corpus |
-| Non-incremental LSP | MEDIUM | Add scope-level caching, change parser to support partial re-parse, add debouncing |
-| Lossy PLCopen XML round-trip | LOW | Document limitations clearly; implement vendor-specific importers as alternative |
-| Poor error messages | LOW | Add structured error type with code, location, message, suggestion; update error emitters incrementally |
+### Pitfall 11: Stub Files With Syntax That Triggers Parser Edge Cases
 
-## Pitfall-to-Phase Mapping
+**What goes wrong:**
+Stub files contain declarations with no body. The parser must handle:
+- `FUNCTION_BLOCK` with `VAR_INPUT`/`VAR_OUTPUT` blocks but no statements between the last `END_VAR` and `END_FUNCTION_BLOCK`
+- `FUNCTION` with parameters but no body (just `END_FUNCTION`)
+- Type declarations using vendor-specific syntax (e.g., Beckhoff `{attribute 'qualified_only'}` pragmas on enums)
+- Default values referencing enum members defined in the same file but later in parse order
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Grammar not LALR(1) | Phase 1 (Parser) | Parser handles identifier ambiguity via symbol tables; passes MATIEC-style test suite |
-| Edition 2 only trap | Phase 1 (Parser) | Parser successfully parses OOP-heavy production files from TwinCAT/CODESYS |
-| ANY type resolution | Phase 2 (Type System) | Two-pass type inference passes; mixed-type expression tests all green |
-| Bad error recovery | Phase 1 (Parser) | Partial AST tests: broken code still produces usable AST for LSP completions |
-| Vendor dialect drift | Phase 1-3 (All) | Both TwinCAT and CODESYS test corpora pass continuously |
-| Wrong scan cycle semantics | Phase 3 (Execution) | Timer tests use simulated time; deterministic across platforms |
-| PLCopen XML expectations | Phase 4+ (Interop) | Import/export tests document and verify exactly what is preserved vs lost |
-| Agent-unfriendly tools | Phase 1+ (All) | JSON output tested in CI; agent integration tests from Phase 2 |
-| Standard library gaps | Phase 3 (Execution) | Property-based tests for conversions; cross-vendor behavioral comparison for timers |
-| LSP performance | Phase 1 + Phase 4 | Incremental AST design in Phase 1; <100ms completion latency measured on 1000-line files |
+The parser was tested with complete POUs (declaration + body). Empty-body POUs may trigger untested code paths.
+
+**Prevention:**
+1. **Add parser test cases for empty-body POUs.** Specifically: FB with inputs/outputs and no body; function with parameters and no body; function with parameters, no body, and a return type.
+2. **Test stub files against the parser before shipping.** Run `stc check` on every shipped stub file as a CI step.
+3. **Handle forward-referenced types in stub files.** If `MC_MoveAbsolute` references `MC_Direction` which is defined later in the same file, the two-pass resolver handles it. Verify with a test.
+
+**Phase to address:** Phase 1 (Stub Loading). Test-driven -- add tests for each edge case before implementing.
+
+---
+
+### Pitfall 12: PVOID / Pointer Parameters Simplified as UDINT
+
+**What goes wrong:**
+Beckhoff system FBs use `PVOID` (pointer to void) for memory operation parameters (`MEMCPY`, `ADSREAD.DESTADDR`). The current stubs replace `PVOID` with `UDINT` (the raw docs in `VENDOR_LIBRARIES.md` show this). This works for type-checking (both are 32-bit unsigned), but:
+- It hides the fact that the parameter is a pointer
+- Code passing a regular UDINT value where a pointer is expected will pass type-checking but crash on real hardware
+- On 64-bit TwinCAT runtimes, `PVOID` is 64-bit (`ULINT`), not 32-bit
+
+**Prevention:**
+1. **Define a stub type alias:** `TYPE PVOID : UDINT; END_TYPE` (or `ULINT` for 64-bit targets)
+2. **Add a comment:** `(* PVOID: Pointer to void. Pass ADR(variable) on real TwinCAT. Simplified for stc type-checking. *)`
+3. **Consider emitting a warning** when user passes a literal value to a PVOID parameter.
+
+**Phase to address:** Phase 1 (Stub Definition). Low effort, high documentation value.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Stub loading (resolver) | Vendor name collision (two vendors define MC_MoveAbsolute) | Enforce single vendor stub set per project; reject multi-vendor same-name FB loading |
+| Stub loading (resolver) | Redeclaration error when loading stubs before user code | Add library-declaration mode to resolver that skips redeclaration checks for stub-then-user ordering |
+| I/O address parsing | %I0.0 (no X prefix) rejected by parser | Update lexer to handle optional X in bit addresses |
+| I/O address parsing | Hierarchical addressing (%IW1.2) parsed as bit address | Distinguish dotted-path semantics based on size prefix (X = bit.subbyte, B/W/D = module.channel) |
+| I/O mock table | Overlapping addresses not detected | Build address range tracker; warn on byte/word writes overlapping bit addresses |
+| Mock framework | Mock signature diverges from stub | Validate mock VAR_INPUT/VAR_OUTPUT against stub at load time |
+| Mock framework | Zero-value stubs hide error paths | Emit fidelity warning in test output for every unstubbed FB |
+| AB vendor support | Users expect full AB compile-checking | Document AB support as "experimental / limited" in v1.1; full support deferred |
+| AB vendor support | CASE ranges, FOR BY clause rejected | Add vendor-specific syntax restrictions to checker |
+| Shipped stubs | Stubs don't match user's TwinCAT version | Version header in every stub file; `stc vendor extract` for user-specific stubs |
+| Shipped stubs | Opaque structs (AXIS_REF) too simplified | Ship more complete struct stubs; warn on access to unstubbed fields |
+
+---
+
+## "Looks Done But Isn't" Checklist for v1.1
+
+- [ ] **Stub loading:** Parser handles FB declaration with completely empty body (no statements, no comments between END_VAR and END_FUNCTION_BLOCK)
+- [ ] **Stub loading:** Forward references within a single stub file resolve correctly (enum defined after FB that uses it)
+- [ ] **Stub loading:** Case-insensitive matching between stub FB names and user code references
+- [ ] **I/O parsing:** `%I0.0` (no X prefix) parses correctly as bit address
+- [ ] **I/O parsing:** `%IW1.2` parses as word address with hierarchical path, not as bit 2 of word 1
+- [ ] **I/O parsing:** `AT %I*` wildcard syntax accepted in FB declarations
+- [ ] **I/O parsing:** `%IL0` rejected when vendor profile does not support 64-bit types
+- [ ] **Mock override:** Mock with different parameter types than stub produces error, not silent acceptance
+- [ ] **Mock override:** Mocks only active during `stc test`, never during `stc check`
+- [ ] **Vendor compat:** Allen Bradley target rejects POINTER TO, REFERENCE TO, METHOD, INTERFACE, PROPERTY, direct addressing
+- [ ] **Vendor compat:** Allen Bradley target rejects CASE with ranges (`1..10:`)
+- [ ] **Shipped stubs:** Every shipped stub file passes `stc check` without errors
+- [ ] **Shipped stubs:** AXIS_REF stub includes NcToPlc.ActPos and PlcToNc fields for Beckhoff
+- [ ] **Shipped stubs:** Each stub file has version header comment identifying source vendor library version
+- [ ] **Test output:** Warning emitted for each FB using zero-value auto-stub (no user mock)
+
+---
 
 ## Sources
 
-- [MATIEC Compiler Documentation and Architecture](https://openplcproject.gitlab.io/matiec/)
-- [MATIEC Source -- Type Narrowing (stage3)](https://github.com/nucleron/matiec)
-- [STruC++ Compiler](https://github.com/Autonomy-Logic/STruCpp) -- validates OOP support, test framework design, and C++17 transpilation approach
-- [K-ST: Formal Executable Semantics for Structured Text](https://cposkitt.github.io/files/publications/k-st_structured_text_tse23.pdf) -- found 5 bugs and 9 functional defects in OpenPLC compiler
-- [Agents4PLC: LLM-based PLC Code Generation](https://arxiv.org/html/2410.14209v1) -- documents LLM failure modes with ST
-- [Multi-Agent Framework for ST Generation](https://arxiv.org/html/2412.02410v1/) -- vendor fragmentation challenges
-- [Training LLMs for IEC 61131-3 ST](https://arxiv.org/html/2410.22159v3) -- limited training data, compilation success rates
-- [PLCopen XML Exchange Standard](https://www.plcopen.org/standards/xml-echange/)
-- [CODESYS PLCopen XML Import Issues](https://forge.codesys.com/forge/talk/Engineering/thread/c3f728a1ad/)
-- [Beckhoff TwinCAT PLCopen XML Export Documentation](https://infosys.beckhoff.com/content/1033/tc3_plc_intro/2526208651.html)
-- [TwinCAT Attribute Pragmas](https://infosys.beckhoff.com/content/1033/tc3_plc_intro/2529567115.html)
-- [IEC 61131-3 Type Conversion Functions (Fernhill)](https://www.fernhillsoftware.com/help/iec-61131/common-elements/conversion-functions/type-casts.html)
-- [IEC 61131-3 OOP Extensions Research](https://www.researchgate.net/publication/224089615_Object-oriented_extensions_for_IEC_61131-3)
-- [Incremental Packrat Parsing for Fast Language Servers](https://unallocated.com/blog/incremental-packrat-parsing-the-secret-to-fast-language-servers/)
-- [LSP Implementation Practices Study](https://peldszus.com/wp-content/uploads/2022/08/2022-models-lspstudy.pdf)
+- [Beckhoff MC_MoveAbsolute Documentation (Tc2_MC2)](https://infosys.beckhoff.com/content/1033/tcplclib_tc2_mc2/70094731.html) -- verified parameter list: LREAL Position, LREAL Velocity, MC_BufferMode, ST_MoveOptions
+- [Schneider MC_MoveAbsolute Documentation](https://product-help.schneider-electric.com/Machine%20Expert/V1.1/en/MotCoLib/MotCoLib/Function_Blocks_-_Single_Axis/Function_Blocks_-_Single_Axis-20.htm) -- verified parameter list: DINT Position, DINT Velocity, no Accel/Decel params
+- [PLCopen Motion Control Part 1 Standard](https://plcopen.org/system/files/downloads/plcopen_motion_control_part_1_version_2.0.pdf) -- confirms vendors may choose data types for parameters
+- [Rockwell Logix 5000 IEC 61131-3 Compliance](https://literature.rockwellautomation.com/idc/groups/literature/documents/pm/1756-pm018_-en-p.pdf) -- AB compliance documentation
+- [Rockwell AOI Documentation](https://literature.rockwellautomation.com/idc/groups/literature/documents/pm/1756-pm010_-en-p.pdf) -- AOI structure and limitations
+- [Google Testing Blog: Increase Test Fidelity By Avoiding Mocks](https://testing.googleblog.com/2024/02/increase-test-fidelity-by-avoiding-mocks.html) -- mock fidelity and false confidence
+- [Stefan Henneken: IEC 61131-3 Unit Tests](https://stefanhenneken.net/2018/01/24/iec-61131-3-unit-tests/) -- PLC unit testing patterns
+- [Unit Testing and PLCs (AllTwinCAT)](https://alltwincat.com/2019/06/18/unit-testing-and-plcs/) -- TwinCAT testing practices
+- [IEC 61131-3 Direct Addressing (Wikipedia)](https://en.wikipedia.org/wiki/IEC_61131-3) -- %I/%Q/%M syntax reference
+- [Beckhoff EtherCAT System Documentation](https://infosys.beckhoff.com/content/1033/ethercatsystem/2584719371.html) -- PDO mapping and DC configuration
+- [CODESYS vs TwinCAT Comparison](https://plcprogramming.io/blog/codesys-vs-twincat-comprehensive-comparison) -- vendor feature differences
+- [Allen Bradley AOI Guide (Industrial Monitor Direct)](https://industrialmonitordirect.com/blogs/knowledgebase/allen-bradley-add-on-instructions-complete-aoi-guide) -- AOI limitations vs FUNCTION_BLOCK
+- [l5x2ST Project (GitHub)](https://github.com/lagarcia38/l5x2ST) -- AB L5X to ST conversion, demonstrates dialect differences
 
 ---
-*Pitfalls research for: IEC 61131-3 Structured Text Compiler Toolchain*
-*Researched: 2026-03-26*
+*Pitfalls research for: Vendor Library Stubs, I/O Mapping, and Mock Framework (v1.1 milestone)*
+*Researched: 2026-03-30*
