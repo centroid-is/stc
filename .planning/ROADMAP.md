@@ -233,7 +233,11 @@ Plans:
   2. Interpreter maintains three flat byte arrays (%I, %Q, %M) and AT-addressed variables read from and write to correct byte offsets
   3. I/O values sync at scan cycle boundaries -- inputs copied before execution, outputs copied after, matching real PLC behavior
   4. User gets a warning when AT addresses overlap (e.g., %IW0 and %IX0.3 referencing the same byte range)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 12-01-PLAN.md -- IOMap package (address parser, IOTable data structure) and lexer DirectAddr token
+- [ ] 12-02-PLAN.md -- ScanCycleEngine IOTable integration, checker AT validation, overlap detection
 
 ### Phase 13: Vendor Stub Loading
 **Goal**: Users can type-check and navigate production ST code that references vendor-specific function blocks by loading .st stub files with declarations
@@ -320,7 +324,7 @@ Phases execute in numeric order: 12 -> 13 -> 14 -> 15/16 (parallel) -> 17 -> 18
 | 9. LSP & VS Code Extension | v1.0 | 3/3 | Complete | 2026-03-28 |
 | 10. Incremental Compilation | v1.0 | 2/2 | Complete | 2026-03-28 |
 | 11. MCP Server & Claude Code Skills | v1.0 | 2/2 | Complete | 2026-03-28 |
-| 12. I/O Address Parser & Table | v1.1 | 0/0 | Not started | - |
+| 12. I/O Address Parser & Table | v1.1 | 0/2 | In progress | - |
 | 13. Vendor Stub Loading | v1.1 | 0/0 | Not started | - |
 | 14. Mock Framework | v1.1 | 0/0 | Not started | - |
 | 15. Shipped Stubs -- Beckhoff | v1.1 | 0/0 | Not started | - |
