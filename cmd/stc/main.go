@@ -30,6 +30,7 @@ func newRootCmd() *cobra.Command {
 		newFmtCmd(),
 		newPpCmd(),
 		newLspCmd(),
+		newVendorCmd(),
 	)
 
 	return rootCmd

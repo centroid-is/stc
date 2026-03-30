@@ -246,6 +246,33 @@ END_TEST_CASE
 	}
 }
 
+func TestTestCmd_AutoDefinesSTC_TEST(t *testing.T) {
+	dir := t.TempDir()
+
+	// Test that uses {IF defined(STC_TEST)} to conditionally set a value
+	testST := `TEST_CASE 'STC_TEST is defined'
+VAR
+    testMode : BOOL := FALSE;
+END_VAR
+
+{IF defined(STC_TEST)}
+    testMode := TRUE;
+{END_IF}
+
+    ASSERT_TRUE(testMode, 'STC_TEST should be auto-defined during stc test');
+END_TEST_CASE
+`
+	writeTestFixture(t, dir, "define_test.st", testST)
+
+	stdout, stderr, exitCode := runStc(t, "test", dir)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 for STC_TEST auto-define test, got %d; stdout: %s; stderr: %s", exitCode, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "1 passed") {
+		t.Errorf("expected '1 passed' in output, got: %s", stdout)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

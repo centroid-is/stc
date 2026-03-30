@@ -18,6 +18,7 @@ import (
 type RunOpts struct {
 	LibraryFiles []*ast.SourceFile
 	MockFiles    []*ast.SourceFile
+	Defines      map[string]bool // Preprocessor defines (e.g., STC_TEST)
 }
 
 // DiscoverTestFiles finds all *_test.st files under dir recursively.
@@ -67,7 +68,7 @@ func RunWithOpts(dir string, opts RunOpts) (*RunResult, error) {
 	autoStubbed := make(map[string]bool)
 
 	for _, file := range files {
-		suiteResult, stubs, err := runFileWithOpts(file, dir, extCtx)
+		suiteResult, stubs, err := runFileWithOpts(file, dir, extCtx, opts.Defines)
 		if err != nil {
 			return nil, fmt.Errorf("running %s: %w", file, err)
 		}
@@ -148,14 +149,14 @@ type fileContext struct {
 // runFile parses a single .st file and executes all TEST_CASE blocks.
 // Kept for backward compatibility -- delegates to runFileWithOpts with no external context.
 func runFile(filePath, baseDir string) (*SuiteResult, error) {
-	suite, _, err := runFileWithOpts(filePath, baseDir, nil)
+	suite, _, err := runFileWithOpts(filePath, baseDir, nil, nil)
 	return suite, err
 }
 
 // runFileWithOpts parses a single .st file and executes all TEST_CASE blocks
 // with optional external FB context from library/mock files.
 // Returns the suite result and a set of auto-stubbed FB type names.
-func runFileWithOpts(filePath, baseDir string, extCtx *externalContext) (*SuiteResult, map[string]bool, error) {
+func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines map[string]bool) (*SuiteResult, map[string]bool, error) {
 	start := time.Now()
 
 	content, err := os.ReadFile(filePath)
@@ -163,7 +164,7 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext) (*SuiteR
 		return nil, nil, fmt.Errorf("reading %s: %w", filePath, err)
 	}
 
-	parseResult := pipeline.Parse(filePath, string(content), nil)
+	parseResult := pipeline.Parse(filePath, string(content), defines)
 
 	// Build file context: collect TYPE, FUNCTION_BLOCK, and FUNCTION declarations
 	ctx := &fileContext{

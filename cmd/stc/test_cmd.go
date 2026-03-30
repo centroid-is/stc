@@ -24,8 +24,10 @@ func newTestCmd() *cobra.Command {
 			}
 			format, _ := cmd.Flags().GetString("format")
 
-			// Try to load project config for mock/library support
-			opts := stctesting.RunOpts{}
+			// Auto-define STC_TEST preprocessor symbol
+			opts := stctesting.RunOpts{
+				Defines: map[string]bool{"STC_TEST": true},
+			}
 			if configPath, err := project.FindConfig(dir); err == nil {
 				cfg, err := project.LoadConfig(configPath)
 				if err != nil {

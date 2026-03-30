@@ -41,6 +41,11 @@ func runSim(cmd *cobra.Command, args []string) error {
 
 	defineFlags, _ := cmd.Flags().GetStringSlice("define")
 	defines := pipeline.ParseDefines(defineFlags)
+	// Auto-define STC_SIM preprocessor symbol
+	if defines == nil {
+		defines = make(map[string]bool)
+	}
+	defines["STC_SIM"] = true
 
 	// Read and parse the ST file (with preprocessing)
 	content, err := os.ReadFile(filename)
