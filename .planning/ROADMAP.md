@@ -268,8 +268,10 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [x] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
-- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
+- [ ] 14-01-PLAN.md -- Mock infrastructure: config, loader, resolver MockFiles, signature validation
+- [ ] 14-02-PLAN.md -- Test runner integration, auto-stub warnings, I/O injection, CLI wiring
+
+
 
 ### Phase 15: Shipped Stubs -- Beckhoff
 **Goal**: Users targeting Beckhoff TwinCAT can immediately type-check code using common Beckhoff libraries without writing their own stubs
