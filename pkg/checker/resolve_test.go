@@ -342,3 +342,80 @@ END_PROGRAM
 	assert.Equal(t, CodeRedeclared, errors[0].Code)
 	assert.Contains(t, errors[0].Message, "Main")
 }
+
+func TestMockFiles_OverrideLibrarySymbol(t *testing.T) {
+	libSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+    Execute : BOOL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	mockSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+    Execute : BOOL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+END_VAR
+    Done := Execute;
+END_FUNCTION_BLOCK
+`
+	userSrc := `PROGRAM Main
+VAR
+    mover : MC_MoveAbsolute;
+END_VAR
+END_PROGRAM
+`
+	libFile := parseFile(libSrc)
+	mockFile := parseFile(mockSrc)
+	userFile := parseFile(userSrc)
+
+	table := symbols.NewTable()
+	diags := diag.NewCollector()
+	resolver := NewResolver(table, diags)
+	resolver.CollectDeclarations([]*ast.SourceFile{userFile}, ResolveOpts{
+		LibraryFiles: []*ast.SourceFile{libFile},
+		MockFiles:    []*ast.SourceFile{mockFile},
+	})
+
+	// No redeclaration errors
+	assert.False(t, diags.HasErrors(), "mock override of library should not produce error, got: %v", diags.All())
+
+	// The symbol should NOT be marked as library (mock is a real implementation)
+	sym := table.LookupGlobal("MC_MoveAbsolute")
+	require.NotNil(t, sym)
+	assert.False(t, sym.IsLibrary, "mock-overridden symbol should not be marked as library")
+}
+
+func TestMockFiles_CannotOverrideUserSymbol(t *testing.T) {
+	userSrc := `FUNCTION_BLOCK MyFB
+VAR_INPUT
+    x : INT;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	mockSrc := `FUNCTION_BLOCK MyFB
+VAR_INPUT
+    x : INT;
+END_VAR
+    ;
+END_FUNCTION_BLOCK
+`
+	mockFile := parseFile(mockSrc)
+	userFile := parseFile(userSrc)
+
+	table := symbols.NewTable()
+	diags := diag.NewCollector()
+	resolver := NewResolver(table, diags)
+	resolver.CollectDeclarations([]*ast.SourceFile{userFile}, ResolveOpts{
+		MockFiles: []*ast.SourceFile{mockFile},
+	})
+
+	// Should produce redeclaration error -- mock cannot override user code
+	assert.True(t, diags.HasErrors(), "mock override of user code should produce error")
+}

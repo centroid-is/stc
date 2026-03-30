@@ -5,10 +5,20 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/checker"
+	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/parser"
 	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func parseST(src string) *ast.SourceFile {
+	result := parser.Parse("test.st", src)
+	return result.File
+}
 
 func TestLoadMocks_EmptyMockPaths(t *testing.T) {
 	cfg := &project.Config{}
@@ -94,4 +104,128 @@ END_FUNCTION_BLOCK
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	assert.Greater(t, len(files[0].Declarations), 0)
+}
+
+func TestValidateMockSignatures_MatchingSignature(t *testing.T) {
+	// Stub FB in library
+	libSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+    Execute : BOOL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	// Mock with same signature
+	mockSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+    Execute : BOOL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+END_VAR
+    Done := Execute;
+END_FUNCTION_BLOCK
+`
+	libFile := parseST(libSrc)
+	mockFile := parseST(mockSrc)
+
+	// Register library symbols in the table
+	table := symbols.NewTable()
+	diags := diag.NewCollector()
+	resolver := checker.NewResolver(table, diags)
+	resolver.CollectDeclarations(nil, checker.ResolveOpts{
+		LibraryFiles: []*ast.SourceFile{libFile},
+	})
+
+	errs := ValidateMockSignatures([]*ast.SourceFile{mockFile}, table)
+	assert.Empty(t, errs)
+}
+
+func TestValidateMockSignatures_DifferentParamCount(t *testing.T) {
+	libSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+    Execute : BOOL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	// Mock with different input count (missing Execute)
+	mockSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+END_VAR
+    Done := TRUE;
+END_FUNCTION_BLOCK
+`
+	libFile := parseST(libSrc)
+	mockFile := parseST(mockSrc)
+
+	table := symbols.NewTable()
+	diags := diag.NewCollector()
+	resolver := checker.NewResolver(table, diags)
+	resolver.CollectDeclarations(nil, checker.ResolveOpts{
+		LibraryFiles: []*ast.SourceFile{libFile},
+	})
+
+	errs := ValidateMockSignatures([]*ast.SourceFile{mockFile}, table)
+	require.Len(t, errs, 1)
+	assert.Contains(t, errs[0].Error(), "input")
+}
+
+func TestValidateMockSignatures_DifferentParamTypes(t *testing.T) {
+	libSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	// Mock with REAL instead of INT
+	mockSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : REAL;
+END_VAR
+    ;
+END_FUNCTION_BLOCK
+`
+	libFile := parseST(libSrc)
+	mockFile := parseST(mockSrc)
+
+	table := symbols.NewTable()
+	diags := diag.NewCollector()
+	resolver := checker.NewResolver(table, diags)
+	resolver.CollectDeclarations(nil, checker.ResolveOpts{
+		LibraryFiles: []*ast.SourceFile{libFile},
+	})
+
+	errs := ValidateMockSignatures([]*ast.SourceFile{mockFile}, table)
+	require.Len(t, errs, 1)
+	assert.Contains(t, errs[0].Error(), "type")
+}
+
+func TestValidateMockSignatures_FBNotInLibrary(t *testing.T) {
+	// Mock for an FB that's not in the library -- should skip validation
+	mockSrc := `FUNCTION_BLOCK FB_Custom
+VAR_INPUT
+    x : INT;
+END_VAR
+    ;
+END_FUNCTION_BLOCK
+`
+	mockFile := parseST(mockSrc)
+
+	table := symbols.NewTable()
+	// Empty table -- no library symbols
+
+	errs := ValidateMockSignatures([]*ast.SourceFile{mockFile}, table)
+	assert.Empty(t, errs)
 }

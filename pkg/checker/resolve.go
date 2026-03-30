@@ -14,6 +14,13 @@ type ResolveOpts struct {
 	// user code. Symbols from library files are marked with IsLibrary=true
 	// and can be overridden by user code without redeclaration errors.
 	LibraryFiles []*ast.SourceFile
+
+	// MockFiles are parsed mock FB files that override library symbols.
+	// Mock files are registered after user files and can only override
+	// symbols with IsLibrary=true. Attempting to override user-defined
+	// symbols produces a redeclaration error. Mock symbols are NOT marked
+	// IsLibrary (they have bodies and are real implementations).
+	MockFiles []*ast.SourceFile
 }
 
 // Resolver performs Pass 1 of semantic analysis: collecting all
@@ -45,6 +52,13 @@ func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveO
 	// Register user files
 	for _, file := range files {
 		r.collectFileDeclarations(file, false)
+	}
+
+	// Register mock files (highest priority, override library symbols)
+	if len(opts) > 0 && opts[0].MockFiles != nil {
+		for _, mockFile := range opts[0].MockFiles {
+			r.collectFileDeclarations(mockFile, false) // false = not library
+		}
 	}
 }
 
