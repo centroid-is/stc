@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vendor Libraries & I/O
-status: verifying
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-03-30T12:07:49.985Z"
+status: complete
+stopped_at: Completed phases 15-18
+last_updated: "2026-03-30T18:00:00.000Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 18
-  completed_phases: 14
-  total_plans: 38
-  completed_plans: 38
-  percent: 0
+  completed_phases: 18
+  total_plans: 42
+  completed_plans: 42
+  percent: 100
 ---
 
 # Project State
@@ -21,29 +21,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 14 — mock-framework
+**Current focus:** v1.1 milestone complete
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 18 (final)
+Plan: Complete
+Status: v1.1 milestone complete -- all 18 phases shipped
 Last activity: 2026-03-30
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [##########] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 32 (v1.0)
+- Total plans completed: 32 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
-- Total execution time: ~2.4 hours (v1.0)
+- Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 
-**Recent Trend (last 5 plans from v1.0):**
+**v1.1 Phase Execution (phases 12-18):**
 
-- Phase 10 P01: 228s, Phase 10 P02: 287s, Phase 11 P01: 256s, Phase 11 P02: 174s
-- Trend: Stable
+- Phase 12: 2 plans (I/O address parser)
+- Phase 13: 2 plans (vendor stub loading)
+- Phase 14: 2 plans (mock framework)
+- Phase 15: 1 plan (Beckhoff stubs)
+- Phase 16: 1 plan (Schneider/AB stubs)
+- Phase 17: 1 plan (behavioral mocks)
+- Phase 18: 1 plan (auto-defines + TcPOU extractor)
 
 *Updated after each plan completion*
 
@@ -68,18 +73,19 @@ Recent decisions affecting current work:
 - [Phase 14]: Mock symbols registered with isLibrary=false so they override library stubs as real implementations
 - [Phase 14-mock-framework]: SET_IO/GET_IO use string area identifiers for ST developer ergonomics
 - [Phase 14-mock-framework]: IOTable created per test case for isolation; auto-stub warnings aggregated at run level
+- [Phase 15]: MC_Power.Override parameter renamed to Override_V to avoid conflict with OVERRIDE keyword in stc lexer
+- [Phase 18]: RunOpts.Defines field threads preprocessor defines through test runner to pipeline.Parse
 
 ### Pending Todos
 
-None yet.
+None -- v1.1 milestone complete.
 
 ### Blockers/Concerns
 
-- [Research]: Schneider-specific FB signatures (READ_VAR, WRITE_VAR parameter details) need verification when writing stubs
-- [Research]: AB timer instruction semantics (TONR vs TON differences) need verification when writing AB stubs
+None -- all blockers resolved during implementation.
 
 ## Session Continuity
 
-Last session: 2026-03-30T12:06:16.382Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-03-30T18:00:00.000Z
+Stopped at: Completed phases 15-18 (v1.1 milestone complete)
 Resume file: None

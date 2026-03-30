@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v1.0 MVP** - Phases 1-11 (shipped 2026-03-28)
-- [ ] **v1.1 Vendor Libraries & I/O** - Phases 12-18 (in progress)
+- [x] **v1.1 Vendor Libraries & I/O** - Phases 12-18 (shipped 2026-03-30)
 
 ## Phases
 
@@ -285,8 +285,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
-- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
+- [x] 15-01-PLAN.md -- Beckhoff Tc2_MC2, Tc2_System, Tc2_Utilities, Tc3_EventLogger stubs, common types, EtherCAT I/O docs
 
 ### Phase 16: Shipped Stubs -- Schneider & Allen Bradley
 **Goal**: Users targeting Schneider or Allen Bradley can type-check code using common vendor FBs without writing their own stubs
@@ -300,8 +299,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
-- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
+- [x] 16-01-PLAN.md -- Schneider motion/comm/system stubs and AB profile/timers/instructions stubs
 
 ### Phase 17: Behavioral Mocks
 **Goal**: Users can run realistic simulations of motion control code using shipped behavioral mocks that simulate multi-cycle FB execution
@@ -315,8 +313,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
-- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
+- [x] 17-01-PLAN.md -- Behavioral mocks for MC_MoveAbsolute, MC_Power, MC_Home, MC_Stop, ADSREAD
 
 ### Phase 18: Auto-Defines & TcPOU Extractor
 **Goal**: Users get automatic preprocessor symbols during test/sim and can extract FB stubs from existing TwinCAT projects
@@ -329,8 +326,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
-- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
+- [x] 18-01-PLAN.md -- STC_TEST/STC_SIM auto-defines and stc vendor extract command
 
 ## Progress
 
@@ -353,7 +349,7 @@ Phases execute in numeric order: 12 -> 13 -> 14 -> 15/16 (parallel) -> 17 -> 18
 | 12. I/O Address Parser & Table | v1.1 | 2/2 | Complete    | 2026-03-30 |
 | 13. Vendor Stub Loading | v1.1 | 2/2 | Complete    | 2026-03-30 |
 | 14. Mock Framework | v1.1 | 2/2 | Complete    | 2026-03-30 |
-| 15. Shipped Stubs -- Beckhoff | v1.1 | 0/0 | Not started | - |
-| 16. Shipped Stubs -- Schneider & AB | v1.1 | 0/0 | Not started | - |
-| 17. Behavioral Mocks | v1.1 | 0/0 | Not started | - |
-| 18. Auto-Defines & TcPOU Extractor | v1.1 | 0/0 | Not started | - |
+| 15. Shipped Stubs -- Beckhoff | v1.1 | 1/1 | Complete | 2026-03-30 |
+| 16. Shipped Stubs -- Schneider & AB | v1.1 | 1/1 | Complete | 2026-03-30 |
+| 17. Behavioral Mocks | v1.1 | 1/1 | Complete | 2026-03-30 |
+| 18. Auto-Defines & TcPOU Extractor | v1.1 | 1/1 | Complete | 2026-03-30 |

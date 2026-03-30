@@ -33,41 +33,41 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 
 ### Shipped Stubs -- Beckhoff
 
-- [ ] **STUB-01**: Tc2_MC2 stubs shipped (MC_Power, MC_MoveAbsolute, MC_MoveRelative, MC_MoveVelocity, MC_Stop, MC_Home, MC_Reset, MC_ReadActualPosition, MC_ReadActualVelocity, MC_ReadStatus)
-- [ ] **STUB-02**: Tc2_System stubs shipped (ADSREAD, ADSWRITE, FB_FileOpen, FB_FileClose, FB_FileRead, FB_FileWrite, MEMCPY, MEMSET, MEMMOVE)
-- [ ] **STUB-03**: Tc2_Utilities stubs shipped (FB_FormatString, CRC16, CRC32)
-- [ ] **STUB-04**: Tc3_EventLogger stubs shipped (FB_TcEventLogger, FB_TcAlarm)
-- [ ] **STUB-05**: Common types shipped (AXIS_REF, MC_Direction, T_AmsNetId, T_AmsPort, E_OpenPath)
-- [ ] **STUB-06**: Common EtherCAT terminal I/O patterns documented with example GVL stubs
+- [x] **STUB-01**: Tc2_MC2 stubs shipped (MC_Power, MC_MoveAbsolute, MC_MoveRelative, MC_MoveVelocity, MC_Stop, MC_Home, MC_Reset, MC_ReadActualPosition, MC_ReadActualVelocity, MC_ReadStatus)
+- [x] **STUB-02**: Tc2_System stubs shipped (ADSREAD, ADSWRITE, FB_FileOpen, FB_FileClose, FB_FileRead, FB_FileWrite, MEMCPY, MEMSET, MEMMOVE)
+- [x] **STUB-03**: Tc2_Utilities stubs shipped (FB_FormatString, CRC16, CRC32)
+- [x] **STUB-04**: Tc3_EventLogger stubs shipped (FB_TcEventLogger, FB_TcAlarm)
+- [x] **STUB-05**: Common types shipped (AXIS_REF, MC_Direction, T_AmsNetId, T_AmsPort, E_OpenPath)
+- [x] **STUB-06**: Common EtherCAT terminal I/O patterns documented with example GVL stubs
 
 ### Shipped Stubs -- Schneider
 
-- [ ] **STUB-07**: Schneider motion stubs shipped (MC_Power, MC_MoveAbsolute, MC_Stop with Schneider-specific parameters)
-- [ ] **STUB-08**: Schneider communication stubs shipped (READ_VAR, WRITE_VAR, SEND_REQ, RCV_REQ)
-- [ ] **STUB-09**: Schneider system stubs shipped (GetBit, SetBit, RTC)
+- [x] **STUB-07**: Schneider motion stubs shipped (MC_Power, MC_MoveAbsolute, MC_Stop with Schneider-specific parameters)
+- [x] **STUB-08**: Schneider communication stubs shipped (READ_VAR, WRITE_VAR, SEND_REQ, RCV_REQ)
+- [x] **STUB-09**: Schneider system stubs shipped (GetBit, SetBit, RTC)
 
 ### Shipped Stubs -- Allen Bradley
 
-- [ ] **STUB-10**: AB type-check profile stubs (no OOP, no POINTER TO, no REFERENCE TO, tag-based I/O)
-- [ ] **STUB-11**: AB timer stubs (TONR, TOFR, RTO -- different names from IEC)
-- [ ] **STUB-12**: AB common instructions stubs (ADD, SUB, MUL, DIV, MOV, CMP, EQU, NEQ, GRT, LES, GEQ, LEQ)
+- [x] **STUB-10**: AB type-check profile stubs (no OOP, no POINTER TO, no REFERENCE TO, tag-based I/O)
+- [x] **STUB-11**: AB timer stubs (TONR, TOFR, RTO -- different names from IEC)
+- [x] **STUB-12**: AB common instructions stubs (ADD, SUB, MUL, DIV, MOV, CMP, EQU, NEQ, GRT, LES, GEQ, LEQ)
 
 ### Behavioral Mocks
 
-- [ ] **BMOCK-01**: Shipped behavioral mock for MC_MoveAbsolute (simulates motion with cycle counting)
-- [ ] **BMOCK-02**: Shipped behavioral mock for MC_Power (simulates enable/disable with status)
-- [ ] **BMOCK-03**: Shipped behavioral mock for MC_Home (simulates homing sequence)
-- [ ] **BMOCK-04**: Shipped behavioral mock for MC_Stop (simulates deceleration)
-- [ ] **BMOCK-05**: Shipped behavioral mock for ADSREAD (configurable response data)
+- [x] **BMOCK-01**: Shipped behavioral mock for MC_MoveAbsolute (simulates motion with cycle counting)
+- [x] **BMOCK-02**: Shipped behavioral mock for MC_Power (simulates enable/disable with status)
+- [x] **BMOCK-03**: Shipped behavioral mock for MC_Home (simulates homing sequence)
+- [x] **BMOCK-04**: Shipped behavioral mock for MC_Stop (simulates deceleration)
+- [x] **BMOCK-05**: Shipped behavioral mock for ADSREAD (configurable response data)
 
 ### Test Integration
 
-- [ ] **TEST-08**: `stc test` auto-defines STC_TEST preprocessor symbol
-- [ ] **TEST-09**: `stc sim` auto-defines STC_SIM preprocessor symbol
+- [x] **TEST-08**: `stc test` auto-defines STC_TEST preprocessor symbol
+- [x] **TEST-09**: `stc sim` auto-defines STC_SIM preprocessor symbol
 
 ### Tooling
 
-- [ ] **TOOL-01**: `stc vendor extract <path.plcproj>` extracts FB stubs from TwinCAT project XML files
+- [x] **TOOL-01**: `stc vendor extract <path.plcproj>` extracts FB stubs from TwinCAT project XML files
 
 ## Future Requirements
 
@@ -113,26 +113,26 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 | MOCK-04 | Phase 14 | Complete |
 | MOCK-05 | Phase 14 | Complete |
 | IO-04 | Phase 14 | Complete |
-| STUB-01 | Phase 15 | Pending |
-| STUB-02 | Phase 15 | Pending |
-| STUB-03 | Phase 15 | Pending |
-| STUB-04 | Phase 15 | Pending |
-| STUB-05 | Phase 15 | Pending |
-| STUB-06 | Phase 15 | Pending |
-| STUB-07 | Phase 16 | Pending |
-| STUB-08 | Phase 16 | Pending |
-| STUB-09 | Phase 16 | Pending |
-| STUB-10 | Phase 16 | Pending |
-| STUB-11 | Phase 16 | Pending |
-| STUB-12 | Phase 16 | Pending |
-| BMOCK-01 | Phase 17 | Pending |
-| BMOCK-02 | Phase 17 | Pending |
-| BMOCK-03 | Phase 17 | Pending |
-| BMOCK-04 | Phase 17 | Pending |
-| BMOCK-05 | Phase 17 | Pending |
-| TEST-08 | Phase 18 | Pending |
-| TEST-09 | Phase 18 | Pending |
-| TOOL-01 | Phase 18 | Pending |
+| STUB-01 | Phase 15 | Complete |
+| STUB-02 | Phase 15 | Complete |
+| STUB-03 | Phase 15 | Complete |
+| STUB-04 | Phase 15 | Complete |
+| STUB-05 | Phase 15 | Complete |
+| STUB-06 | Phase 15 | Complete |
+| STUB-07 | Phase 16 | Complete |
+| STUB-08 | Phase 16 | Complete |
+| STUB-09 | Phase 16 | Complete |
+| STUB-10 | Phase 16 | Complete |
+| STUB-11 | Phase 16 | Complete |
+| STUB-12 | Phase 16 | Complete |
+| BMOCK-01 | Phase 17 | Complete |
+| BMOCK-02 | Phase 17 | Complete |
+| BMOCK-03 | Phase 17 | Complete |
+| BMOCK-04 | Phase 17 | Complete |
+| BMOCK-05 | Phase 17 | Complete |
+| TEST-08 | Phase 18 | Complete |
+| TEST-09 | Phase 18 | Complete |
+| TOOL-01 | Phase 18 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 35 total
@@ -141,4 +141,4 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 
 ---
 *Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after roadmap creation*
+*Last updated: 2026-03-30 after phases 15-18 completion*
