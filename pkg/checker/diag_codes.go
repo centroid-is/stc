@@ -35,4 +35,5 @@ const (
 	CodeVendorStringLen = "VEND004" // string length exceeds vendor limit
 	CodeVendor64Bit     = "VEND005" // 64-bit type not supported
 	CodeVendorWString   = "VEND006" // WSTRING not supported
+	CodeCrossVendorLib  = "VEND010" // library appears to be for a different vendor than target
 )

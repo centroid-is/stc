@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 
 	"github.com/centroid-is/stc/pkg/analyzer"
+	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/incremental"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/vendor"
 	"github.com/spf13/cobra"
 )
 
@@ -47,7 +49,9 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	// Try to find and load project config
 	var cfg *project.Config
-	if configPath, err := project.FindConfig("."); err == nil {
+	var configPath string
+	if cp, err := project.FindConfig("."); err == nil {
+		configPath = cp
 		if loaded, err := project.LoadConfig(configPath); err == nil {
 			cfg = loaded
 		}
@@ -61,9 +65,20 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		cfg.Build.VendorTarget = vendorFlag
 	}
 
+	// Load vendor library stubs from configured library paths
+	var libFiles []*ast.SourceFile
+	if cfg != nil && len(cfg.Build.LibraryPaths) > 0 && configPath != "" {
+		projectDir := filepath.Dir(configPath)
+		var err error
+		libFiles, err = vendor.LoadLibraries(cfg, projectDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: loading libraries: %v\n", err)
+		}
+	}
+
 	// Determine cache directory for incremental analysis
 	cacheDir := "."
-	if configPath, _ := project.FindConfig("."); configPath != "" {
+	if configPath != "" {
 		cacheDir = filepath.Dir(configPath)
 	}
 
@@ -75,8 +90,8 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	incrResult := ia.Parse(args)
 	stats := incrResult.Stats
 
-	// Run semantic analysis on all parsed files
-	analysisResult := analyzer.Analyze(incrResult.Files, cfg)
+	// Run semantic analysis on all parsed files (with library stubs if available)
+	analysisResult := analyzer.Analyze(incrResult.Files, cfg, analyzer.AnalyzeOpts{LibraryFiles: libFiles})
 
 	// Combine parse diagnostics with analysis diagnostics
 	allDiags := make([]diag.Diagnostic, 0, len(incrResult.Diags)+len(analysisResult.Diags))
