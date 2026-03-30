@@ -5,7 +5,16 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/iomap"
+	"github.com/centroid-is/stc/pkg/types"
 )
+
+// IOBinding associates a variable name with a parsed I/O address for
+// scan-cycle synchronization between the interpreter env and the IOTable.
+type IOBinding struct {
+	VarName string         // uppercase variable name in env
+	Address iomap.IOAddress
+}
 
 // ScanCycleEngine implements the PLC scan cycle model:
 // read inputs -> execute program body -> write outputs -> advance clock.
@@ -22,6 +31,9 @@ type ScanCycleEngine struct {
 	inputNames  []string // VAR_INPUT variable names (uppercase)
 	outputNames []string // VAR_OUTPUT variable names (uppercase)
 
+	ioTable    *iomap.IOTable // I/O process image table
+	ioBindings []IOBinding    // AT-addressed variable bindings
+
 	initialized bool
 }
 
@@ -33,18 +45,34 @@ func NewScanCycleEngine(program *ast.ProgramDecl) *ScanCycleEngine {
 		program: program,
 		inputs:  make(map[string]Value),
 		outputs: make(map[string]Value),
+		ioTable: iomap.NewIOTable(),
 	}
 }
 
+// IOTable returns the engine's I/O process image table for external access.
+// External code can call SetBit/SetWord etc. to inject test inputs before Tick.
+func (e *ScanCycleEngine) IOTable() *iomap.IOTable {
+	return e.ioTable
+}
+
 // Tick executes one scan cycle with the given time delta:
+//  0. Copy I/O table values into env for AT-bound input/memory variables
 //  1. Copy staged inputs into the program environment
 //  2. Set dt on the interpreter for FB Execute calls
 //  3. Execute the program body
 //  4. Copy VAR_OUTPUT variables from env into the outputs map
-//  5. Advance the virtual clock by dt
+//  5. Copy AT-bound output/memory variables to I/O table
+//  6. Advance the virtual clock by dt
 func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 	if !e.initialized {
 		e.initializeEnv()
+	}
+
+	// 0. Copy I/O table values into env for AT-bound variables (inputs + memory)
+	for _, b := range e.ioBindings {
+		if b.Address.Area == iomap.AreaInput || b.Address.Area == iomap.AreaMemory {
+			e.env.Set(b.VarName, e.readIOValue(b.Address))
+		}
 	}
 
 	// 1. Copy inputs into env
@@ -73,10 +101,48 @@ func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 		}
 	}
 
-	// 5. Advance clock
+	// 5. Copy AT-bound output/memory variables to I/O table
+	for _, b := range e.ioBindings {
+		if b.Address.Area == iomap.AreaOutput || b.Address.Area == iomap.AreaMemory {
+			if v, ok := e.env.Get(b.VarName); ok {
+				e.writeIOValue(b.Address, v)
+			}
+		}
+	}
+
+	// 6. Advance clock
 	e.clock += dt
 
 	return nil
+}
+
+// readIOValue reads a value from the IOTable based on the address size.
+func (e *ScanCycleEngine) readIOValue(addr iomap.IOAddress) Value {
+	switch addr.Size {
+	case iomap.SizeBit:
+		return BoolValue(e.ioTable.GetBit(addr.Area, addr.ByteOffset, addr.BitOffset))
+	case iomap.SizeByte:
+		return Value{Kind: ValInt, Int: int64(e.ioTable.GetByte(addr.Area, addr.ByteOffset)), IECType: types.KindBYTE}
+	case iomap.SizeWord:
+		return Value{Kind: ValInt, Int: int64(e.ioTable.GetWord(addr.Area, addr.ByteOffset)), IECType: types.KindINT}
+	case iomap.SizeDWord:
+		return Value{Kind: ValInt, Int: int64(e.ioTable.GetDWord(addr.Area, addr.ByteOffset)), IECType: types.KindDINT}
+	}
+	return Value{}
+}
+
+// writeIOValue writes a value to the IOTable based on the address size.
+func (e *ScanCycleEngine) writeIOValue(addr iomap.IOAddress, v Value) {
+	switch addr.Size {
+	case iomap.SizeBit:
+		e.ioTable.SetBit(addr.Area, addr.ByteOffset, addr.BitOffset, v.Bool)
+	case iomap.SizeByte:
+		e.ioTable.SetByte(addr.Area, addr.ByteOffset, byte(v.Int))
+	case iomap.SizeWord:
+		e.ioTable.SetWord(addr.Area, addr.ByteOffset, uint16(v.Int))
+	case iomap.SizeDWord:
+		e.ioTable.SetDWord(addr.Area, addr.ByteOffset, uint32(v.Int))
+	}
 }
 
 // SetInput stages an input value to be copied into the program env on the
@@ -171,6 +237,17 @@ func (e *ScanCycleEngine) initializeEnv() {
 					e.inputNames = append(e.inputNames, upper)
 				case ast.VarOutput:
 					e.outputNames = append(e.outputNames, upper)
+				}
+
+				// Register AT address binding if present
+				if vd.AtAddress != nil {
+					addr, err := iomap.ParseAddress(vd.AtAddress.Name)
+					if err == nil && !addr.IsWildcard {
+						e.ioBindings = append(e.ioBindings, IOBinding{
+							VarName: upper,
+							Address: addr,
+						})
+					}
 				}
 			}
 		}
