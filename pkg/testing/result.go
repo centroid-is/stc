@@ -34,6 +34,7 @@ type RunResult struct {
 	Passed   int           `json:"passed"`
 	Failed   int           `json:"failed"`
 	Errors   int           `json:"errors"`
+	Warnings []string      `json:"warnings,omitempty"`
 	Duration time.Duration `json:"duration_ns"`
 }
 

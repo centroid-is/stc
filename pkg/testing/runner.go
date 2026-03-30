@@ -10,8 +10,15 @@ import (
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/interp"
+	"github.com/centroid-is/stc/pkg/iomap"
 	"github.com/centroid-is/stc/pkg/pipeline"
 )
+
+// RunOpts configures mock and library files for the test runner.
+type RunOpts struct {
+	LibraryFiles []*ast.SourceFile
+	MockFiles    []*ast.SourceFile
+}
 
 // DiscoverTestFiles finds all *_test.st files under dir recursively.
 // Returns sorted paths.
@@ -34,7 +41,16 @@ func DiscoverTestFiles(dir string) ([]string, error) {
 }
 
 // Run discovers and executes all *_test.st files in the given directory.
+// This is a backward-compatible wrapper around RunWithOpts.
 func Run(dir string) (*RunResult, error) {
+	return RunWithOpts(dir, RunOpts{})
+}
+
+// RunWithOpts discovers and executes all *_test.st files with mock/library support.
+// LibraryFiles provide declaration-only FBs (stubs). MockFiles provide FB implementations
+// that override library stubs. FBs that are only in library stubs (no mock, no body)
+// produce zero-value outputs and generate fidelity warnings.
+func RunWithOpts(dir string, opts RunOpts) (*RunResult, error) {
 	start := time.Now()
 
 	files, err := DiscoverTestFiles(dir)
@@ -42,10 +58,16 @@ func Run(dir string) (*RunResult, error) {
 		return nil, err
 	}
 
+	// Build external FB context from library and mock files
+	extCtx := buildExternalContext(opts)
+
 	result := &RunResult{}
 
+	// Track auto-stubbed FB types across all files
+	autoStubbed := make(map[string]bool)
+
 	for _, file := range files {
-		suiteResult, err := runFile(file, dir)
+		suiteResult, stubs, err := runFileWithOpts(file, dir, extCtx)
 		if err != nil {
 			return nil, fmt.Errorf("running %s: %w", file, err)
 		}
@@ -60,10 +82,54 @@ func Run(dir string) (*RunResult, error) {
 				result.Failed++
 			}
 		}
+		for name := range stubs {
+			autoStubbed[name] = true
+		}
 	}
+
+	// Generate fidelity warnings for auto-stubbed FBs
+	for name := range autoStubbed {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("auto-stub: FB type '%s' has no mock implementation; outputs are zero-valued", name))
+	}
+	sort.Strings(result.Warnings)
 
 	result.Duration = time.Since(start)
 	return result, nil
+}
+
+// externalContext holds FB declarations from library stubs and mock files.
+type externalContext struct {
+	// libraryFBs maps uppercase FB names to body-less declarations (stubs)
+	libraryFBs map[string]*ast.FunctionBlockDecl
+	// mockFBs maps uppercase FB names to declarations with bodies (mocks)
+	mockFBs map[string]*ast.FunctionBlockDecl
+}
+
+// buildExternalContext extracts FB declarations from library and mock files.
+func buildExternalContext(opts RunOpts) *externalContext {
+	ext := &externalContext{
+		libraryFBs: make(map[string]*ast.FunctionBlockDecl),
+		mockFBs:    make(map[string]*ast.FunctionBlockDecl),
+	}
+
+	for _, f := range opts.LibraryFiles {
+		for _, decl := range f.Declarations {
+			if fb, ok := decl.(*ast.FunctionBlockDecl); ok && fb.Name != nil {
+				ext.libraryFBs[strings.ToUpper(fb.Name.Name)] = fb
+			}
+		}
+	}
+
+	for _, f := range opts.MockFiles {
+		for _, decl := range f.Declarations {
+			if fb, ok := decl.(*ast.FunctionBlockDecl); ok && fb.Name != nil {
+				ext.mockFBs[strings.ToUpper(fb.Name.Name)] = fb
+			}
+		}
+	}
+
+	return ext
 }
 
 // fileContext holds parsed declarations from a test file that are
@@ -80,12 +146,21 @@ type fileContext struct {
 }
 
 // runFile parses a single .st file and executes all TEST_CASE blocks.
+// Kept for backward compatibility -- delegates to runFileWithOpts with no external context.
 func runFile(filePath, baseDir string) (*SuiteResult, error) {
+	suite, _, err := runFileWithOpts(filePath, baseDir, nil)
+	return suite, err
+}
+
+// runFileWithOpts parses a single .st file and executes all TEST_CASE blocks
+// with optional external FB context from library/mock files.
+// Returns the suite result and a set of auto-stubbed FB type names.
+func runFileWithOpts(filePath, baseDir string, extCtx *externalContext) (*SuiteResult, map[string]bool, error) {
 	start := time.Now()
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", filePath, err)
+		return nil, nil, fmt.Errorf("reading %s: %w", filePath, err)
 	}
 
 	parseResult := pipeline.Parse(filePath, string(content), nil)
@@ -122,6 +197,27 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 		}
 	}
 
+	// Merge external context: mock FBs override library stubs, which fill gaps
+	autoStubbed := make(map[string]bool)
+	if extCtx != nil {
+		// First add library stubs for FB types not already declared in test file
+		for name, fbDecl := range extCtx.libraryFBs {
+			if _, exists := ctx.fbDecls[name]; !exists {
+				// Library stub (no body) -- track as auto-stub candidate
+				ctx.fbDecls[name] = fbDecl
+				// If no mock overrides this, it remains auto-stubbed
+				if _, hasMock := extCtx.mockFBs[name]; !hasMock {
+					autoStubbed[fbDecl.Name.Name] = true
+				}
+			}
+		}
+		// Then add/override with mock FBs (these have bodies)
+		for name, fbDecl := range extCtx.mockFBs {
+			ctx.fbDecls[name] = fbDecl
+			delete(autoStubbed, fbDecl.Name.Name) // mock replaces auto-stub
+		}
+	}
+
 	relPath, err := filepath.Rel(baseDir, filePath)
 	if err != nil {
 		relPath = filePath
@@ -137,7 +233,7 @@ func runFile(filePath, baseDir string) (*SuiteResult, error) {
 	}
 
 	suite.Duration = time.Since(start)
-	return suite, nil
+	return suite, autoStubbed, nil
 }
 
 // executeTestCase runs a single TEST_CASE in isolation with its own
@@ -163,6 +259,10 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 		registerUserFunctions(interpreter, ctx)
 		registerEnumTypes(interpreter, ctx)
 	}
+
+	// Register SET_IO and GET_IO for I/O table injection/reading
+	ioTable := iomap.NewIOTable()
+	registerIOFunctions(interpreter, ioTable)
 
 	// Create isolated environment
 	env := interp.NewEnv(nil)
@@ -468,6 +568,60 @@ func parseInt(s string) (int64, error) {
 		}
 	}
 	return n, nil
+}
+
+// parseIOArea converts a string area identifier to an iomap.Area.
+func parseIOArea(s string) (iomap.Area, error) {
+	switch strings.ToUpper(s) {
+	case "I":
+		return iomap.AreaInput, nil
+	case "Q":
+		return iomap.AreaOutput, nil
+	case "M":
+		return iomap.AreaMemory, nil
+	default:
+		return 0, fmt.Errorf("invalid I/O area %q, expected I, Q, or M", s)
+	}
+}
+
+// registerIOFunctions adds SET_IO and GET_IO to the interpreter for test I/O injection.
+func registerIOFunctions(interpreter *interp.Interpreter, ioTable *iomap.IOTable) {
+	interpreter.RegisterFunction("SET_IO", func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
+		// SET_IO(area_str, byte_offset, bit_offset, value)
+		if len(args) < 4 {
+			return interp.Value{}, fmt.Errorf("SET_IO requires 4 arguments (area, byte_offset, bit_offset, value)")
+		}
+		areaStr := args[0].Str
+		byteOff := int(args[1].Int)
+		bitOff := int(args[2].Int)
+		value := args[3].Bool
+
+		area, err := parseIOArea(areaStr)
+		if err != nil {
+			return interp.Value{}, err
+		}
+
+		ioTable.SetBit(area, byteOff, bitOff, value)
+		return interp.BoolValue(true), nil
+	})
+
+	interpreter.RegisterFunction("GET_IO", func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
+		// GET_IO(area_str, byte_offset, bit_offset) -> BOOL
+		if len(args) < 3 {
+			return interp.Value{}, fmt.Errorf("GET_IO requires 3 arguments (area, byte_offset, bit_offset)")
+		}
+		areaStr := args[0].Str
+		byteOff := int(args[1].Int)
+		bitOff := int(args[2].Int)
+
+		area, err := parseIOArea(areaStr)
+		if err != nil {
+			return interp.Value{}, err
+		}
+
+		val := ioTable.GetBit(area, byteOff, bitOff)
+		return interp.BoolValue(val), nil
+	})
 }
 
 // typeNameFromSpec extracts the type name string from an AST TypeSpec.
