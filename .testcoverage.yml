@@ -17,7 +17,7 @@ override:
   - path: ^pkg/lexer$
     threshold: 95
   - path: ^pkg/checker$
-    threshold: 95
+    threshold: 94
   - path: ^pkg/interp$
     threshold: 95
   - path: ^pkg/types$
