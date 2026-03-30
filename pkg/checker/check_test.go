@@ -413,3 +413,154 @@ func TestIfConditionType(t *testing.T) {
 	}
 	assert.True(t, found, "expected type error for non-BOOL IF condition")
 }
+
+// --- AT address validation tests ---
+
+func TestATAddressValidInProgram(t *testing.T) {
+	src := `PROGRAM P
+VAR
+    x AT %IX0.0 : BOOL;
+END_VAR
+END_PROGRAM`
+	allDiags := runChecker(src)
+	for _, d := range allDiags {
+		if d.Severity == diag.Error || d.Code == CodeATNotAllowedHere {
+			t.Errorf("unexpected diagnostic for AT in PROGRAM: %s (code=%s)", d.Message, d.Code)
+		}
+	}
+}
+
+func TestATAddressNotAllowedInFunctionBlock(t *testing.T) {
+	src := `FUNCTION_BLOCK FB_Test
+VAR
+    x AT %IX0.0 : BOOL;
+END_VAR
+END_FUNCTION_BLOCK`
+	allDiags := runChecker(src)
+	found := false
+	for _, d := range allDiags {
+		if d.Code == CodeATNotAllowedHere {
+			found = true
+			assert.Contains(t, d.Message, "FUNCTION_BLOCK")
+		}
+	}
+	assert.True(t, found, "expected ATNotAllowedHere warning for AT in FUNCTION_BLOCK")
+}
+
+func TestATAddressNotAllowedInFunction(t *testing.T) {
+	src := `FUNCTION F : INT
+VAR
+    x AT %IX0.0 : BOOL;
+END_VAR
+    F := 0;
+END_FUNCTION`
+	allDiags := runChecker(src)
+	found := false
+	for _, d := range allDiags {
+		if d.Code == CodeATNotAllowedHere {
+			found = true
+			assert.Contains(t, d.Message, "FUNCTION")
+		}
+	}
+	assert.True(t, found, "expected ATNotAllowedHere warning for AT in FUNCTION")
+}
+
+func TestATAddressInvalidFormat(t *testing.T) {
+	src := `PROGRAM P
+VAR
+    x AT %ZZ0 : BOOL;
+END_VAR
+END_PROGRAM`
+	allDiags := runChecker(src)
+	found := false
+	for _, d := range allDiags {
+		if d.Code == CodeInvalidATAddress {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected InvalidATAddress error for %%ZZ0")
+}
+
+func TestATOverlapWordAndBit(t *testing.T) {
+	// %IW0 covers bytes 0-1, %IX0.3 touches byte 0 -- should overlap
+	src := `PROGRAM P
+VAR
+    a AT %IW0 : INT;
+    b AT %IX0.3 : BOOL;
+END_VAR
+END_PROGRAM`
+	allDiags := runChecker(src)
+	found := false
+	for _, d := range allDiags {
+		if d.Code == CodeATOverlap {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected ATOverlap warning for %%IW0 and %%IX0.3")
+}
+
+func TestATNoOverlapAdjacent(t *testing.T) {
+	// %IW0 covers bytes 0-1, %IW2 covers bytes 2-3 -- adjacent, no overlap
+	src := `PROGRAM P
+VAR
+    a AT %IW0 : INT;
+    b AT %IW2 : INT;
+END_VAR
+END_PROGRAM`
+	allDiags := runChecker(src)
+	for _, d := range allDiags {
+		if d.Code == CodeATOverlap {
+			t.Errorf("unexpected overlap warning for adjacent addresses: %s", d.Message)
+		}
+	}
+}
+
+func TestATOverlapDWordAndWord(t *testing.T) {
+	// %ID0 covers bytes 0-3, %IW2 covers bytes 2-3 -- should overlap
+	src := `PROGRAM P
+VAR
+    a AT %ID0 : DINT;
+    b AT %IW2 : INT;
+END_VAR
+END_PROGRAM`
+	allDiags := runChecker(src)
+	found := false
+	for _, d := range allDiags {
+		if d.Code == CodeATOverlap {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected ATOverlap warning for %%ID0 and %%IW2")
+}
+
+func TestATNoOverlapDifferentAreas(t *testing.T) {
+	// %IW0 (input) and %QW0 (output) -- different areas, no overlap
+	src := `PROGRAM P
+VAR
+    a AT %IW0 : INT;
+    b AT %QW0 : INT;
+END_VAR
+END_PROGRAM`
+	allDiags := runChecker(src)
+	for _, d := range allDiags {
+		if d.Code == CodeATOverlap {
+			t.Errorf("unexpected overlap warning for different areas: %s", d.Message)
+		}
+	}
+}
+
+func TestATWildcardNoOverlap(t *testing.T) {
+	// Wildcard addresses should not produce overlap warnings
+	src := `PROGRAM P
+VAR
+    a AT %I* : BOOL;
+    b AT %IX0.0 : BOOL;
+END_VAR
+END_PROGRAM`
+	allDiags := runChecker(src)
+	for _, d := range allDiags {
+		if d.Code == CodeATOverlap {
+			t.Errorf("unexpected overlap warning with wildcard: %s", d.Message)
+		}
+	}
+}
