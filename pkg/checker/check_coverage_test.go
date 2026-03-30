@@ -852,7 +852,7 @@ func TestResolverProgramNilName(t *testing.T) {
 	table := symbols.NewTable()
 	diags := diag.NewCollector()
 	r := NewResolver(table, diags)
-	r.resolveProgram(&ast.ProgramDecl{Name: nil})
+	r.resolveProgram(&ast.ProgramDecl{Name: nil}, false)
 	assert.False(t, diags.HasErrors())
 }
 
@@ -860,7 +860,7 @@ func TestResolverFunctionBlockNilName(t *testing.T) {
 	table := symbols.NewTable()
 	diags := diag.NewCollector()
 	r := NewResolver(table, diags)
-	r.resolveFunctionBlock(&ast.FunctionBlockDecl{Name: nil})
+	r.resolveFunctionBlock(&ast.FunctionBlockDecl{Name: nil}, false)
 	assert.False(t, diags.HasErrors())
 }
 
@@ -868,7 +868,7 @@ func TestResolverFunctionNilName(t *testing.T) {
 	table := symbols.NewTable()
 	diags := diag.NewCollector()
 	r := NewResolver(table, diags)
-	r.resolveFunction(&ast.FunctionDecl{Name: nil})
+	r.resolveFunction(&ast.FunctionDecl{Name: nil}, false)
 	assert.False(t, diags.HasErrors())
 }
 
@@ -876,7 +876,7 @@ func TestResolverTypeDeclNilName(t *testing.T) {
 	table := symbols.NewTable()
 	diags := diag.NewCollector()
 	r := NewResolver(table, diags)
-	r.resolveTypeDecl(&ast.TypeDecl{Name: nil})
+	r.resolveTypeDecl(&ast.TypeDecl{Name: nil}, false)
 	assert.False(t, diags.HasErrors())
 }
 
@@ -884,7 +884,7 @@ func TestResolverInterfaceNilName(t *testing.T) {
 	table := symbols.NewTable()
 	diags := diag.NewCollector()
 	r := NewResolver(table, diags)
-	r.resolveInterface(&ast.InterfaceDecl{Name: nil})
+	r.resolveInterface(&ast.InterfaceDecl{Name: nil}, false)
 	assert.False(t, diags.HasErrors())
 }
 

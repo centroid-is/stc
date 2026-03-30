@@ -79,6 +79,22 @@ func (t *Table) LookupPOU(name string) *Scope {
 	return t.pous[strings.ToUpper(name)]
 }
 
+// RemovePOU removes a POU from the global scope and POU registry.
+// Used when user code overrides a library symbol.
+func (t *Table) RemovePOU(name string) {
+	key := strings.ToUpper(name)
+	t.global.Delete(name)
+	delete(t.pous, key)
+	// Remove child scope
+	filtered := t.global.Children[:0]
+	for _, child := range t.global.Children {
+		if strings.ToUpper(child.Name) != key {
+			filtered = append(filtered, child)
+		}
+	}
+	t.global.Children = filtered
+}
+
 // LookupGlobal looks up a symbol in the global scope only (case-insensitive).
 // Returns nil if not found.
 func (t *Table) LookupGlobal(name string) *Symbol {

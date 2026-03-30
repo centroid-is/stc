@@ -87,6 +87,17 @@ func (s *Scope) LookupLocal(name string) *Symbol {
 	return s.symbols[strings.ToUpper(name)]
 }
 
+// Delete removes a symbol from this scope by name (case-insensitive).
+// Returns true if the symbol was found and removed, false otherwise.
+func (s *Scope) Delete(name string) bool {
+	key := strings.ToUpper(name)
+	if _, ok := s.symbols[key]; ok {
+		delete(s.symbols, key)
+		return true
+	}
+	return false
+}
+
 // Symbols returns all symbols defined in this scope.
 // Useful for iterating over symbols for unused variable detection.
 func (s *Scope) Symbols() []*Symbol {

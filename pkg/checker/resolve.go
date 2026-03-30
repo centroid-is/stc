@@ -8,6 +8,14 @@ import (
 	"github.com/centroid-is/stc/pkg/types"
 )
 
+// ResolveOpts provides optional configuration for CollectDeclarations.
+type ResolveOpts struct {
+	// LibraryFiles are parsed library stub files that are registered before
+	// user code. Symbols from library files are marked with IsLibrary=true
+	// and can be overridden by user code without redeclaration errors.
+	LibraryFiles []*ast.SourceFile
+}
+
 // Resolver performs Pass 1 of semantic analysis: collecting all
 // declarations into the symbol table before any body is type-checked.
 // This ensures forward references between POUs work correctly.
@@ -22,27 +30,44 @@ func NewResolver(table *symbols.Table, diags *diag.Collector) *Resolver {
 }
 
 // CollectDeclarations walks all source files and registers POU declarations,
-// type declarations, and their variables in the symbol table.
-func (r *Resolver) CollectDeclarations(files []*ast.SourceFile) {
+// type declarations, and their variables in the symbol table. The variadic
+// opts parameter preserves backward compatibility -- existing callers pass
+// no opts. When opts are provided, LibraryFiles are registered first with
+// IsLibrary=true, before user code is processed.
+func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveOpts) {
+	// Register library files first (if provided)
+	if len(opts) > 0 && opts[0].LibraryFiles != nil {
+		for _, libFile := range opts[0].LibraryFiles {
+			r.collectFileDeclarations(libFile, true)
+		}
+	}
+
+	// Register user files
 	for _, file := range files {
-		for _, decl := range file.Declarations {
-			switch d := decl.(type) {
-			case *ast.ProgramDecl:
-				r.resolveProgram(d)
-			case *ast.FunctionBlockDecl:
-				r.resolveFunctionBlock(d)
-			case *ast.FunctionDecl:
-				r.resolveFunction(d)
-			case *ast.TypeDecl:
-				r.resolveTypeDecl(d)
-			case *ast.InterfaceDecl:
-				r.resolveInterface(d)
-			}
+		r.collectFileDeclarations(file, false)
+	}
+}
+
+// collectFileDeclarations processes a single source file's declarations.
+// When isLibrary is true, symbols are marked with IsLibrary=true.
+func (r *Resolver) collectFileDeclarations(file *ast.SourceFile, isLibrary bool) {
+	for _, decl := range file.Declarations {
+		switch d := decl.(type) {
+		case *ast.ProgramDecl:
+			r.resolveProgram(d, isLibrary)
+		case *ast.FunctionBlockDecl:
+			r.resolveFunctionBlock(d, isLibrary)
+		case *ast.FunctionDecl:
+			r.resolveFunction(d, isLibrary)
+		case *ast.TypeDecl:
+			r.resolveTypeDecl(d, isLibrary)
+		case *ast.InterfaceDecl:
+			r.resolveInterface(d, isLibrary)
 		}
 	}
 }
 
-func (r *Resolver) resolveProgram(d *ast.ProgramDecl) {
+func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 	if d.Name == nil {
 		return
 	}
@@ -51,9 +76,18 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl) {
 
 	// Check for redeclaration
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		r.diags.Errorf(pos, CodeRedeclared,
-			"redeclaration of %q (previously declared at %s)", name, existing.Pos)
-		return
+		if isLibrary && existing.IsLibrary {
+			// Duplicate library symbol -- silently ignore (first library wins)
+			return
+		}
+		if !isLibrary && existing.IsLibrary {
+			// User code overrides library symbol -- remove library entry
+			r.table.RemovePOU(name)
+		} else {
+			r.diags.Errorf(pos, CodeRedeclared,
+				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
+			return
+		}
 	}
 
 	pouScope := r.table.RegisterPOU(name, symbols.KindProgram, pos)
@@ -61,12 +95,13 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl) {
 	// Set type on the global symbol
 	if sym := r.table.LookupGlobal(name); sym != nil {
 		sym.Type = &types.FunctionBlockType{Name: name}
+		sym.IsLibrary = isLibrary
 	}
 
 	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
 }
 
-func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl) {
+func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool) {
 	if d.Name == nil {
 		return
 	}
@@ -74,9 +109,18 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		r.diags.Errorf(pos, CodeRedeclared,
-			"redeclaration of %q (previously declared at %s)", name, existing.Pos)
-		return
+		if isLibrary && existing.IsLibrary {
+			// Duplicate library symbol -- silently ignore (first library wins)
+			return
+		}
+		if !isLibrary && existing.IsLibrary {
+			// User code overrides library symbol -- remove library entry
+			r.table.RemovePOU(name)
+		} else {
+			r.diags.Errorf(pos, CodeRedeclared,
+				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
+			return
+		}
 	}
 
 	pouScope := r.table.RegisterPOU(name, symbols.KindFunctionBlock, pos)
@@ -113,10 +157,11 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl) {
 	// Set type on the global symbol
 	if sym := r.table.LookupGlobal(name); sym != nil {
 		sym.Type = fbType
+		sym.IsLibrary = isLibrary
 	}
 }
 
-func (r *Resolver) resolveFunction(d *ast.FunctionDecl) {
+func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 	if d.Name == nil {
 		return
 	}
@@ -124,9 +169,16 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		r.diags.Errorf(pos, CodeRedeclared,
-			"redeclaration of %q (previously declared at %s)", name, existing.Pos)
-		return
+		if isLibrary && existing.IsLibrary {
+			return
+		}
+		if !isLibrary && existing.IsLibrary {
+			r.table.RemovePOU(name)
+		} else {
+			r.diags.Errorf(pos, CodeRedeclared,
+				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
+			return
+		}
 	}
 
 	pouScope := r.table.RegisterPOU(name, symbols.KindFunction, pos)
@@ -170,10 +222,11 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl) {
 	// Set type on the global symbol
 	if sym := r.table.LookupGlobal(name); sym != nil {
 		sym.Type = fnType
+		sym.IsLibrary = isLibrary
 	}
 }
 
-func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl) {
+func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 	if d.Name == nil {
 		return
 	}
@@ -181,9 +234,16 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		r.diags.Errorf(pos, CodeRedeclared,
-			"redeclaration of %q (previously declared at %s)", name, existing.Pos)
-		return
+		if isLibrary && existing.IsLibrary {
+			return
+		}
+		if !isLibrary && existing.IsLibrary {
+			r.table.GlobalScope().Delete(name)
+		} else {
+			r.diags.Errorf(pos, CodeRedeclared,
+				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
+			return
+		}
 	}
 
 	resolvedType := r.resolveTypeSpec(d.Type)
@@ -198,10 +258,11 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl) {
 	}
 
 	sym := &symbols.Symbol{
-		Name: name,
-		Kind: symbols.KindType,
-		Pos:  pos,
-		Type: resolvedType,
+		Name:      name,
+		Kind:      symbols.KindType,
+		Pos:       pos,
+		Type:      resolvedType,
+		IsLibrary: isLibrary,
 	}
 	_ = r.table.GlobalScope().Insert(sym)
 
@@ -219,7 +280,7 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl) {
 	}
 }
 
-func (r *Resolver) resolveInterface(d *ast.InterfaceDecl) {
+func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
 	if d.Name == nil {
 		return
 	}
@@ -227,15 +288,23 @@ func (r *Resolver) resolveInterface(d *ast.InterfaceDecl) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		r.diags.Errorf(pos, CodeRedeclared,
-			"redeclaration of %q (previously declared at %s)", name, existing.Pos)
-		return
+		if isLibrary && existing.IsLibrary {
+			return
+		}
+		if !isLibrary && existing.IsLibrary {
+			r.table.GlobalScope().Delete(name)
+		} else {
+			r.diags.Errorf(pos, CodeRedeclared,
+				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
+			return
+		}
 	}
 
 	sym := &symbols.Symbol{
-		Name: name,
-		Kind: symbols.KindInterface,
-		Pos:  pos,
+		Name:      name,
+		Kind:      symbols.KindInterface,
+		Pos:       pos,
+		IsLibrary: isLibrary,
 	}
 	_ = r.table.GlobalScope().Insert(sym)
 }
