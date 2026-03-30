@@ -12,8 +12,8 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 - [x] **VLIB-01**: User can declare vendor FBs in .st stub files (declarations without bodies) and reference them from production code
 - [x] **VLIB-02**: User configures library paths via `[build.library_paths]` in stc.toml
 - [x] **VLIB-03**: `stc check` resolves vendor FB types from stubs and validates input/output parameter usage
-- [ ] **VLIB-04**: LSP provides completion, hover, and go-to-definition for vendor FB inputs and outputs
-- [ ] **VLIB-05**: Single-vendor enforcement -- project targets one vendor, stubs from other vendors produce warnings
+- [x] **VLIB-04**: LSP provides completion, hover, and go-to-definition for vendor FB inputs and outputs
+- [x] **VLIB-05**: Single-vendor enforcement -- project targets one vendor, stubs from other vendors produce warnings
 
 ### I/O Address Mapping
 
@@ -105,8 +105,8 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 | VLIB-01 | Phase 13 | Complete |
 | VLIB-02 | Phase 13 | Complete |
 | VLIB-03 | Phase 13 | Complete |
-| VLIB-04 | Phase 13 | Pending |
-| VLIB-05 | Phase 13 | Pending |
+| VLIB-04 | Phase 13 | Complete |
+| VLIB-05 | Phase 13 | Complete |
 | MOCK-01 | Phase 14 | Pending |
 | MOCK-02 | Phase 14 | Pending |
 | MOCK-03 | Phase 14 | Pending |
