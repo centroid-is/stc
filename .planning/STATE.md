@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vendor Libraries & I/O
-status: ready_to_plan
-stopped_at: Roadmap created for v1.1
-last_updated: "2026-03-30"
+status: executing
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-03-30T10:53:02.974Z"
 last_activity: 2026-03-30
 progress:
-  total_phases: 7
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 18
+  completed_phases: 11
+  total_plans: 34
+  completed_plans: 33
   percent: 0
 ---
 
@@ -21,25 +21,27 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 12 -- I/O Address Parser & Table
+**Current focus:** Phase 12 — io-address-parser-table
 
 ## Current Position
 
-Phase: 12 of 18 (I/O Address Parser & Table)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-30 -- v1.1 roadmap created
+Phase: 12 (io-address-parser-table) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-30
 
 Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 32 (v1.0)
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0)
 
 **Recent Trend (last 5 plans from v1.0):**
+
 - Phase 10 P01: 228s, Phase 10 P02: 287s, Phase 11 P01: 256s, Phase 11 P02: 174s
 - Trend: Stable
 
@@ -57,6 +59,7 @@ Recent decisions affecting current work:
 - [v1.1 Research]: Stub files are hand-written .st declarations (TypeScript .d.ts analogy), NOT parsed from .library
 - [v1.1 Research]: TcPOU XML extraction is a convenience tool, not the primary stub path
 - [v1.1 Research]: AB stubs written as IEC 61131-3 FUNCTION_BLOCKs for checker, emitter handles AOI translation later
+- [Phase 12]: IOTable is pure byte-level storage with no interp.Value dependency
 
 ### Pending Todos
 
@@ -69,6 +72,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30
-Stopped at: v1.1 roadmap created, ready to plan Phase 12
+Last session: 2026-03-30T10:53:02.972Z
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
