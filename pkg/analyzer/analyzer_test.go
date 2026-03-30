@@ -134,6 +134,114 @@ func TestAnalyzeWithVendor(t *testing.T) {
 	}
 }
 
+func TestAnalyzeWithLibraryFiles(t *testing.T) {
+	// Library stub declaring a function block
+	libSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Axis : INT;
+    Position : REAL;
+    Velocity : REAL;
+    Execute : BOOL;
+END_VAR
+VAR_OUTPUT
+    Done : BOOL;
+    Busy : BOOL;
+    Error : BOOL;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	libResult := parser.Parse("lib/mc2.st", libSrc)
+	require.NotNil(t, libResult.File)
+
+	// User code that references the library FB
+	userSrc := `PROGRAM Main
+VAR
+    mover : MC_MoveAbsolute;
+    startMove : BOOL;
+END_VAR
+    mover(Execute := startMove, Position := 100.0, Velocity := 50.0);
+    IF mover.Done THEN
+        startMove := FALSE;
+    END_IF
+END_PROGRAM
+`
+	userResult := parser.Parse("main.st", userSrc)
+	require.NotNil(t, userResult.File)
+
+	analysis := Analyze(
+		[]*ast.SourceFile{userResult.File},
+		nil,
+		AnalyzeOpts{LibraryFiles: []*ast.SourceFile{libResult.File}},
+	)
+
+	errors := countErrors(analysis.Diags)
+	assert.Equal(t, 0, errors,
+		"user code referencing library FB should have 0 errors, got diags: %v", analysis.Diags)
+}
+
+func TestAnalyzeWithLibraryFilesWrongParam(t *testing.T) {
+	// Library stub
+	libSrc := `FUNCTION_BLOCK MC_MoveAbsolute
+VAR_INPUT
+    Execute : BOOL;
+    Position : REAL;
+END_VAR
+END_FUNCTION_BLOCK
+`
+	libResult := parser.Parse("lib/mc2.st", libSrc)
+	require.NotNil(t, libResult.File)
+
+	// User code with wrong parameter name
+	userSrc := `PROGRAM Main
+VAR
+    mover : MC_MoveAbsolute;
+END_VAR
+    mover(Execut := TRUE);
+END_PROGRAM
+`
+	userResult := parser.Parse("main.st", userSrc)
+	require.NotNil(t, userResult.File)
+
+	analysis := Analyze(
+		[]*ast.SourceFile{userResult.File},
+		nil,
+		AnalyzeOpts{LibraryFiles: []*ast.SourceFile{libResult.File}},
+	)
+
+	errors := countErrors(analysis.Diags)
+	assert.Greater(t, errors, 0,
+		"wrong parameter name should produce at least 1 error, got diags: %v", analysis.Diags)
+}
+
+func TestAnalyzeCrossVendorWarning(t *testing.T) {
+	userSrc := `PROGRAM Main
+VAR
+    x : INT;
+END_VAR
+    x := 42;
+END_PROGRAM
+`
+	userResult := parser.Parse("main.st", userSrc)
+	require.NotNil(t, userResult.File)
+
+	cfg := &project.Config{
+		Build: project.BuildConfig{
+			VendorTarget: "schneider",
+			LibraryPaths: map[string]string{
+				"beckhoff_tc2_mc2": "/some/path",
+			},
+		},
+	}
+
+	analysis := Analyze(
+		[]*ast.SourceFile{userResult.File},
+		cfg,
+	)
+
+	assert.True(t, hasDiagCode(analysis.Diags, "VEND010"),
+		"cross-vendor library should produce VEND010 warning, got diags: %v", analysis.Diags)
+}
+
 func TestAnalyzeNilConfig(t *testing.T) {
 	src := `PROGRAM Main
 VAR
