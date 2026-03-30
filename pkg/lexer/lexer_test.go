@@ -308,3 +308,47 @@ func TestTokenize_TriviaPreservation(t *testing.T) {
 		}
 	}
 }
+
+func TestDirectAddr_SingleTokens(t *testing.T) {
+	tests := []struct {
+		input string
+		text  string
+	}{
+		{"%IX0.0", "%IX0.0"},
+		{"%QW4", "%QW4"},
+		{"%MD12", "%MD12"},
+		{"%I*", "%I*"},
+		{"%QB0", "%QB0"},
+		{"%I0.0", "%I0.0"},
+		{"%ix0.0", "%ix0.0"},
+		{"%IB10", "%IB10"},
+		{"%QD100", "%QD100"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			tokens := Tokenize("test.st", tt.input)
+			sig := nonTrivia(tokens)
+			// Should have DirectAddr + EOF
+			require.True(t, len(sig) >= 1, "expected at least 1 non-trivia token")
+			assert.Equal(t, DirectAddr, sig[0].Kind, "expected DirectAddr token")
+			assert.Equal(t, tt.text, sig[0].Text, "token text mismatch")
+		})
+	}
+}
+
+func TestDirectAddr_ATContext(t *testing.T) {
+	input := "x AT %IX0.0 : BOOL"
+	tokens := Tokenize("test.st", input)
+	sig := nonTrivia(tokens)
+
+	// Expected: Ident("x"), KwAt, DirectAddr("%IX0.0"), Colon, KwBool, EOF
+	require.True(t, len(sig) >= 5, "expected at least 5 non-trivia tokens, got %d", len(sig))
+	assert.Equal(t, Ident, sig[0].Kind)
+	assert.Equal(t, "x", sig[0].Text)
+	assert.Equal(t, KwAt, sig[1].Kind)
+	assert.Equal(t, DirectAddr, sig[2].Kind)
+	assert.Equal(t, "%IX0.0", sig[2].Text)
+	assert.Equal(t, Colon, sig[3].Kind)
+	assert.Equal(t, KwBool, sig[4].Kind)
+}

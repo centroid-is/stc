@@ -446,8 +446,65 @@ func (l *Lexer) scanOperator(start Pos) Token {
 		return l.makeToken(Hash, start)
 	case '&':
 		return l.makeToken(Ampersand, start)
+	case '%':
+		return l.scanDirectAddr(start)
 	}
 
+	return l.makeToken(Illegal, start)
+}
+
+// scanDirectAddr scans a direct address literal starting with %.
+// Forms: %IX0.0, %QW4, %MD12, %I*, %I0.0 (optional X), case-insensitive.
+func (l *Lexer) scanDirectAddr(start Pos) Token {
+	// '%' was already consumed by scanOperator via advance()
+	// Check area letter
+	if l.atEnd() {
+		return l.makeToken(Illegal, start)
+	}
+	ch := l.peek()
+	upper := ch
+	if upper >= 'a' && upper <= 'z' {
+		upper -= 32
+	}
+	if upper != 'I' && upper != 'Q' && upper != 'M' {
+		return l.makeToken(Illegal, start)
+	}
+	l.advance() // consume area letter
+
+	// Optional size letter
+	if !l.atEnd() {
+		ch = l.peek()
+		upper = ch
+		if upper >= 'a' && upper <= 'z' {
+			upper -= 32
+		}
+		if upper == 'X' || upper == 'B' || upper == 'W' || upper == 'D' {
+			l.advance() // consume size letter
+		}
+	}
+
+	// Wildcard
+	if !l.atEnd() && l.peek() == '*' {
+		l.advance()
+		return l.makeToken(DirectAddr, start)
+	}
+
+	// Digits (byte offset)
+	if !l.atEnd() && isDigit(l.peek()) {
+		for !l.atEnd() && isDigit(l.peek()) {
+			l.advance()
+		}
+		// Optional dot + bit offset
+		if !l.atEnd() && l.peek() == '.' && l.pos+1 < len(l.src) && isDigit(l.src[l.pos+1]) {
+			l.advance() // consume dot
+			for !l.atEnd() && isDigit(l.peek()) {
+				l.advance()
+			}
+		}
+		return l.makeToken(DirectAddr, start)
+	}
+
+	// If we got here with no digits and no wildcard, it's incomplete
 	return l.makeToken(Illegal, start)
 }
 

@@ -176,6 +176,9 @@ const (
 	// Testing keywords
 	KwTestCase
 	KwEndTestCase
+
+	// Direct address literal (e.g., %IX0.0, %QW4, %MD12, %I*)
+	DirectAddr
 )
 
 var tokenKindNames = [...]string{
@@ -327,6 +330,8 @@ var tokenKindNames = [...]string{
 
 	KwTestCase:    "KwTestCase",
 	KwEndTestCase: "KwEndTestCase",
+
+	DirectAddr: "DirectAddr",
 }
 
 // String returns the human-readable name of a TokenKind.

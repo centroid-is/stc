@@ -122,7 +122,7 @@ func (p *Parser) parseVarDecl() *ast.VarDecl {
 	var atAddress *ast.Ident
 	if p.match(lexer.KwAt) {
 		// Address looks like %IX0.0 — lexer produces it as an identifier or special token
-		if p.at(lexer.Ident) {
+		if p.at(lexer.Ident) || p.at(lexer.DirectAddr) {
 			tok := p.advance()
 			atAddress = makeIdent(tok)
 		}
