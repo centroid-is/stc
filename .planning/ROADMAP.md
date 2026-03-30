@@ -252,7 +252,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
+- [x] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
 - [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
 
 ### Phase 14: Mock Framework
@@ -349,7 +349,7 @@ Phases execute in numeric order: 12 -> 13 -> 14 -> 15/16 (parallel) -> 17 -> 18
 | 10. Incremental Compilation | v1.0 | 2/2 | Complete | 2026-03-28 |
 | 11. MCP Server & Claude Code Skills | v1.0 | 2/2 | Complete | 2026-03-28 |
 | 12. I/O Address Parser & Table | v1.1 | 2/2 | Complete    | 2026-03-30 |
-| 13. Vendor Stub Loading | v1.1 | 0/2 | In progress | - |
+| 13. Vendor Stub Loading | v1.1 | 1/2 | In Progress|  |
 | 14. Mock Framework | v1.1 | 0/0 | Not started | - |
 | 15. Shipped Stubs -- Beckhoff | v1.1 | 0/0 | Not started | - |
 | 16. Shipped Stubs -- Schneider & AB | v1.1 | 0/0 | Not started | - |
