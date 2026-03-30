@@ -249,7 +249,11 @@ Plans:
   3. `stc check` validates input/output parameter usage against stub signatures -- wrong parameter names or types produce errors
   4. LSP provides completion, hover, and go-to-definition for vendor FB inputs and outputs loaded from stubs
   5. When project targets one vendor, stubs from other vendors produce warnings about cross-vendor usage
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
+- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
 
 ### Phase 14: Mock Framework
 **Goal**: Users can test ST code that depends on vendor FBs by writing ST mock implementations or relying on auto-generated zero-value stubs
@@ -261,7 +265,11 @@ Plans:
   3. Vendor FBs without explicit mocks auto-generate zero-value instances that accept inputs and return zeros, with fidelity warnings in test output
   4. Mock FB signatures are validated against stub signatures -- parameter count or type mismatches produce errors before test execution
   5. Tests can inject I/O values into the mock I/O table before assertions to simulate sensor inputs and verify actuator outputs
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
+- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
 
 ### Phase 15: Shipped Stubs -- Beckhoff
 **Goal**: Users targeting Beckhoff TwinCAT can immediately type-check code using common Beckhoff libraries without writing their own stubs
@@ -272,7 +280,11 @@ Plans:
   2. User can reference ADSREAD, ADSWRITE, FB_FileOpen, FB_FileClose, and other Tc2_System FBs with correct type checking
   3. Common types (AXIS_REF, MC_Direction, T_AmsNetId, T_AmsPort, E_OpenPath) resolve correctly when used as FB parameters
   4. Example GVL stubs for EtherCAT terminal I/O patterns are documented and usable as templates for users' own I/O declarations
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
+- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
 
 ### Phase 16: Shipped Stubs -- Schneider & Allen Bradley
 **Goal**: Users targeting Schneider or Allen Bradley can type-check code using common vendor FBs without writing their own stubs
@@ -283,7 +295,11 @@ Plans:
   2. User can reference Schneider communication FBs (READ_VAR, WRITE_VAR, SEND_REQ, RCV_REQ) and system FBs (GetBit, SetBit, RTC)
   3. AB type-check profile restricts code to AB-compatible subset -- no OOP, no POINTER TO, no REFERENCE TO, tag-based I/O patterns
   4. AB timer stubs (TONR, TOFR, RTO) and common instruction stubs (ADD, SUB, MUL, DIV, MOV, CMP, EQU, NEQ, GRT, LES, GEQ, LEQ) type-check correctly
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
+- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
 
 ### Phase 17: Behavioral Mocks
 **Goal**: Users can run realistic simulations of motion control code using shipped behavioral mocks that simulate multi-cycle FB execution
@@ -294,7 +310,11 @@ Plans:
   2. MC_Power mock simulates enable/disable with Status output, MC_Home simulates homing sequence, MC_Stop simulates deceleration
   3. ADSREAD mock returns configurable response data so users can test communication handling logic
   4. All behavioral mocks are pure ST files that users can inspect, modify, or use as templates for their own behavioral mocks
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
+- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
 
 ### Phase 18: Auto-Defines & TcPOU Extractor
 **Goal**: Users get automatic preprocessor symbols during test/sim and can extract FB stubs from existing TwinCAT projects
@@ -304,7 +324,11 @@ Plans:
   1. When running `stc test`, the STC_TEST preprocessor symbol is automatically defined so users can conditionally compile test-only code paths
   2. When running `stc sim`, the STC_SIM preprocessor symbol is automatically defined so users can conditionally compile simulation-only code paths
   3. User can run `stc vendor extract <path.plcproj>` on a TwinCAT project file and get .st stub files extracted from TcPOU XML declarations
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Vendor loader, Symbol IsLibrary flag, resolver library support
+- [ ] 13-02-PLAN.md -- Analyzer/CLI/LSP integration, single-vendor enforcement
 
 ## Progress
 
@@ -325,7 +349,7 @@ Phases execute in numeric order: 12 -> 13 -> 14 -> 15/16 (parallel) -> 17 -> 18
 | 10. Incremental Compilation | v1.0 | 2/2 | Complete | 2026-03-28 |
 | 11. MCP Server & Claude Code Skills | v1.0 | 2/2 | Complete | 2026-03-28 |
 | 12. I/O Address Parser & Table | v1.1 | 2/2 | Complete    | 2026-03-30 |
-| 13. Vendor Stub Loading | v1.1 | 0/0 | Not started | - |
+| 13. Vendor Stub Loading | v1.1 | 0/2 | In progress | - |
 | 14. Mock Framework | v1.1 | 0/0 | Not started | - |
 | 15. Shipped Stubs -- Beckhoff | v1.1 | 0/0 | Not started | - |
 | 16. Shipped Stubs -- Schneider & AB | v1.1 | 0/0 | Not started | - |
