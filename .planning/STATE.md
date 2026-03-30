@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: verifying
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-03-28T21:33:11.470Z"
-last_activity: 2026-03-28
+milestone: v1.1
+milestone_name: Vendor Libraries & I/O
+status: ready_to_plan
+stopped_at: Roadmap created for v1.1
+last_updated: "2026-03-30"
+last_activity: 2026-03-30
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 32
-  completed_plans: 32
+  total_phases: 7
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
   percent: 0
 ---
 
@@ -18,72 +18,32 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-26)
+See: .planning/PROJECT.md (updated 2026-03-30)
 
-**Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor — no hardware required for development and testing.
-**Current focus:** Phase 11 — mcp-server-claude-code-skills
+**Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
+**Current focus:** Phase 12 -- I/O Address Parser & Table
 
 ## Current Position
 
-Phase: 11
+Phase: 12 of 18 (I/O Address Parser & Table)
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-03-28
+Status: Ready to plan
+Last activity: 2026-03-30 -- v1.1 roadmap created
 
 Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
+- Total plans completed: 32 (v1.0)
+- Average duration: ~4.5 min
+- Total execution time: ~2.4 hours (v1.0)
 
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
+**Recent Trend (last 5 plans from v1.0):**
+- Phase 10 P01: 228s, Phase 10 P02: 287s, Phase 11 P01: 256s, Phase 11 P02: 174s
+- Trend: Stable
 
 *Updated after each plan completion*
-| Phase 01 P01 | 2min | 2 tasks | 14 files |
-| Phase 01 P02 | 5min | 2 tasks | 10 files |
-| Phase 01 P03 | 271s | 2 tasks | 9 files |
-| Phase 01 P04 | 7min | 2 tasks | 17 files |
-| Phase 01 P05 | 2min | 2 tasks | 11 files |
-| Phase 02-01 P01 | 3min | 2 tasks | 5 files |
-| Phase 02-preprocessor P02 | 2min | 2 tasks | 7 files |
-| Phase 03 P02 | 219s | 2 tasks | 5 files |
-| Phase 03 P01 | 4min | 2 tasks | 6 files |
-| Phase 03 P04 | 260s | 2 tasks | 7 files |
-| Phase 03 P03 | 634s | 2 tasks | 12 files |
-| Phase 03 P05 | 236s | 2 tasks | 9 files |
-| Phase 04 P01 | 5min | 2 tasks | 7 files |
-| Phase 04 P03 | 361s | 2 tasks | 6 files |
-| Phase 04 P02 | 6min | 2 tasks | 6 files |
-| Phase 04 P04 | 412s | 2 tasks | 14 files |
-| Phase 05 P01 | 278s | 2 tasks | 10 files |
-| Phase 05 P02 | 391s | 2 tasks | 15 files |
-| Phase 06 P01 | 228s | 2 tasks | 4 files |
-| Phase 06 P02 | 318s | 2 tasks | 9 files |
-| Phase 07 P01 | 309s | 2 tasks | 3 files |
-| Phase 07 P02 | 126s | 1 tasks | 6 files |
-| Phase 08 P02 | 272s | 2 tasks | 9 files |
-| Phase 08 P01 | 10min | 2 tasks | 7 files |
-| Phase 08 P03 | 313s | 2 tasks | 5 files |
-| Phase 09 P01 | 5min | 2 tasks | 10 files |
-| Phase 09 P03 | 229s | 2 tasks | 9 files |
-| Phase 09 P02 | 188s | 2 tasks | 8 files |
-| Phase 10 P01 | 228s | 2 tasks | 6 files |
-| Phase 10 P02 | 287s | 2 tasks | 4 files |
-| Phase 11 P02 | 174s | 2 tasks | 6 files |
-| Phase 11 P01 | 256s | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -92,78 +52,11 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Init]: Interpreter only — no C++ transpiler, ever
-- [Init]: No PLCopen XML — vendor interop through preprocessor ifdefs and ST re-emission
-- [Init]: Go language, MIT license
-- [Init]: Beckhoff + Schneider first, Allen Bradley deferred to v2
-- [Init]: GitHub-first — all work via PRs, CI on macOS/Windows/Linux, agent PR reviews
-- [Phase 01]: Go 1.22 minimum in go.mod; Pos uses 1-based line/col; Diagnostic format file:line:col: severity: message
-- [Phase 01]: Local Pos/Span types in ast package to avoid circular imports with future source package
-- [Phase 01]: JSON marshaling via centralized nodeToMap dispatch with kind discriminator on every node
-- [Phase 01]: Lexer-local Pos/Span types mirroring ast.Pos/Span to avoid circular imports
-- [Phase 01]: Time/date and typed literal prefixes scanned as compound tokens with # and value
-- [Phase 01]: ErrorNode implements all marker interfaces for universal error recovery
-- [Phase 01]: METHOD modifiers accepted both before and after keyword for CODESYS dialect compatibility
-- [Phase 01]: Pratt parser with 8 IEC 61131-3 precedence levels including right-associative ** operator
-- [Phase 01]: Cobra CLI with persistent --format flag; stub subcommands return exit 0; binary integration tests via TestMain
-- [Phase 02-01]: Line-based preprocessing with stack-based IF nesting for IEC 61131-3 directives
-- [Phase 02-01]: Diagnostic codes: PP001 (ERROR), PP002 (unmatched), PP003 (unclosed IF)
-- [Phase 02-01]: Source map per-line mappings sufficient for ST line-based directives
-- [Phase 02-preprocessor]: StringSlice for --define flag supports multiple defines per invocation
-- [Phase 02-preprocessor]: JSON output includes source_map array and diagnostics for tool integration
-- [Phase 03]: Type stored as any in Symbol to avoid circular import between symbols and types packages
-- [Phase 03]: Scope keys normalized with strings.ToUpper for IEC 61131-3 case-insensitive identifiers
-- [Phase 03]: IEC-strict widening only: LINT->LREAL rejected (precision loss)
-- [Phase 03]: GenericConstraint as func(TypeKind) bool on Parameter for ANY_* validation
-- [Phase 03]: Vendor diagnostic codes shared via diag_codes.go, not duplicated per file
-- [Phase 03]: Interface variables (VAR_INPUT/OUTPUT/IN_OUT/GLOBAL/EXTERNAL) excluded from unused warnings
-- [Phase 03]: Integer literals (DINT) compatible with any integer target; real literals (LREAL) compatible with any real target
-- [Phase 03]: Resolver uses POU scope directly (bypassing scope stack) for Pass 1 variable registration
-- [Phase 03]: Analyzer facade sequences passes: resolve -> check -> usage -> vendor (vendor only if config present)
-- [Phase 03]: CLI check exits 1 on errors only; warnings alone produce exit 0
-- [Phase 04]: Tagged union Value with IECType tracks precise IEC type through runtime
-- [Phase 04]: Control flow (RETURN/EXIT/CONTINUE) uses typed error values for stack unwinding
-- [Phase 04]: Power (**) always returns real via math.Pow per IEC EXPT semantics
-- [Phase 04]: StdlibFunctions as package-level map populated via init() for simple function registration
-- [Phase 04]: IEC 1-based string indexing with goIdx = iecPos - 1 conversion; FIND returns 0 for not-found
-- [Phase 04]: REAL_TO_INT uses math.RoundToEven for IEC-standard banker's rounding
-- [Phase 04]: FBRef field changed from any to *FBInstance for type safety
-- [Phase 04]: ScanCycleEngine lazy-initializes env on first Tick, not at construction
-- [Phase 04]: GetMember resolves outputs first then inputs matching PLC convention
-- [Phase 04]: Parser lookahead for named-arg FB calls: isNamedArgCall checks ident := or ident => after LParen
-- [Phase 05]: LocalFunctions per-interpreter dispatch for test isolation (avoids global StdlibFunctions mutation)
-- [Phase 05]: Assertions return BoolValue(true) always, recording failures on collector instead of aborting
-- [Phase 05]: Position-aware LocalFunctions signature: func(args []Value, pos ast.Pos) for source position propagation
-- [Phase 05]: Expression-statement support: nil Value in AssignStmt evaluates Target for side effects (assertion calls)
-- [Phase 05]: Export thin wrappers (ExecStatements, EvalExpr, SetDt, ZeroFromTypeSpec) for cross-package interpreter access
-- [Phase 05]: Import testing package as stctesting alias to avoid Go testing collision
-- [Phase 06]: WaveformGenerator is stateless pure function of t; PlantModel.Update uses map[string]interp.Value matching ScanCycleEngine conventions
-- [Phase 06]: Plant outputs feed back as inputs on NEXT cycle matching real PLC scan behavior
-- [Phase 06]: Value.MarshalJSON produces native JSON types for clean simulation output
-- [Phase 07]: Type-switch emission (not visitor) for AST-to-ST emission clarity
-- [Phase 07]: Vendor filtering at VarDecl level: skip declarations with unsupported types
-- [Phase 07]: Canonical 4-space indent, uppercase keywords for round-trip stability
-- [Phase 07]: Default emit target is portable (safest cross-vendor subset)
-- [Phase 08]: LINT0xx diagnostic code prefix for all lint rules (distinct from SEMA/VEND)
-- [Phase 08]: Lint warnings exit 0, parse errors exit 1 (consistent with stc check)
-- [Phase 08]: PascalCase naming regex allows underscore-separated segments (FB_Motor style)
-- [Phase 08]: Formatter reuses emitter pattern without vendor filtering - formats ALL constructs
-- [Phase 08]: Body indentation: indent++ before body, indent-- after in all POU types
-- [Phase 08]: Comment preservation via trivia emission ready, awaits parser trivia support
-- [Phase 08]: Post-parse trivia attachment via offset-to-node mapping rather than inline during parsing
-- [Phase 08]: Trailing trivia detection by same-line check against previous non-trivia token end position
-- [Phase 08]: Formatter buffer capture for statement trailing trivia insertion before final newline
-- [Phase 09]: GLSP v0.2.2 for LSP protocol handling; Full document sync mode; Parse+analyze on every change
-- [Phase 09]: Heuristic: assume first IF branch active, gray ELSE/ELSIF blocks without knowing defines
-- [Phase 09]: Use comment token type for inactive regions (universal editor graying)
-- [Phase 09]: TextMate grammar with case-insensitive (?i) flag on all keyword patterns
-- [Phase 09]: Position-based AST lookup with span containment for symbol navigation
-- [Phase 10]: SHA-256 for content hashing; disk index stores hashes only, ASTs in memory per invocation; case-insensitive POU matching via ToUpper
-- [Phase 10]: IncrementalAnalyzer.Parse returns files+stats; caller runs semantic analysis (avoids import cycle)
-- [Phase 10]: LSP cross-file analysis: all open documents analyzed together with shared AnalysisResult
-- [Phase 11]: Skills are self-contained markdown files with no cross-skill dependencies
-- [Phase 11]: MCP tool handlers as testable package-level functions separate from transport registration
-- [Phase 11]: google/jsonschema-go tags use description-only text format
+- [v1.0]: All v1.0 decisions remain valid (see STATE.md archive)
+- [v1.1 Research]: IOTable uses three flat byte arrays (%I, %Q, %M) per IEC 61131-3 standard
+- [v1.1 Research]: Stub files are hand-written .st declarations (TypeScript .d.ts analogy), NOT parsed from .library
+- [v1.1 Research]: TcPOU XML extraction is a convenience tool, not the primary stub path
+- [v1.1 Research]: AB stubs written as IEC 61131-3 FUNCTION_BLOCKs for checker, emitter handles AOI translation later
 
 ### Pending Todos
 
@@ -171,12 +64,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Research]: GLSP (`tliron/glsp`) last updated March 2024 — validate before Phase 9 commitment
-- [Research]: Two-pass type inference for IEC ANY hierarchy is the hardest technical problem — budget extra time in Phase 3
-- [Research]: TwinCAT `.TcPOU` file format not publicly documented — may need reverse engineering in Phase 7
+- [Research]: Schneider-specific FB signatures (READ_VAR, WRITE_VAR parameter details) need verification when writing stubs
+- [Research]: AB timer instruction semantics (TONR vs TON differences) need verification when writing AB stubs
 
 ## Session Continuity
 
-Last session: 2026-03-28T21:29:45.061Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-03-30
+Stopped at: v1.1 roadmap created, ready to plan Phase 12
 Resume file: None

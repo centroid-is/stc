@@ -1,7 +1,7 @@
-# Requirements: STC v1.1 — Vendor Libraries & I/O
+# Requirements: STC v1.1 -- Vendor Libraries & I/O
 
 **Defined:** 2026-03-30
-**Core Value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor — no hardware required for development and testing.
+**Core Value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
 
 ## v1.1 Requirements
 
@@ -13,7 +13,7 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 - [ ] **VLIB-02**: User configures library paths via `[build.library_paths]` in stc.toml
 - [ ] **VLIB-03**: `stc check` resolves vendor FB types from stubs and validates input/output parameter usage
 - [ ] **VLIB-04**: LSP provides completion, hover, and go-to-definition for vendor FB inputs and outputs
-- [ ] **VLIB-05**: Single-vendor enforcement — project targets one vendor, stubs from other vendors produce warnings
+- [ ] **VLIB-05**: Single-vendor enforcement -- project targets one vendor, stubs from other vendors produce warnings
 
 ### I/O Address Mapping
 
@@ -31,7 +31,7 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 - [ ] **MOCK-04**: Mock signatures validated against stub signatures (parameter count and types must match)
 - [ ] **MOCK-05**: Zero-value auto-stubs emit fidelity warnings in test output
 
-### Shipped Stubs — Beckhoff
+### Shipped Stubs -- Beckhoff
 
 - [ ] **STUB-01**: Tc2_MC2 stubs shipped (MC_Power, MC_MoveAbsolute, MC_MoveRelative, MC_MoveVelocity, MC_Stop, MC_Home, MC_Reset, MC_ReadActualPosition, MC_ReadActualVelocity, MC_ReadStatus)
 - [ ] **STUB-02**: Tc2_System stubs shipped (ADSREAD, ADSWRITE, FB_FileOpen, FB_FileClose, FB_FileRead, FB_FileWrite, MEMCPY, MEMSET, MEMMOVE)
@@ -40,16 +40,16 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 - [ ] **STUB-05**: Common types shipped (AXIS_REF, MC_Direction, T_AmsNetId, T_AmsPort, E_OpenPath)
 - [ ] **STUB-06**: Common EtherCAT terminal I/O patterns documented with example GVL stubs
 
-### Shipped Stubs — Schneider
+### Shipped Stubs -- Schneider
 
 - [ ] **STUB-07**: Schneider motion stubs shipped (MC_Power, MC_MoveAbsolute, MC_Stop with Schneider-specific parameters)
 - [ ] **STUB-08**: Schneider communication stubs shipped (READ_VAR, WRITE_VAR, SEND_REQ, RCV_REQ)
 - [ ] **STUB-09**: Schneider system stubs shipped (GetBit, SetBit, RTC)
 
-### Shipped Stubs — Allen Bradley
+### Shipped Stubs -- Allen Bradley
 
 - [ ] **STUB-10**: AB type-check profile stubs (no OOP, no POINTER TO, no REFERENCE TO, tag-based I/O)
-- [ ] **STUB-11**: AB timer stubs (TONR, TOFR, RTO — different names from IEC)
+- [ ] **STUB-11**: AB timer stubs (TONR, TOFR, RTO -- different names from IEC)
 - [ ] **STUB-12**: AB common instructions stubs (ADD, SUB, MUL, DIV, MOV, CMP, EQU, NEQ, GRT, LES, GEQ, LEQ)
 
 ### Behavioral Mocks
@@ -87,24 +87,58 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 
 | Feature | Reason |
 |---------|--------|
-| EtherCAT PDO configuration | Exists outside ST code — hardware config, not compiler |
+| EtherCAT PDO configuration | Exists outside ST code -- hardware config, not compiler |
 | Distributed clocks | EtherCAT infrastructure, not compilable |
 | Beckhoff .library parsing | Proprietary binary format, undocumented |
 | AB emission in v1.1 | Dialect differences too deep for this milestone; type-checking only |
 | VAR_CONFIG remapping | Complex feature, defer to v2 |
-| Tc3_JsonXml stubs | Requires METHOD declarations in stubs — needs design work |
+| Tc3_JsonXml stubs | Requires METHOD declarations in stubs -- needs design work |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| IO-01 | Phase 12 | Pending |
+| IO-02 | Phase 12 | Pending |
+| IO-03 | Phase 12 | Pending |
+| IO-05 | Phase 12 | Pending |
+| VLIB-01 | Phase 13 | Pending |
+| VLIB-02 | Phase 13 | Pending |
+| VLIB-03 | Phase 13 | Pending |
+| VLIB-04 | Phase 13 | Pending |
+| VLIB-05 | Phase 13 | Pending |
+| MOCK-01 | Phase 14 | Pending |
+| MOCK-02 | Phase 14 | Pending |
+| MOCK-03 | Phase 14 | Pending |
+| MOCK-04 | Phase 14 | Pending |
+| MOCK-05 | Phase 14 | Pending |
+| IO-04 | Phase 14 | Pending |
+| STUB-01 | Phase 15 | Pending |
+| STUB-02 | Phase 15 | Pending |
+| STUB-03 | Phase 15 | Pending |
+| STUB-04 | Phase 15 | Pending |
+| STUB-05 | Phase 15 | Pending |
+| STUB-06 | Phase 15 | Pending |
+| STUB-07 | Phase 16 | Pending |
+| STUB-08 | Phase 16 | Pending |
+| STUB-09 | Phase 16 | Pending |
+| STUB-10 | Phase 16 | Pending |
+| STUB-11 | Phase 16 | Pending |
+| STUB-12 | Phase 16 | Pending |
+| BMOCK-01 | Phase 17 | Pending |
+| BMOCK-02 | Phase 17 | Pending |
+| BMOCK-03 | Phase 17 | Pending |
+| BMOCK-04 | Phase 17 | Pending |
+| BMOCK-05 | Phase 17 | Pending |
+| TEST-08 | Phase 18 | Pending |
+| TEST-09 | Phase 18 | Pending |
+| TOOL-01 | Phase 18 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 31 total
-- Mapped to phases: 0
-- Unmapped: 31
+- v1.1 requirements: 35 total
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after initial definition*
+*Last updated: 2026-03-30 after roadmap creation*
