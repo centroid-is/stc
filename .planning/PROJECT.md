@@ -28,6 +28,17 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 - MCP server with 6 tool handlers — v1.0
 - Claude Code skills for ST workflows — v1.0
 
+## Current Milestone: v1.1 Vendor Libraries & I/O
+
+**Goal:** Enable stc to type-check, test, and simulate code that uses vendor-specific function blocks and hardware I/O, with a mockable framework for host-based testing.
+
+**Target features:**
+- Vendor library stub loading from .st declaration files
+- ST-based mock framework for testing with vendor FBs
+- I/O address mapping (%I*, %Q*, %M*) with mock I/O table
+- Shipped starter stubs: Beckhoff, Schneider, Allen Bradley
+- Auto-define STC_TEST/STC_SIM preprocessor symbols
+
 ## Current State
 
 **v1.0 shipped** — 2026-03-28
