@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vendor Libraries & I/O
-status: executing
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-03-30T10:53:02.974Z"
+status: verifying
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-03-30T11:24:39.632Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 18
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 34
-  completed_plans: 33
+  completed_plans: 34
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 Phase: 12 (io-address-parser-table) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-30
 
 Progress: [░░░░░░░░░░] 0%
@@ -60,6 +60,7 @@ Recent decisions affecting current work:
 - [v1.1 Research]: TcPOU XML extraction is a convenience tool, not the primary stub path
 - [v1.1 Research]: AB stubs written as IEC 61131-3 FUNCTION_BLOCKs for checker, emitter handles AOI translation later
 - [Phase 12]: IOTable is pure byte-level storage with no interp.Value dependency
+- [Phase 12]: AT-bound input vars synced before staged inputs in Tick for test override flexibility
 
 ### Pending Todos
 
@@ -72,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T10:53:02.972Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-03-30T11:24:39.630Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None

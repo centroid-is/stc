@@ -19,9 +19,9 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 
 - [x] **IO-01**: Parser handles AT %IX0.0, %QX0.0, %IW0, %QW0, %MW0, %MD0 address syntax in VAR blocks
 - [x] **IO-02**: Interpreter maintains a mock I/O table mapping addresses to values
-- [ ] **IO-03**: I/O values sync at scan cycle boundaries (inputs copied before execution, outputs copied after)
+- [x] **IO-03**: I/O values sync at scan cycle boundaries (inputs copied before execution, outputs copied after)
 - [ ] **IO-04**: Tests can inject I/O values via the mock I/O table before assertions
-- [ ] **IO-05**: Address overlap detection warns when byte and bit addresses conflict
+- [x] **IO-05**: Address overlap detection warns when byte and bit addresses conflict
 
 ### Mock Framework
 
@@ -100,8 +100,8 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 |-------------|-------|--------|
 | IO-01 | Phase 12 | Complete |
 | IO-02 | Phase 12 | Complete |
-| IO-03 | Phase 12 | Pending |
-| IO-05 | Phase 12 | Pending |
+| IO-03 | Phase 12 | Complete |
+| IO-05 | Phase 12 | Complete |
 | VLIB-01 | Phase 13 | Pending |
 | VLIB-02 | Phase 13 | Pending |
 | VLIB-03 | Phase 13 | Pending |
