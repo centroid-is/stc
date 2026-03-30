@@ -11,6 +11,7 @@ import (
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/parser"
 	"github.com/centroid-is/stc/pkg/pipeline"
+	"github.com/centroid-is/stc/pkg/project"
 )
 
 // Document represents an open text document with its current content,
@@ -25,8 +26,10 @@ type Document struct {
 
 // DocumentStore manages open documents with thread-safe access.
 type DocumentStore struct {
-	mu   sync.RWMutex
-	docs map[string]*Document
+	mu           sync.RWMutex
+	docs         map[string]*Document
+	libraryFiles []*ast.SourceFile
+	libCfg       *project.Config
 }
 
 // NewDocumentStore creates a new empty document store.
@@ -34,6 +37,16 @@ func NewDocumentStore() *DocumentStore {
 	return &DocumentStore{
 		docs: make(map[string]*Document),
 	}
+}
+
+// SetLibraryFiles configures vendor library stub files and project config
+// for use during analysis. Library FB symbols will be available for
+// completion, hover, and go-to-definition.
+func (s *DocumentStore) SetLibraryFiles(files []*ast.SourceFile, cfg *project.Config) {
+	s.mu.Lock()
+	s.libraryFiles = files
+	s.libCfg = cfg
+	s.mu.Unlock()
 }
 
 // Open adds a new document to the store and triggers parsing and analysis.
@@ -113,7 +126,7 @@ func (s *DocumentStore) analyzeDocument(doc *Document) {
 		allFiles = append(allFiles, result.File)
 	}
 
-	analysisResult := analyzer.Analyze(allFiles, nil)
+	analysisResult := analyzer.Analyze(allFiles, s.libCfg, analyzer.AnalyzeOpts{LibraryFiles: s.libraryFiles})
 
 	// Store full analysis result on all open documents so cross-file
 	// features (go-to-def, hover) work across files

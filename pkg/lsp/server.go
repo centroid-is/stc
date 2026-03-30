@@ -1,6 +1,10 @@
 package lsp
 
 import (
+	"path/filepath"
+
+	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/vendor"
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"github.com/tliron/glsp/server"
@@ -104,6 +108,22 @@ func NewServer() *server.Server {
 		if err != nil {
 			return result, err
 		}
+
+		// Load vendor library stubs from project config if workspace root is available
+		if params.RootURI != nil {
+			rootPath := uriToFilename(string(*params.RootURI))
+			if configPath, err := project.FindConfig(rootPath); err == nil {
+				if cfg, err := project.LoadConfig(configPath); err == nil {
+					if len(cfg.Build.LibraryPaths) > 0 {
+						projectDir := filepath.Dir(configPath)
+						if libFiles, err := vendor.LoadLibraries(cfg, projectDir); err == nil && len(libFiles) > 0 {
+							store.SetLibraryFiles(libFiles, cfg)
+						}
+					}
+				}
+			}
+		}
+
 		if initResult, ok := result.(protocol.InitializeResult); ok {
 			initResult.Capabilities.SemanticTokensProvider = &protocol.SemanticTokensOptions{
 				Legend: semanticTokensLegend,
