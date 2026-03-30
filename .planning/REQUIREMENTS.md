@@ -25,10 +25,10 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 
 ### Mock Framework
 
-- [ ] **MOCK-01**: User can write ST mock FBs with full bodies that override vendor stubs by name
-- [ ] **MOCK-02**: Mock paths configured via `[test.mock_paths]` in stc.toml
-- [ ] **MOCK-03**: FBs without explicit mocks auto-generate zero-value instances (accept inputs, return zeros)
-- [ ] **MOCK-04**: Mock signatures validated against stub signatures (parameter count and types must match)
+- [x] **MOCK-01**: User can write ST mock FBs with full bodies that override vendor stubs by name
+- [x] **MOCK-02**: Mock paths configured via `[test.mock_paths]` in stc.toml
+- [x] **MOCK-03**: FBs without explicit mocks auto-generate zero-value instances (accept inputs, return zeros)
+- [x] **MOCK-04**: Mock signatures validated against stub signatures (parameter count and types must match)
 - [ ] **MOCK-05**: Zero-value auto-stubs emit fidelity warnings in test output
 
 ### Shipped Stubs -- Beckhoff
@@ -107,10 +107,10 @@ Requirements for vendor library support, I/O mapping, and mock framework.
 | VLIB-03 | Phase 13 | Complete |
 | VLIB-04 | Phase 13 | Complete |
 | VLIB-05 | Phase 13 | Complete |
-| MOCK-01 | Phase 14 | Pending |
-| MOCK-02 | Phase 14 | Pending |
-| MOCK-03 | Phase 14 | Pending |
-| MOCK-04 | Phase 14 | Pending |
+| MOCK-01 | Phase 14 | Complete |
+| MOCK-02 | Phase 14 | Complete |
+| MOCK-03 | Phase 14 | Complete |
+| MOCK-04 | Phase 14 | Complete |
 | MOCK-05 | Phase 14 | Pending |
 | IO-04 | Phase 14 | Pending |
 | STUB-01 | Phase 15 | Pending |

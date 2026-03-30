@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vendor Libraries & I/O
-status: verifying
-stopped_at: Completed 13-02-PLAN.md
-last_updated: "2026-03-30T11:49:39.275Z"
+status: executing
+stopped_at: Completed 14-01-PLAN.md
+last_updated: "2026-03-30T11:59:32.211Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 18
   completed_phases: 13
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 38
+  completed_plans: 37
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 13 — vendor-stub-loading
+**Current focus:** Phase 14 — mock-framework
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 14 (mock-framework) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-30
 
 Progress: [░░░░░░░░░░] 0%
@@ -65,6 +65,7 @@ Recent decisions affecting current work:
 - [Phase 13]: First-library-wins deduplication for duplicate vendor FB names; user code silently overrides library symbols
 - [Phase 13]: Variadic AnalyzeOpts pattern preserves backward compatibility for all existing Analyze callers
 - [Phase 13]: Cross-vendor detection uses string-contains heuristic on library path keys (VEND010)
+- [Phase 14]: Mock symbols registered with isLibrary=false so they override library stubs as real implementations
 
 ### Pending Todos
 
@@ -77,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T11:46:37.348Z
-Stopped at: Completed 13-02-PLAN.md
+Last session: 2026-03-30T11:59:32.208Z
+Stopped at: Completed 14-01-PLAN.md
 Resume file: None
