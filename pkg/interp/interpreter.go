@@ -39,6 +39,11 @@ type Interpreter struct {
 	// used as an array element or struct member resolves to the right shape
 	// instead of falling back to an INT zero.
 	TypeDecls map[string]ast.TypeSpec
+
+	// FBDecls maps uppercase user-defined function block names to their
+	// declarations. FB instantiation consults this so that an FB-typed VAR
+	// inside another FB is created as a live nested instance.
+	FBDecls map[string]*ast.FunctionBlockDecl
 }
 
 // TypeResolverFunc returns a TypeResolver backed by the interpreter's
@@ -931,7 +936,9 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 	}
 
 	// Execute the FB
-	fbInst.Execute(interp.dt, interp)
+	if err := fbInst.Execute(interp.dt, interp); err != nil {
+		return err
+	}
 
 	// Copy output args back (=> bindings)
 	for _, arg := range s.Args {

@@ -23,12 +23,50 @@ func registerConvertFunctions() {
 		}
 	}
 
-	// DINT_TO_LREAL -- integer to LREAL
-	StdlibFunctions["DINT_TO_LREAL"] = func(args []Value) (Value, error) {
-		if len(args) < 1 {
-			return Value{}, &RuntimeError{Msg: "DINT_TO_LREAL requires 1 argument"}
+	// DINT_TO_LREAL, UDINT_TO_LREAL -- integer to LREAL
+	for _, name := range []string{"DINT_TO_LREAL", "UDINT_TO_LREAL"} {
+		StdlibFunctions[name] = func(args []Value) (Value, error) {
+			if len(args) < 1 {
+				return Value{}, &RuntimeError{Msg: "conversion requires 1 argument"}
+			}
+			return Value{Kind: ValReal, Real: float64(args[0].Int), IECType: types.KindLREAL}, nil
 		}
-		return Value{Kind: ValReal, Real: float64(args[0].Int), IECType: types.KindLREAL}, nil
+	}
+
+	// UDINT_TO_REAL, UINT_TO_REAL -- unsigned integer to REAL
+	for _, name := range []string{"UDINT_TO_REAL", "UINT_TO_REAL", "USINT_TO_REAL"} {
+		StdlibFunctions[name] = func(args []Value) (Value, error) {
+			if len(args) < 1 {
+				return Value{}, &RuntimeError{Msg: "conversion requires 1 argument"}
+			}
+			return Value{Kind: ValReal, Real: float64(args[0].Int), IECType: types.KindREAL}, nil
+		}
+	}
+
+	// REAL_TO_LREAL -- widening float conversion (same float64 backing)
+	StdlibFunctions["REAL_TO_LREAL"] = func(args []Value) (Value, error) {
+		if len(args) < 1 {
+			return Value{}, &RuntimeError{Msg: "REAL_TO_LREAL requires 1 argument"}
+		}
+		return Value{Kind: ValReal, Real: args[0].Real, IECType: types.KindLREAL}, nil
+	}
+
+	// LREAL_TO_REAL -- narrowing float conversion (same float64 backing;
+	// true single-precision truncation is not modelled)
+	StdlibFunctions["LREAL_TO_REAL"] = func(args []Value) (Value, error) {
+		if len(args) < 1 {
+			return Value{}, &RuntimeError{Msg: "LREAL_TO_REAL requires 1 argument"}
+		}
+		return Value{Kind: ValReal, Real: args[0].Real, IECType: types.KindREAL}, nil
+	}
+
+	// TIME_TO_REAL -- duration in milliseconds as REAL, matching TwinCAT
+	// semantics (TIME resolution is 1 ms).
+	StdlibFunctions["TIME_TO_REAL"] = func(args []Value) (Value, error) {
+		if len(args) < 1 {
+			return Value{}, &RuntimeError{Msg: "TIME_TO_REAL requires 1 argument"}
+		}
+		return Value{Kind: ValReal, Real: float64(args[0].Time.Milliseconds()), IECType: types.KindREAL}, nil
 	}
 
 	// REAL_TO_INT, LREAL_TO_DINT -- float to integer with banker's rounding
@@ -50,13 +88,22 @@ func registerConvertFunctions() {
 		}
 	}
 
-	// INT_TO_DINT, DINT_TO_INT -- integer width changes (same backing int64)
+	// INT_TO_DINT, DINT_TO_INT, ... -- integer width/sign changes (same
+	// backing int64; overflow wrapping is not modelled)
 	for _, entry := range []struct {
 		name    string
 		iecType types.TypeKind
 	}{
 		{"INT_TO_DINT", types.KindDINT},
 		{"DINT_TO_INT", types.KindINT},
+		{"INT_TO_UDINT", types.KindUDINT},
+		{"UDINT_TO_INT", types.KindINT},
+		{"UDINT_TO_DINT", types.KindDINT},
+		{"DINT_TO_UDINT", types.KindUDINT},
+		{"UINT_TO_UDINT", types.KindUDINT},
+		{"UDINT_TO_UINT", types.KindUINT},
+		{"UINT_TO_INT", types.KindINT},
+		{"INT_TO_UINT", types.KindUINT},
 	} {
 		iecType := entry.iecType
 		StdlibFunctions[entry.name] = func(args []Value) (Value, error) {

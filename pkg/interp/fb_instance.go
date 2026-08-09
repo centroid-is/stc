@@ -42,7 +42,19 @@ type FBInstance struct {
 // NewUserFBInstance creates an FBInstance for a user-defined function block.
 // It initializes a new Env with all variables from the declaration's VarBlocks,
 // using zero values based on type names. The env persists across Execute calls.
+//
+// A VAR whose type is itself a function block -- stdlib (TON, R_TRIG, ...) or
+// user-defined via the interpreter's FBDecls registry -- is instantiated
+// recursively, so FB composition works at any depth.
 func NewUserFBInstance(name string, decl *ast.FunctionBlockDecl, interp *Interpreter, parentEnv *Env) *FBInstance {
+	return newUserFBInstanceDepth(name, decl, interp, parentEnv, 0)
+}
+
+// maxFBNestDepth bounds recursive FB instantiation. IEC 61131-3 forbids an FB
+// containing itself, but a registry cycle must not hang the interpreter.
+const maxFBNestDepth = 32
+
+func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *Interpreter, parentEnv *Env, depth int) *FBInstance {
 	env := NewEnv(parentEnv)
 	inst := &FBInstance{
 		TypeName: name,
@@ -54,17 +66,39 @@ func NewUserFBInstance(name string, decl *ast.FunctionBlockDecl, interp *Interpr
 	resolve := interp.TypeResolverFunc()
 	for _, vb := range decl.VarBlocks {
 		for _, vd := range vb.Declarations {
-			// Resolve zero value from the type name
-			val := zeroFromTypeSpecWith(vd.Type, resolve, 0)
-
-			// If there is an init value, try to evaluate it
-			if vd.InitValue != nil && interp != nil {
-				if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-					val = iv
+			// FB-typed member: instantiate rather than zero-fill. One shared
+			// value must never be defined for several names, so instantiate
+			// per name below.
+			typeName := typeNameFromSpec(vd.Type)
+			upperType := strings.ToUpper(typeName)
+			isStdlibFB := false
+			var nestedDecl *ast.FunctionBlockDecl
+			if typeName != "" && depth < maxFBNestDepth {
+				if _, ok := StdlibFBFactory[upperType]; ok {
+					isStdlibFB = true
+				} else if interp != nil && interp.FBDecls != nil {
+					nestedDecl = interp.FBDecls[upperType]
 				}
 			}
 
 			for _, n := range vd.Names {
+				var val Value
+				switch {
+				case isStdlibFB:
+					val = MakeFBInstanceValue(typeName, StdlibFBFactory[upperType]())
+				case nestedDecl != nil:
+					nested := newUserFBInstanceDepth(typeName, nestedDecl, interp, env, depth+1)
+					val = Value{Kind: ValFBInstance, FBRef: nested}
+				default:
+					val = zeroFromTypeSpecWith(vd.Type, resolve, 0)
+					// If there is an init value, try to evaluate it
+					if vd.InitValue != nil && interp != nil {
+						if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
+							val = iv
+						}
+					}
+				}
+
 				env.Define(n.Name, val)
 				upper := strings.ToUpper(n.Name)
 				switch vb.Section {
@@ -82,23 +116,26 @@ func NewUserFBInstance(name string, decl *ast.FunctionBlockDecl, interp *Interpr
 
 // Execute runs one execution cycle of the FB instance.
 // For stdlib FBs, it delegates to the StandardFB.Execute method.
-// For user-defined FBs, it executes the body statements against the persistent env.
-func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) {
+// For user-defined FBs, it executes the body statements against the persistent
+// env. A runtime error in the body is returned to the caller -- swallowing it
+// would leave outputs stale and turn the bug into a silent wrong value.
+func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) error {
 	if inst.FB != nil {
 		inst.FB.Execute(dt)
-		return
+		return nil
 	}
 	// User-defined FB: execute body statements
 	if interp != nil && inst.Decl != nil && inst.Env != nil {
 		err := interp.execStatements(inst.Env, inst.Decl.Body)
-		// Swallow ErrReturn (normal FB termination)
 		if err != nil {
-			if _, ok := err.(*ErrReturn); !ok {
-				// In the future we could propagate this error, but for now
-				// FB execution errors are silently swallowed to match PLC behavior
+			// ErrReturn is normal FB termination
+			if _, ok := err.(*ErrReturn); ok {
+				return nil
 			}
+			return err
 		}
 	}
+	return nil
 }
 
 // SetInput sets an input value on the FB instance.

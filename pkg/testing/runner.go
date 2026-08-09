@@ -537,14 +537,20 @@ func validateImplements(fbDecl *ast.FunctionBlockDecl, ctx *fileContext) []strin
 // they appear -- including as an array element type or a struct member type,
 // which the top-level lookup in initializeTestEnv does not cover.
 func registerTypeDecls(interpreter *interp.Interpreter, ctx *fileContext) {
-	if len(ctx.typeDecls) == 0 {
-		return
+	if len(ctx.typeDecls) > 0 {
+		decls := make(map[string]ast.TypeSpec, len(ctx.typeDecls))
+		for name, ts := range ctx.typeDecls {
+			decls[name] = ts
+		}
+		interpreter.TypeDecls = decls
 	}
-	decls := make(map[string]ast.TypeSpec, len(ctx.typeDecls))
-	for name, ts := range ctx.typeDecls {
-		decls[name] = ts
+	if len(ctx.fbDecls) > 0 {
+		fbs := make(map[string]*ast.FunctionBlockDecl, len(ctx.fbDecls))
+		for name, d := range ctx.fbDecls {
+			fbs[name] = d
+		}
+		interpreter.FBDecls = fbs
 	}
-	interpreter.TypeDecls = decls
 }
 
 // registerEnumTypes registers enum type declarations from the file context
