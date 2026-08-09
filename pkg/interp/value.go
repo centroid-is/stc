@@ -101,6 +101,49 @@ func (v Value) String() string {
 	}
 }
 
+// Clone returns a deep copy of the Value.
+//
+// ARRAY and STRUCT are value types in IEC 61131-3: assigning one to another
+// copies the contents, and later writes to the source must not be visible
+// through the destination. The interpreter backs them with Go slices and maps,
+// which are reference types, so any assignment or copy of an aggregate has to
+// clone it explicitly.
+//
+// FB instances, pointers and references are deliberately NOT deep-copied --
+// they are reference values by nature, and VAR_IN_OUT relies on sharing them.
+func (v Value) Clone() Value {
+	switch v.Kind {
+	case ValArray:
+		if v.Array == nil {
+			return v
+		}
+		out := v
+		out.Array = make([]Value, len(v.Array))
+		for i := range v.Array {
+			out.Array[i] = v.Array[i].Clone()
+		}
+		return out
+	case ValStruct:
+		if v.Struct == nil {
+			return v
+		}
+		out := v
+		out.Struct = make(map[string]Value, len(v.Struct))
+		for k, f := range v.Struct {
+			out.Struct[k] = f.Clone()
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+// IsAggregate reports whether the Value is an ARRAY or STRUCT, i.e. a value
+// type whose backing store must be cloned on assignment.
+func (v Value) IsAggregate() bool {
+	return v.Kind == ValArray || v.Kind == ValStruct
+}
+
 // IsTruthy returns whether the Value represents a truthy value.
 func (v Value) IsTruthy() bool {
 	switch v.Kind {

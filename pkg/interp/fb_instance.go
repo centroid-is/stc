@@ -51,10 +51,11 @@ func NewUserFBInstance(name string, decl *ast.FunctionBlockDecl, interp *Interpr
 	}
 
 	// Walk VarBlocks, initialize variables, and track input/output names
+	resolve := interp.TypeResolverFunc()
 	for _, vb := range decl.VarBlocks {
 		for _, vd := range vb.Declarations {
 			// Resolve zero value from the type name
-			val := zeroFromTypeSpec(vd.Type)
+			val := zeroFromTypeSpecWith(vd.Type, resolve, 0)
 
 			// If there is an init value, try to evaluate it
 			if vd.InitValue != nil && interp != nil {
@@ -191,6 +192,23 @@ func ZeroFromTypeSpec(ts ast.TypeSpec) Value {
 	return zeroFromTypeSpec(ts)
 }
 
+// TypeResolver maps an upper-case user-defined type name to its TypeSpec.
+// It lets zero-value construction resolve named types that appear nested
+// inside an aggregate -- as an array element type or a struct member type --
+// not just at the top level of a declaration.
+type TypeResolver func(upperName string) (ast.TypeSpec, bool)
+
+// maxTypeNestDepth bounds recursion while building a zero value, so a type
+// that refers to itself cannot spin forever.
+const maxTypeNestDepth = 32
+
+// ZeroFromTypeSpecWith resolves a TypeSpec to its zero Value, using resolve to
+// look up user-defined named types at any nesting depth. A nil resolver behaves
+// exactly like ZeroFromTypeSpec.
+func ZeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver) Value {
+	return zeroFromTypeSpecWith(ts, resolve, 0)
+}
+
 // MakeFBInstanceValue creates a Value wrapping a StandardFB as an FBInstance.
 // Used by the test runner to initialize FB variables in test environments.
 func MakeFBInstanceValue(typeName string, fb StandardFB) Value {
@@ -215,6 +233,13 @@ func typeNameFromSpec(ts ast.TypeSpec) string {
 // For ArrayType, it creates a zero-filled array of the appropriate size.
 // For StructType, it creates a struct with zero-valued fields.
 func zeroFromTypeSpec(ts ast.TypeSpec) Value {
+	return zeroFromTypeSpecWith(ts, nil, 0)
+}
+
+func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Value {
+	if depth > maxTypeNestDepth {
+		return Zero(types.KindDINT)
+	}
 	switch t := ts.(type) {
 	case *ast.NamedType:
 		if t.Name != nil {
@@ -225,18 +250,26 @@ func zeroFromTypeSpec(ts ast.TypeSpec) Value {
 			if typ, found := types.LookupElementaryType(name); found {
 				return Zero(typ.Kind())
 			}
+			// Not elementary: it may be a user-defined TYPE (struct, array,
+			// enum, subrange or alias). Resolve and recurse so that aggregates
+			// nested inside other aggregates are built correctly.
+			if resolve != nil {
+				if target, found := resolve(name); found {
+					return zeroFromTypeSpecWith(target, resolve, depth+1)
+				}
+			}
 		}
 		// Unknown type name; default to INT zero
 		return Zero(types.KindDINT)
 	case *ast.ArrayType:
-		return zeroArray(t)
+		return zeroArrayWith(t, resolve, depth)
 	case *ast.StructType:
-		return zeroStruct(t)
+		return zeroStructWith(t, resolve, depth)
 	case *ast.StringType:
 		return Value{Kind: ValString, Str: ""}
 	case *ast.SubrangeType:
 		// Use the base type's zero
-		return zeroFromTypeSpec(t.BaseType)
+		return zeroFromTypeSpecWith(t.BaseType, resolve, depth+1)
 	case *ast.PointerType:
 		// Null pointer
 		return Value{Kind: ValPointer}
@@ -252,6 +285,10 @@ func zeroFromTypeSpec(ts ast.TypeSpec) Value {
 // The interpreter uses direct indexing (arr[i] maps to slice index i),
 // so for ARRAY[1..10] we allocate high+1 elements to support 1-based indexing.
 func zeroArray(at *ast.ArrayType) Value {
+	return zeroArrayWith(at, nil, 0)
+}
+
+func zeroArrayWith(at *ast.ArrayType, resolve TypeResolver, depth int) Value {
 	if len(at.Ranges) == 0 {
 		return Value{Kind: ValArray, Array: []Value{}}
 	}
@@ -264,10 +301,13 @@ func zeroArray(at *ast.ArrayType) Value {
 	if size > 10000 {
 		size = 10000 // safety cap
 	}
-	elemZero := zeroFromTypeSpec(at.ElementType)
+	elemZero := zeroFromTypeSpecWith(at.ElementType, resolve, depth+1)
 	arr := make([]Value, size)
 	for i := range arr {
-		arr[i] = elemZero
+		// Clone per element: an aggregate element is backed by a slice or map,
+		// so sharing one zero value would make a write to one slot visible in
+		// every slot.
+		arr[i] = elemZero.Clone()
 	}
 	return Value{Kind: ValArray, Array: arr}
 }
@@ -275,10 +315,14 @@ func zeroArray(at *ast.ArrayType) Value {
 // zeroStruct creates a zero-valued struct Value from a StructType AST node.
 // Keys are stored in UPPER case to match the interpreter's member access logic.
 func zeroStruct(st *ast.StructType) Value {
+	return zeroStructWith(st, nil, 0)
+}
+
+func zeroStructWith(st *ast.StructType, resolve TypeResolver, depth int) Value {
 	fields := make(map[string]Value, len(st.Members))
 	for _, m := range st.Members {
 		if m.Name != nil {
-			fields[strings.ToUpper(m.Name.Name)] = zeroFromTypeSpec(m.Type)
+			fields[strings.ToUpper(m.Name.Name)] = zeroFromTypeSpecWith(m.Type, resolve, depth+1)
 		}
 	}
 	return Value{Kind: ValStruct, Struct: fields}

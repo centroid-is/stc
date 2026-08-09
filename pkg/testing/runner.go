@@ -259,6 +259,7 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	if ctx != nil {
 		registerUserFunctions(interpreter, ctx)
 		registerEnumTypes(interpreter, ctx)
+		registerTypeDecls(interpreter, ctx)
 	}
 
 	// Register SET_IO and GET_IO for I/O table injection/reading
@@ -441,7 +442,7 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 			// Check if the type is a user-defined TYPE (struct, enum, etc.)
 			if ctx != nil {
 				if typeSpec, ok := ctx.typeDecls[upperTypeName]; ok {
-					val := interp.ZeroFromTypeSpec(typeSpec)
+					val := interp.ZeroFromTypeSpecWith(typeSpec, interpreter.TypeResolverFunc())
 					if vd.InitValue != nil {
 						if iv, err := interpreter.EvalExpr(env, vd.InitValue); err == nil {
 							val = iv
@@ -455,7 +456,7 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 			}
 
 			// Resolve zero value from the type spec
-			val := interp.ZeroFromTypeSpec(vd.Type)
+			val := interp.ZeroFromTypeSpecWith(vd.Type, interpreter.TypeResolverFunc())
 
 			// Evaluate init value if present
 			if vd.InitValue != nil {
@@ -529,6 +530,21 @@ func validateImplements(fbDecl *ast.FunctionBlockDecl, ctx *fileContext) []strin
 		}
 	}
 	return errors
+}
+
+// registerTypeDecls hands the file's TYPE declarations to the interpreter so
+// that zero-value construction can resolve user-defined named types wherever
+// they appear -- including as an array element type or a struct member type,
+// which the top-level lookup in initializeTestEnv does not cover.
+func registerTypeDecls(interpreter *interp.Interpreter, ctx *fileContext) {
+	if len(ctx.typeDecls) == 0 {
+		return
+	}
+	decls := make(map[string]ast.TypeSpec, len(ctx.typeDecls))
+	for name, ts := range ctx.typeDecls {
+		decls[name] = ts
+	}
+	interpreter.TypeDecls = decls
 }
 
 // registerEnumTypes registers enum type declarations from the file context

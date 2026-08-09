@@ -33,6 +33,24 @@ type Interpreter struct {
 	// EnumTypes maps uppercase type names to their enum value maps.
 	// Each enum value map is uppercase enum member name -> integer value.
 	EnumTypes map[string]map[string]int64
+
+	// TypeDecls maps uppercase user-defined type names to their TypeSpec.
+	// Zero-value construction consults this so that a named STRUCT or ARRAY
+	// used as an array element or struct member resolves to the right shape
+	// instead of falling back to an INT zero.
+	TypeDecls map[string]ast.TypeSpec
+}
+
+// TypeResolverFunc returns a TypeResolver backed by the interpreter's
+// TypeDecls, or nil when no user types are registered.
+func (interp *Interpreter) TypeResolverFunc() TypeResolver {
+	if interp == nil || len(interp.TypeDecls) == 0 {
+		return nil
+	}
+	return func(upperName string) (ast.TypeSpec, bool) {
+		ts, ok := interp.TypeDecls[upperName]
+		return ts, ok
+	}
 }
 
 // New creates a new Interpreter with default settings.
@@ -550,6 +568,14 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 		return err
 	}
 
+	// ARRAY and STRUCT are value types in IEC 61131-3: assigning one to another
+	// copies the contents, so later writes to the source must not show up
+	// through the destination. They are backed by Go slices and maps, so the
+	// copy has to be explicit.
+	if val.IsAggregate() {
+		val = val.Clone()
+	}
+
 	switch target := s.Target.(type) {
 	case *ast.Ident:
 		// Check if this variable is a REFERENCE TO — if so, write through
@@ -584,17 +610,16 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 	}
 }
 
-// execAssignIndex handles assignment to array elements: arr[i] := val
+// execAssignIndex handles assignment to array elements: arr[i] := val.
+//
+// The base may be any expression that evaluates to an array -- a plain
+// identifier, a struct member (s.slots[i]), or a nested index. An array Value
+// carries a Go slice, so mutating the element writes through to the same
+// backing store the base was read from; no write-back is required.
 func (interp *Interpreter) execAssignIndex(env *Env, target *ast.IndexExpr, val Value) error {
-	// Get the array variable name
-	id, ok := target.Object.(*ast.Ident)
-	if !ok {
-		return &RuntimeError{Msg: "array assignment requires identifier as base"}
-	}
-
-	arr, found := env.Get(id.Name)
-	if !found {
-		return &RuntimeError{Msg: fmt.Sprintf("undefined variable: %s", id.Name)}
+	arr, err := interp.evalExpr(env, target.Object)
+	if err != nil {
+		return err
 	}
 	if arr.Kind != ValArray {
 		return &RuntimeError{Msg: fmt.Sprintf("cannot index %s", arr.Kind)}
@@ -612,8 +637,14 @@ func (interp *Interpreter) execAssignIndex(env *Env, target *ast.IndexExpr, val 
 		return &RuntimeError{Msg: fmt.Sprintf("array index out of bounds: %d", i)}
 	}
 
+	// ARRAY and STRUCT are value types: storing one copies it.
+	if val.IsAggregate() {
+		val = val.Clone()
+	}
 	arr.Array[i] = val
-	env.Set(id.Name, arr)
+	if id, ok := target.Object.(*ast.Ident); ok {
+		env.Set(id.Name, arr)
+	}
 	return nil
 }
 
