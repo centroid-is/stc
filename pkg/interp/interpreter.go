@@ -190,8 +190,9 @@ func (interp *Interpreter) parseLitTime(s string) (Value, error) {
 		s = s[5:]
 	}
 
-	// Remove underscores
-	s = strings.ReplaceAll(s, "_", "")
+	// Remove underscores. Units are case-insensitive in IEC 61131-3
+	// (T#1D == T#1d), so normalize before matching.
+	s = strings.ToLower(strings.ReplaceAll(s, "_", ""))
 
 	var total time.Duration
 	matches := timePartRegex.FindAllStringSubmatch(s, -1)
