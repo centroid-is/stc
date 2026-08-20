@@ -269,9 +269,19 @@ func (interp *Interpreter) parseLitTyped(value string, prefix string) (Value, er
 
 // evalIdent resolves an identifier in the environment.
 // If the value is a REFERENCE TO, it auto-dereferences to the target.
+// Identifiers not found in any scope fall back to bare enum member names
+// (e.g. `state := RUNNING` for TYPE E_State : (IDLE, RUNNING);).
 func (interp *Interpreter) evalIdent(env *Env, id *ast.Ident) (Value, error) {
 	v, ok := env.Get(id.Name)
 	if !ok {
+		if interp.EnumTypes != nil {
+			upper := strings.ToUpper(id.Name)
+			for _, enumMap := range interp.EnumTypes {
+				if intVal, found := enumMap[upper]; found {
+					return Value{Kind: ValInt, Int: intVal, IECType: types.KindDINT}, nil
+				}
+			}
+		}
 		return Value{}, &RuntimeError{
 			Msg: fmt.Sprintf("undefined variable: %s", id.Name),
 			Pos: id.Span().Start,
