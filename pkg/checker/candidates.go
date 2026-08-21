@@ -44,6 +44,7 @@ func ResolveCandidates(fn *types.FunctionType, argTypes []types.Type) (types.Typ
 	// that match both the constraint AND are compatible with the actual arg.
 	resolvedParams := make([]types.Type, len(fn.Params))
 	var commonKind types.TypeKind
+	var anyArgType types.Type // first argument bound to an unconstrained ANY parameter
 	hasGeneric := false
 
 	for i, param := range fn.Params {
@@ -78,6 +79,9 @@ func ResolveCandidates(fn *types.FunctionType, argTypes []types.Type) (types.Typ
 		} else if param.Type == nil {
 			// ANY parameter (no constraint) - accept anything
 			resolvedParams[i] = argType
+			if anyArgType == nil {
+				anyArgType = argType
+			}
 		} else {
 			resolvedParams[i] = param.Type
 		}
@@ -85,6 +89,11 @@ func ResolveCandidates(fn *types.FunctionType, argTypes []types.Type) (types.Typ
 
 	// Determine the return type
 	retType := fn.ReturnType
+	if retType == nil && anyArgType != nil {
+		// ANY return type (SEL, MUX, MOVE): follow the ANY-typed data inputs
+		// rather than a leading selector such as SEL's G or MUX's K.
+		return anyArgType, resolvedParams, true
+	}
 	if hasGeneric && commonKind != types.KindInvalid {
 		// For generic functions, the return type matches the resolved common type
 		if retType == nil || retType == fn.ReturnType {

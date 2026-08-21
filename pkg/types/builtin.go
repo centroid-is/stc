@@ -110,12 +110,19 @@ func init() {
 	}
 
 	// Math: ANY_REAL -> ANY_REAL
-	for _, name := range []string{"ABS", "SQRT", "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "LN", "LOG", "EXP"} {
+	for _, name := range []string{"SQRT", "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "LN", "LOG", "EXP"} {
 		BuiltinFunctions[name] = &FunctionType{
 			Name:       name,
 			ReturnType: TypeREAL,
 			Params:     []Parameter{realParam("IN")},
 		}
+	}
+
+	// ABS: ANY_NUM -> ANY_NUM (IEC 61131-3 allows integer operands)
+	BuiltinFunctions["ABS"] = &FunctionType{
+		Name:       "ABS",
+		ReturnType: TypeREAL, // Generic: returns same type as arg
+		Params:     []Parameter{numParam("IN")},
 	}
 
 	// MIN, MAX: ANY_NUM, ANY_NUM -> ANY_NUM
@@ -178,6 +185,12 @@ func init() {
 		{"INT_TO_BYTE", TypeINT, TypeBYTE},
 		{"DINT_TO_LREAL", TypeDINT, TypeLREAL},
 		{"LREAL_TO_DINT", TypeLREAL, TypeDINT},
+		{"TIME_TO_DINT", TypeTIME, TypeDINT},
+		{"TIME_TO_LREAL", TypeTIME, TypeLREAL},
+		// TRUNC: truncate toward zero (as opposed to REAL_TO_INT's rounding)
+		{"TRUNC", TypeREAL, TypeDINT},
+		{"TRUNC_INT", TypeREAL, TypeINT},
+		{"TRUNC_DINT", TypeREAL, TypeDINT},
 	}
 	for _, c := range conversions {
 		BuiltinFunctions[c.name] = &FunctionType{

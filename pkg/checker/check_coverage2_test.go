@@ -883,3 +883,18 @@ func TestChecker_ForStmt_NonIntBy(t *testing.T) {
 	}
 	assert.True(t, found, "expected type mismatch for REAL BY value")
 }
+
+func TestResolveCandidates_ANYReturnSkipsSelector(t *testing.T) {
+	// SEL(G, IN0, IN1) must return the type of the ANY data inputs,
+	// not the BOOL selector.
+	ret, _, ok := ResolveCandidates(types.BuiltinFunctions["SEL"],
+		[]types.Type{types.TypeBOOL, types.TypeDINT, types.TypeDINT})
+	assert.True(t, ok)
+	assert.Equal(t, types.TypeDINT, ret)
+
+	// MUX(K, IN0, IN1) likewise must not return K's type.
+	ret, _, ok = ResolveCandidates(types.BuiltinFunctions["MUX"],
+		[]types.Type{types.TypeINT, types.TypeSTRING, types.TypeSTRING})
+	assert.True(t, ok)
+	assert.Equal(t, types.TypeSTRING, ret)
+}

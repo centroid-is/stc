@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/centroid-is/stc/pkg/types"
 )
@@ -86,6 +87,39 @@ func registerConvertFunctions() {
 			rounded := math.RoundToEven(args[0].Real)
 			return Value{Kind: ValInt, Int: int64(rounded), IECType: iecType}, nil
 		}
+	}
+
+	// TRUNC, TRUNC_INT, TRUNC_DINT -- float to integer, truncating toward zero
+	for _, entry := range []struct {
+		name    string
+		iecType types.TypeKind
+	}{
+		{"TRUNC", types.KindDINT},
+		{"TRUNC_INT", types.KindINT},
+		{"TRUNC_DINT", types.KindDINT},
+	} {
+		iecType := entry.iecType
+		StdlibFunctions[entry.name] = func(args []Value) (Value, error) {
+			if len(args) < 1 {
+				return Value{}, &RuntimeError{Msg: "TRUNC requires 1 argument"}
+			}
+			return Value{Kind: ValInt, Int: int64(math.Trunc(toFloat(args[0]))), IECType: iecType}, nil
+		}
+	}
+
+	// TIME_TO_DINT, TIME_TO_LREAL -- duration expressed in milliseconds
+	StdlibFunctions["TIME_TO_DINT"] = func(args []Value) (Value, error) {
+		if len(args) < 1 {
+			return Value{}, &RuntimeError{Msg: "TIME_TO_DINT requires 1 argument"}
+		}
+		return Value{Kind: ValInt, Int: args[0].Time.Milliseconds(), IECType: types.KindDINT}, nil
+	}
+	StdlibFunctions["TIME_TO_LREAL"] = func(args []Value) (Value, error) {
+		if len(args) < 1 {
+			return Value{}, &RuntimeError{Msg: "TIME_TO_LREAL requires 1 argument"}
+		}
+		ms := float64(args[0].Time) / float64(time.Millisecond)
+		return Value{Kind: ValReal, Real: ms, IECType: types.KindLREAL}, nil
 	}
 
 	// INT_TO_DINT, DINT_TO_INT, ... -- integer width/sign changes (same

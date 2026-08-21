@@ -565,3 +565,57 @@ END_PROGRAM`
 		}
 	}
 }
+
+func TestNumericBuiltinsAcceptIntegers(t *testing.T) {
+	// ABS/MIN/MAX/LIMIT/SEL are ANY_NUM (or ANY) in IEC 61131-3 and must
+	// accept integer operands, returning the operand type.
+	diags := runChecker(`
+FUNCTION_BLOCK FB_T
+VAR_INPUT
+    d : DINT;
+    g : BOOL;
+END_VAR
+VAR_OUTPUT
+    a : DINT;
+    b : DINT;
+    c : DINT;
+    e : DINT;
+    f : DINT;
+END_VAR
+    a := ABS(d);
+    b := MIN(d, d);
+    c := MAX(d, d);
+    e := LIMIT(d, d, d);
+    f := SEL(g, d, d);
+END_FUNCTION_BLOCK
+`)
+	for _, dg := range diags {
+		assert.NotEqual(t, diag.Error, dg.Severity, "unexpected error: %s", dg.Message)
+	}
+}
+
+func TestTruncAndTimeConversions(t *testing.T) {
+	diags := runChecker(`
+FUNCTION_BLOCK FB_T
+VAR_INPUT
+    r : REAL;
+    t : TIME;
+END_VAR
+VAR_OUTPUT
+    a : DINT;
+    b : INT;
+    c : DINT;
+    d : DINT;
+    e : LREAL;
+END_VAR
+    a := TRUNC(r);
+    b := TRUNC_INT(r);
+    c := TRUNC_DINT(r);
+    d := TIME_TO_DINT(t);
+    e := TIME_TO_LREAL(t);
+END_FUNCTION_BLOCK
+`)
+	for _, dg := range diags {
+		assert.NotEqual(t, diag.Error, dg.Severity, "unexpected error: %s", dg.Message)
+	}
+}

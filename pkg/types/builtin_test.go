@@ -126,12 +126,51 @@ func TestBuiltinFunctions_MOD(t *testing.T) {
 }
 
 func TestBuiltinFunctions_Math(t *testing.T) {
-	for _, name := range []string{"ABS", "SQRT", "SIN", "COS"} {
+	for _, name := range []string{"SQRT", "SIN", "COS"} {
 		fn, ok := BuiltinFunctions[name]
 		require.True(t, ok, "%s should be registered", name)
 		assert.Len(t, fn.Params, 1)
 		assert.True(t, fn.Params[0].GenericConstraint(KindREAL))
 		assert.False(t, fn.Params[0].GenericConstraint(KindINT))
+	}
+}
+
+func TestBuiltinFunctions_ABS(t *testing.T) {
+	// ABS is ANY_NUM in IEC 61131-3, not ANY_REAL.
+	fn, ok := BuiltinFunctions["ABS"]
+	require.True(t, ok)
+	assert.Len(t, fn.Params, 1)
+	for _, k := range []TypeKind{KindSINT, KindINT, KindDINT, KindLINT, KindREAL, KindLREAL} {
+		assert.True(t, fn.Params[0].GenericConstraint(k), "ABS should accept %v", k)
+	}
+	assert.False(t, fn.Params[0].GenericConstraint(KindBOOL))
+	assert.False(t, fn.Params[0].GenericConstraint(KindSTRING))
+}
+
+func TestBuiltinFunctions_Trunc(t *testing.T) {
+	for name, want := range map[string]Type{
+		"TRUNC":      TypeDINT,
+		"TRUNC_INT":  TypeINT,
+		"TRUNC_DINT": TypeDINT,
+	} {
+		fn, ok := BuiltinFunctions[name]
+		require.True(t, ok, "%s should be registered", name)
+		assert.Len(t, fn.Params, 1)
+		assert.Equal(t, TypeREAL, fn.Params[0].Type)
+		assert.Equal(t, want, fn.ReturnType, "%s return type", name)
+	}
+}
+
+func TestBuiltinFunctions_TimeConversions(t *testing.T) {
+	for name, want := range map[string]Type{
+		"TIME_TO_DINT":  TypeDINT,
+		"TIME_TO_LREAL": TypeLREAL,
+	} {
+		fn, ok := BuiltinFunctions[name]
+		require.True(t, ok, "%s should be registered", name)
+		assert.Len(t, fn.Params, 1)
+		assert.Equal(t, TypeTIME, fn.Params[0].Type)
+		assert.Equal(t, want, fn.ReturnType, "%s return type", name)
 	}
 }
 

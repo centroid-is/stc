@@ -279,3 +279,45 @@ func assertRealClose(t *testing.T, want, got float64) {
 		t.Fatalf("real mismatch: want %g, got %g", want, got)
 	}
 }
+
+// End-to-end: ABS on integers, TRUNC, and TIME_TO_* through the interpreter.
+func TestNumericBuiltins_EndToEnd(t *testing.T) {
+	env := runProgram(t, `
+PROGRAM Main
+VAR
+    d : DINT := -7;
+    absD : DINT;
+    r : REAL := -2.7;
+    tr : DINT;
+    rounded : DINT;
+    t : TIME := T#1s500ms;
+    ms : DINT;
+    msf : LREAL;
+END_VAR
+    absD := ABS(d);
+    tr := TRUNC(r);
+    rounded := REAL_TO_DINT(r);
+    ms := TIME_TO_DINT(t);
+    msf := TIME_TO_LREAL(t);
+END_PROGRAM
+`)
+	checkInt := func(name string, want int64) {
+		t.Helper()
+		v, ok := env.Get(name)
+		if !ok {
+			t.Fatalf("%s not found", name)
+		}
+		if v.Int != want {
+			t.Fatalf("%s = %d, want %d", name, v.Int, want)
+		}
+	}
+	checkInt("absD", 7)
+	checkInt("tr", -2)      // truncation toward zero
+	checkInt("rounded", -3) // rounding, for contrast
+	checkInt("ms", 1500)
+
+	v, ok := env.Get("msf")
+	if !ok || v.Real != 1500 {
+		t.Fatalf("msf = %v, want 1500", v)
+	}
+}

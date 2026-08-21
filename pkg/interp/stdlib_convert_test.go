@@ -2,6 +2,9 @@ package interp
 
 import (
 	"testing"
+	"time"
+
+	"github.com/centroid-is/stc/pkg/types"
 )
 
 func TestINT_TO_REAL(t *testing.T) {
@@ -221,5 +224,106 @@ func TestINT_TO_BYTE(t *testing.T) {
 	// 256 & 0xFF = 0
 	if got.Int != 0 {
 		t.Fatalf("INT_TO_BYTE(256) = %v, want 0 (masked)", got)
+	}
+}
+
+func TestTRUNC(t *testing.T) {
+	tests := []struct {
+		name string
+		in   float64
+		want int64
+	}{
+		{"2.9 -> 2", 2.9, 2},
+		{"2.5 -> 2", 2.5, 2},
+		{"-2.5 -> -2 (toward zero)", -2.5, -2},
+		{"-2.9 -> -2 (toward zero)", -2.9, -2},
+		{"-0.5 -> 0", -0.5, 0},
+		{"7.0 -> 7", 7.0, 7},
+	}
+	for _, name := range []string{"TRUNC", "TRUNC_INT", "TRUNC_DINT"} {
+		fn := StdlibFunctions[name]
+		if fn == nil {
+			t.Fatalf("%s not registered", name)
+		}
+		for _, tt := range tests {
+			t.Run(name+"/"+tt.name, func(t *testing.T) {
+				got, err := fn([]Value{RealValue(tt.in)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.Kind != ValInt || got.Int != tt.want {
+					t.Fatalf("%s(%v) = %v, want %d", name, tt.in, got, tt.want)
+				}
+			})
+		}
+	}
+}
+
+func TestTRUNC_ReturnKinds(t *testing.T) {
+	got, err := StdlibFunctions["TRUNC_INT"]([]Value{RealValue(1.7)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IECType != types.KindINT {
+		t.Fatalf("TRUNC_INT IECType = %v, want INT", got.IECType)
+	}
+	got, err = StdlibFunctions["TRUNC"]([]Value{RealValue(1.7)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.IECType != types.KindDINT {
+		t.Fatalf("TRUNC IECType = %v, want DINT", got.IECType)
+	}
+}
+
+func TestTIME_TO_DINT(t *testing.T) {
+	fn := StdlibFunctions["TIME_TO_DINT"]
+	if fn == nil {
+		t.Fatal("TIME_TO_DINT not registered")
+	}
+	tests := []struct {
+		in   time.Duration
+		want int64
+	}{
+		{1500 * time.Millisecond, 1500},
+		{2 * time.Second, 2000},
+		{0, 0},
+		{-250 * time.Millisecond, -250},
+		{1500 * time.Microsecond, 1}, // sub-ms truncated
+	}
+	for _, tt := range tests {
+		got, err := fn([]Value{TimeValue(tt.in)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Kind != ValInt || got.Int != tt.want || got.IECType != types.KindDINT {
+			t.Fatalf("TIME_TO_DINT(%v) = %v, want %d", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestTIME_TO_LREAL(t *testing.T) {
+	fn := StdlibFunctions["TIME_TO_LREAL"]
+	if fn == nil {
+		t.Fatal("TIME_TO_LREAL not registered")
+	}
+	tests := []struct {
+		in   time.Duration
+		want float64
+	}{
+		{1500 * time.Millisecond, 1500},
+		{2 * time.Second, 2000},
+		{0, 0},
+		{1500 * time.Microsecond, 1.5}, // sub-ms precision retained
+		{-250 * time.Millisecond, -250},
+	}
+	for _, tt := range tests {
+		got, err := fn([]Value{TimeValue(tt.in)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Kind != ValReal || got.Real != tt.want || got.IECType != types.KindLREAL {
+			t.Fatalf("TIME_TO_LREAL(%v) = %v, want %v", tt.in, got, tt.want)
+		}
 	}
 }
