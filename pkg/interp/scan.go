@@ -82,8 +82,8 @@ func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 		}
 	}
 
-	// 2. Set dt on interpreter
-	e.interp.dt = dt
+	// 2. Advance the interpreter's virtual clock by this scan's delta
+	e.interp.SetDt(dt)
 
 	// 3. Execute program body
 	err := e.interp.execStatements(e.env, e.program.Body)

@@ -19,6 +19,9 @@ type Interpreter struct {
 
 	// dt is the current scan cycle delta time, passed to FB Execute calls.
 	dt time.Duration
+	// clock is virtual time, advanced by ADVANCE_TIME. FB instances use it
+	// to work out how long since they themselves last ran.
+	clock time.Duration
 
 	// LocalFunctions provides per-interpreter-instance function overrides.
 	// These take priority over global StdlibFunctions during evalCall.
@@ -69,6 +72,12 @@ func New() *Interpreter {
 // Used by the test runner for ADVANCE_TIME support.
 func (interp *Interpreter) SetDt(dt time.Duration) {
 	interp.dt = dt
+	interp.clock += dt
+}
+
+// Clock returns the interpreter's virtual time, advanced by ADVANCE_TIME.
+func (interp *Interpreter) Clock() time.Duration {
+	return interp.clock
 }
 
 // EvalExpr is the exported wrapper around evalExpr for use by the test runner.
@@ -966,8 +975,8 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 		fbInst.SetInput(arg.Name.Name, argVal)
 	}
 
-	// Execute the FB
-	if err := fbInst.Execute(interp.dt, interp); err != nil {
+	// Execute the FB, with the time elapsed since this instance last ran.
+	if err := fbInst.Execute(fbInst.deltaFor(interp.clock, interp.dt), interp); err != nil {
 		return err
 	}
 

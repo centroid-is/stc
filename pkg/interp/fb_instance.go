@@ -28,6 +28,14 @@ var StdlibFBFactory = map[string]func() StandardFB{}
 type FBInstance struct {
 	TypeName string
 
+	// Virtual time at which this instance last executed, and whether it ever
+	// has. Timers get the delta since their own previous call rather than a
+	// delta shared by every FB in the scan -- calling the same TON twice in
+	// one scan must not advance it twice, because no time passed between the
+	// two calls on a real PLC.
+	lastRun    time.Duration
+	hasRun     bool
+
 	// For stdlib FBs (non-nil when wrapping a StandardFB implementation)
 	FB StandardFB
 
@@ -115,6 +123,34 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 	}
 
 	return inst
+}
+
+// deltaFor reports how much virtual time has passed since this instance last
+// executed. The first call gets the scan's delta, since there is no previous
+// run to measure from; later calls in the same scan get zero, which is what a
+// real PLC would give them.
+//
+// This matters for the standard idiom that reads a free-running TON and
+// immediately restarts it to measure a scan:
+//
+//	ton(IN := TRUE, PT := T#1D);   // read ET
+//	ton(IN := FALSE, PT := T#1D);  // IEC: IN FALSE zeroes ET
+//	ton(IN := TRUE, PT := T#1D);   // start again from zero
+//
+// With a scan-wide delta the third call would immediately re-accumulate the
+// whole scan and the measurement would grow without bound.
+func (inst *FBInstance) deltaFor(clock time.Duration, scanDt time.Duration) time.Duration {
+	if !inst.hasRun {
+		inst.hasRun = true
+		inst.lastRun = clock
+		return scanDt
+	}
+	dt := clock - inst.lastRun
+	inst.lastRun = clock
+	if dt < 0 {
+		return 0
+	}
+	return dt
 }
 
 // Execute runs one execution cycle of the FB instance.
