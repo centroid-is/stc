@@ -118,6 +118,16 @@ func init() {
 		}
 	}
 
+	// UPPER_BOUND: ARRAY, dimension -> DINT. Lets a loop follow the array
+	// declaration instead of repeating its size. No LOWER_BOUND: the low
+	// bound is discarded at allocation, and one that guessed would quietly
+	// mislead code that trusted it.
+	BuiltinFunctions["UPPER_BOUND"] = &FunctionType{
+		Name:       "UPPER_BOUND",
+		ReturnType: TypeDINT,
+		Params:     []Parameter{anyParam("ARR"), intParam("DIM")},
+	}
+
 	// ABS: ANY_NUM -> ANY_NUM (IEC 61131-3 allows integer operands)
 	BuiltinFunctions["ABS"] = &FunctionType{
 		Name:       "ABS",
