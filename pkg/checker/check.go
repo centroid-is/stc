@@ -14,10 +14,11 @@ import (
 // assignments, and control flow within POU bodies. It assumes Pass 1
 // (Resolver.CollectDeclarations) has already populated the symbol table.
 type Checker struct {
-	table             *symbols.Table
-	diags             *diag.Collector
-	currentReturnType types.Type
-	currentScope      *symbols.Scope
+	table               *symbols.Table
+	diags               *diag.Collector
+	currentReturnType   types.Type
+	currentFunctionName string
+	currentScope        *symbols.Scope
 }
 
 // NewChecker creates a new Checker using the given symbol table and diagnostics.
@@ -49,8 +50,10 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 							c.currentReturnType = fnType.ReturnType
 						}
 					}
+					c.currentFunctionName = d.Name.Name
 					c.checkPOUBody(d.Name.Name, d.Body)
 					c.currentReturnType = nil
+					c.currentFunctionName = ""
 				}
 			}
 		}
@@ -193,6 +196,15 @@ func (c *Checker) checkStmt(stmt ast.Statement) {
 func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
 	targetType := c.checkExpr(s.Target)
 	valueType := c.checkExpr(s.Value)
+
+	// IEC 61131-3: a FUNCTION returns its value by assigning to its own
+	// name. The identifier resolves to the function type, so substitute
+	// the declared return type before checking compatibility.
+	if c.currentReturnType != nil && c.currentFunctionName != "" {
+		if id, ok := s.Target.(*ast.Ident); ok && strings.EqualFold(id.Name, c.currentFunctionName) {
+			targetType = c.currentReturnType
+		}
+	}
 
 	if targetType == types.Invalid || valueType == types.Invalid {
 		return

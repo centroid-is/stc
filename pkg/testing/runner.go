@@ -105,6 +105,11 @@ type externalContext struct {
 	libraryFBs map[string]*ast.FunctionBlockDecl
 	// mockFBs maps uppercase FB names to declarations with bodies (mocks)
 	mockFBs map[string]*ast.FunctionBlockDecl
+	// typeDecls maps uppercase TYPE names to their specs, so that structs
+	// and enums declared next to mock/library FBs resolve in tests too
+	typeDecls map[string]ast.TypeSpec
+	// funcDecls maps uppercase FUNCTION names to their declarations
+	funcDecls map[string]*ast.FunctionDecl
 }
 
 // buildExternalContext extracts FB declarations from library and mock files.
@@ -112,6 +117,8 @@ func buildExternalContext(opts RunOpts) *externalContext {
 	ext := &externalContext{
 		libraryFBs: make(map[string]*ast.FunctionBlockDecl),
 		mockFBs:    make(map[string]*ast.FunctionBlockDecl),
+		typeDecls:  make(map[string]ast.TypeSpec),
+		funcDecls:  make(map[string]*ast.FunctionDecl),
 	}
 
 	for _, f := range opts.LibraryFiles {
@@ -124,8 +131,19 @@ func buildExternalContext(opts RunOpts) *externalContext {
 
 	for _, f := range opts.MockFiles {
 		for _, decl := range f.Declarations {
-			if fb, ok := decl.(*ast.FunctionBlockDecl); ok && fb.Name != nil {
-				ext.mockFBs[strings.ToUpper(fb.Name.Name)] = fb
+			switch d := decl.(type) {
+			case *ast.FunctionBlockDecl:
+				if d.Name != nil {
+					ext.mockFBs[strings.ToUpper(d.Name.Name)] = d
+				}
+			case *ast.TypeDecl:
+				if d.Name != nil {
+					ext.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
+				}
+			case *ast.FunctionDecl:
+				if d.Name != nil {
+					ext.funcDecls[strings.ToUpper(d.Name.Name)] = d
+				}
 			}
 		}
 	}
@@ -201,6 +219,18 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 	// Merge external context: mock FBs override library stubs, which fill gaps
 	autoStubbed := make(map[string]bool)
 	if extCtx != nil {
+		// TYPE declarations from mock/library files; the test file wins on conflict
+		for name, spec := range extCtx.typeDecls {
+			if _, exists := ctx.typeDecls[name]; !exists {
+				ctx.typeDecls[name] = spec
+			}
+		}
+		// FUNCTION declarations likewise
+		for name, decl := range extCtx.funcDecls {
+			if _, exists := ctx.funcDecls[name]; !exists {
+				ctx.funcDecls[name] = decl
+			}
+		}
 		// First add library stubs for FB types not already declared in test file
 		for name, fbDecl := range extCtx.libraryFBs {
 			if _, exists := ctx.fbDecls[name]; !exists {
