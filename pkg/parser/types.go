@@ -174,7 +174,12 @@ func (p *Parser) parseStructType() *ast.StructType {
 	startTok := p.advance() // consume STRUCT
 
 	var members []*ast.StructMember
-	for !p.atEnd() && !p.at(lexer.KwEndStruct) {
+	for !p.atEnd() {
+		// Pragmas may precede an individual struct member.
+		p.skipPragmas()
+		if p.at(lexer.KwEndStruct) {
+			break
+		}
 		savedPos := p.pos
 		member := p.parseStructMember()
 		if member != nil {

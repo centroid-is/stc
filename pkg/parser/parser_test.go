@@ -355,6 +355,82 @@ END_FUNCTION_BLOCK
 	require.Equal(t, "FB_Test", fb.Name.Name)
 }
 
+func TestParse_PragmasOnStructMembers(t *testing.T) {
+	src := `{attribute 'OPC.UA.DA.StructuredType' := '1'}
+{attribute 'OPC.UA.DA' := '1'}
+TYPE ST_X :
+STRUCT
+    {attribute 'OPC.UA.DA.Access' := '1'}
+    a : LREAL;
+    b : BOOL;
+    {attribute 'pack_mode' := '1'}
+END_STRUCT;
+END_TYPE
+`
+	result := Parse("test.st", src)
+
+	require.NotNil(t, result.File)
+	require.Empty(t, result.Diags, "expected no diagnostics, got: %v", result.Diags)
+
+	require.Len(t, result.File.Declarations, 1)
+	td, ok := result.File.Declarations[0].(*ast.TypeDecl)
+	require.True(t, ok, "expected TypeDecl, got %T", result.File.Declarations[0])
+	require.Equal(t, "ST_X", td.Name.Name)
+
+	st, ok := td.Type.(*ast.StructType)
+	require.True(t, ok, "expected StructType, got %T", td.Type)
+	require.Len(t, st.Members, 2)
+	require.Equal(t, "a", st.Members[0].Name.Name)
+	require.Equal(t, "b", st.Members[1].Name.Name)
+}
+
+func TestParse_PragmasOnVarDecls(t *testing.T) {
+	src := `FUNCTION_BLOCK FB_Test
+{attribute 'instance-path'}
+VAR_INPUT
+    {attribute 'OPC.UA.DA' := '1'}
+    i : INT;
+END_VAR
+VAR
+    {attribute 'hide'}
+    x : BOOL;
+    y : BOOL;
+    {attribute 'no_init'}
+END_VAR
+    x := TRUE;
+{attribute 'monitoring' := 'variable'}
+METHOD PUBLIC M1 : INT
+VAR_INPUT
+    {attribute 'const_non_replaced'}
+    p : INT;
+END_VAR
+    M1 := p;
+END_METHOD
+END_FUNCTION_BLOCK
+`
+	result := Parse("test.st", src)
+
+	require.NotNil(t, result.File)
+	require.Empty(t, result.Diags, "expected no diagnostics, got: %v", result.Diags)
+
+	require.Len(t, result.File.Declarations, 1)
+	fb, ok := result.File.Declarations[0].(*ast.FunctionBlockDecl)
+	require.True(t, ok, "expected FunctionBlockDecl, got %T", result.File.Declarations[0])
+
+	require.Len(t, fb.VarBlocks, 2)
+	require.Len(t, fb.VarBlocks[0].Declarations, 1)
+	require.Equal(t, "i", fb.VarBlocks[0].Declarations[0].Names[0].Name)
+	require.Len(t, fb.VarBlocks[1].Declarations, 2)
+	require.Equal(t, "x", fb.VarBlocks[1].Declarations[0].Names[0].Name)
+	require.Equal(t, "y", fb.VarBlocks[1].Declarations[1].Names[0].Name)
+
+	require.Len(t, fb.Body, 1)
+	require.Len(t, fb.Methods, 1)
+	require.Equal(t, "M1", fb.Methods[0].Name.Name)
+	require.Len(t, fb.Methods[0].VarBlocks, 1)
+	require.Len(t, fb.Methods[0].VarBlocks[0].Declarations, 1)
+}
+
 func TestParse_EmptyProgram(t *testing.T) {
 	src := `PROGRAM Empty END_PROGRAM`
 	result := Parse("test.st", src)

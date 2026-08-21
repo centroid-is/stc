@@ -14,6 +14,12 @@ func (p *Parser) parseStatements(stop ...lexer.TokenKind) []ast.Statement {
 
 	var stmts []ast.Statement
 	for !p.atEnd() {
+		// Pragmas may appear between statements and before a METHOD or
+		// PROPERTY that follows the body of a POU.
+		if p.at(lexer.Pragma) {
+			p.advance()
+			continue
+		}
 		if stopSet[p.peek().Kind] {
 			break
 		}

@@ -234,6 +234,9 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 
 	for !p.atEnd() && !p.at(lexer.KwEndInterface) {
 		switch p.peek().Kind {
+		case lexer.Pragma:
+			// Pragmas may precede a method or property signature.
+			p.advance()
 		case lexer.KwMethod:
 			methods = append(methods, p.parseMethodSignature())
 		case lexer.KwProperty:

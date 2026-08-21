@@ -19,8 +19,10 @@ func (p *Parser) isVarStart() bool {
 // parseVarBlocks parses zero or more VAR sections.
 func (p *Parser) parseVarBlocks() []*ast.VarBlock {
 	var blocks []*ast.VarBlock
+	p.skipPragmas()
 	for p.isVarStart() {
 		blocks = append(blocks, p.parseVarBlock())
+		p.skipPragmas()
 	}
 	return blocks
 }
@@ -77,7 +79,12 @@ func (p *Parser) parseVarBlock() *ast.VarBlock {
 
 	// Parse variable declarations until END_VAR
 	var decls []*ast.VarDecl
-	for !p.atEnd() && !p.at(lexer.KwEndVar) {
+	for !p.atEnd() {
+		// Pragmas may precede an individual variable declaration.
+		p.skipPragmas()
+		if p.at(lexer.KwEndVar) {
+			break
+		}
 		savedPos := p.pos
 		decl := p.parseVarDecl()
 		if decl != nil {
