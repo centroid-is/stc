@@ -592,7 +592,15 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 		val = val.Clone()
 	}
 
-	switch target := s.Target.(type) {
+	return interp.assignToTarget(env, s.Target, val)
+}
+
+// assignToTarget stores val into an assignable expression: an identifier, an
+// array element, a struct member or a pointer dereference. Shared by ordinary
+// assignment and by VAR_IN_OUT write-back once a function block call returns.
+// Callers own the value semantics: execAssign clones aggregates before calling.
+func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Value) error {
+	switch target := targetExpr.(type) {
 	case *ast.Ident:
 		// Check if this variable is a REFERENCE TO — if so, write through
 		if existing, ok := env.Get(target.Name); ok && existing.Kind == ValReference && existing.PtrEnv != nil && existing.PtrVar != "" {
@@ -622,7 +630,19 @@ func (interp *Interpreter) execAssign(env *Env, s *ast.AssignStmt) error {
 	case *ast.DerefExpr:
 		return interp.execAssignDeref(env, target, val)
 	default:
-		return &RuntimeError{Msg: fmt.Sprintf("unsupported assignment target: %T", s.Target)}
+		return &RuntimeError{Msg: fmt.Sprintf("unsupported assignment target: %T", targetExpr)}
+	}
+}
+
+// isAssignable reports whether an expression can serve as an assignment target.
+// Used to decide whether a VAR_IN_OUT argument has somewhere to be written back
+// to: a literal or a computed expression has not, and is skipped silently.
+func isAssignable(e ast.Expr) bool {
+	switch e.(type) {
+	case *ast.Ident, *ast.IndexExpr, *ast.MemberAccessExpr, *ast.DerefExpr:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -949,6 +969,32 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 	// Execute the FB
 	if err := fbInst.Execute(interp.dt, interp); err != nil {
 		return err
+	}
+
+	// Copy VAR_IN_OUT args back into the caller's variable. IEC 61131-3 passes
+	// VAR_IN_OUT by reference, so an assignment inside the FB body has to be
+	// visible to the caller once the call returns. The value is copied back
+	// rather than aliased: arrays and structs have value semantics elsewhere,
+	// so leaving the caller sharing the FB env's backing slice or map would
+	// make every later write inside the FB leak out mid-cycle.
+	for _, arg := range s.Args {
+		if arg.IsOutput || arg.Name == nil || arg.Value == nil {
+			continue
+		}
+		if !isAssignable(arg.Value) {
+			// Literal or computed expression: nothing to write back to.
+			continue
+		}
+		inoutVal, ok := fbInst.GetInOut(arg.Name.Name)
+		if !ok {
+			continue
+		}
+		if inoutVal.IsAggregate() {
+			inoutVal = inoutVal.Clone()
+		}
+		if err := interp.assignToTarget(env, arg.Value, inoutVal); err != nil {
+			return err
+		}
 	}
 
 	// Copy output args back (=> bindings)

@@ -37,6 +37,7 @@ type FBInstance struct {
 	ParentDecl  *ast.FunctionBlockDecl // parent FB decl for EXTENDS chain
 	inputNames  []string               // VAR_INPUT variable names (uppercase)
 	outputNames []string               // VAR_OUTPUT variable names (uppercase)
+	inoutNames  []string               // VAR_IN_OUT variable names (uppercase)
 }
 
 // NewUserFBInstance creates an FBInstance for a user-defined function block.
@@ -106,6 +107,8 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 					inst.inputNames = append(inst.inputNames, upper)
 				case ast.VarOutput:
 					inst.outputNames = append(inst.outputNames, upper)
+				case ast.VarInOut:
+					inst.inoutNames = append(inst.inoutNames, upper)
 				}
 			}
 		}
@@ -191,6 +194,29 @@ func (inst *FBInstance) GetInput(name string) Value {
 		}
 	}
 	return Value{}
+}
+
+// IsInOut reports whether name is declared in a VAR_IN_OUT section of this FB.
+// Stdlib FBs have no VAR_IN_OUT parameters, so this is always false for them.
+func (inst *FBInstance) IsInOut(name string) bool {
+	upper := strings.ToUpper(name)
+	for _, n := range inst.inoutNames {
+		if n == upper {
+			return true
+		}
+	}
+	return false
+}
+
+// GetInOut reads a VAR_IN_OUT value out of the FB env after execution, so the
+// caller can copy it back into the argument variable (by-reference semantics).
+// The second result is false when name is not a VAR_IN_OUT parameter of this
+// instance, or the instance has no env of its own (stdlib FB).
+func (inst *FBInstance) GetInOut(name string) (Value, bool) {
+	if inst.Env == nil || !inst.IsInOut(name) {
+		return Value{}, false
+	}
+	return inst.Env.Get(name)
 }
 
 // GetMember resolves a member access on an FB instance.
