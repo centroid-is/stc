@@ -1,0 +1,107 @@
+package parser
+
+import (
+	"strings"
+
+	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/lexer"
+)
+
+// collectPragmas consumes consecutive Pragma tokens at the current position.
+// {attribute ...} pragmas become ast.Attribute nodes; every other pragma
+// ({warning ...}, {region}, ...) is kept verbatim as an ast.PragmaNode. Both
+// slices are in source order and nil when no pragma is present.
+func (p *Parser) collectPragmas() ([]*ast.Attribute, []*ast.PragmaNode) {
+	var attrs []*ast.Attribute
+	var pragmas []*ast.PragmaNode
+	for p.at(lexer.Pragma) {
+		tok := p.advance()
+		span := ast.SpanFrom(astPos(tok.Pos), astPos(tok.EndPos))
+		if name, value, hasValue, ok := parseAttributeText(tok.Text); ok {
+			attrs = append(attrs, &ast.Attribute{
+				NodeBase: ast.NodeBase{NodeKind: ast.KindAttribute, NodeSpan: span},
+				Name:     name,
+				Value:    value,
+				HasValue: hasValue,
+			})
+			continue
+		}
+		pragmas = append(pragmas, &ast.PragmaNode{
+			NodeBase: ast.NodeBase{NodeKind: ast.KindPragma, NodeSpan: span},
+			Text:     tok.Text,
+		})
+	}
+	return attrs, pragmas
+}
+
+// parseAttributeText recognises {attribute 'name'} and
+// {attribute 'name' := 'value'}. The keyword is case-insensitive, name and
+// value may use ' or " quotes, and a doubled quote character inside a quoted
+// string stands for one quote. Any other shape returns ok=false so the pragma
+// can be kept verbatim. The scan is a single forward pass with every index
+// bounds-checked, so hostile input cannot panic or loop.
+func parseAttributeText(text string) (name, value string, hasValue, ok bool) {
+	const kw = "attribute"
+	if len(text) < 2 || text[0] != '{' || text[len(text)-1] != '}' {
+		return "", "", false, false
+	}
+	// Work on the inside of the braces.
+	s := text[1 : len(text)-1]
+	i := skipPragmaSpace(s, 0)
+	if len(s)-i < len(kw) || !strings.EqualFold(s[i:i+len(kw)], kw) {
+		return "", "", false, false
+	}
+	i += len(kw)
+	j := skipPragmaSpace(s, i)
+	if j == i {
+		return "", "", false, false // keyword must be followed by whitespace
+	}
+	name, i, ok = scanPragmaQuoted(s, j)
+	if !ok || name == "" {
+		return "", "", false, false
+	}
+	i = skipPragmaSpace(s, i)
+	if i == len(s) {
+		return name, "", false, true
+	}
+	if !strings.HasPrefix(s[i:], ":=") {
+		return "", "", false, false
+	}
+	value, i, ok = scanPragmaQuoted(s, skipPragmaSpace(s, i+2))
+	if !ok || skipPragmaSpace(s, i) != len(s) {
+		return "", "", false, false
+	}
+	return name, value, true, true
+}
+
+// skipPragmaSpace returns the index of the first non-whitespace byte at or
+// after i.
+func skipPragmaSpace(s string, i int) int {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') {
+		i++
+	}
+	return i
+}
+
+// scanPragmaQuoted reads a ' or " quoted string starting at s[i] and returns
+// its unescaped content and the index just past the closing quote.
+func scanPragmaQuoted(s string, i int) (string, int, bool) {
+	if i >= len(s) || (s[i] != '\'' && s[i] != '"') {
+		return "", i, false
+	}
+	q := s[i]
+	var b strings.Builder
+	for j := i + 1; j < len(s); j++ {
+		if s[j] != q {
+			b.WriteByte(s[j])
+			continue
+		}
+		if j+1 < len(s) && s[j+1] == q {
+			b.WriteByte(q)
+			j++
+			continue
+		}
+		return b.String(), j + 1, true
+	}
+	return "", i, false
+}
