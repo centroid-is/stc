@@ -1,6 +1,8 @@
 package checker
 
 import (
+	"strings"
+
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/source"
@@ -29,6 +31,17 @@ type ResolveOpts struct {
 type Resolver struct {
 	table *symbols.Table
 	diags *diag.Collector
+
+	// pendingGVLs holds GVL declarations seen during collection. They are
+	// resolved after every file's TYPE declarations are registered, so a GVL
+	// typed with a DUT from a later file gets the real struct type instead of
+	// resolveTypeSpec's placeholder FunctionBlockType.
+	pendingGVLs []pendingGVL
+}
+
+type pendingGVL struct {
+	decl      *ast.GVLDecl
+	isLibrary bool
 }
 
 // NewResolver creates a new Resolver that populates the given symbol table.
@@ -60,6 +73,12 @@ func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveO
 			r.collectFileDeclarations(mockFile, false) // false = not library
 		}
 	}
+
+	// Second pass: GVLs, now that every TYPE is in the global scope.
+	for _, pg := range r.pendingGVLs {
+		r.resolveGVL(pg.decl, pg.isLibrary)
+	}
+	r.pendingGVLs = nil
 }
 
 // collectFileDeclarations processes a single source file's declarations.
@@ -77,6 +96,102 @@ func (r *Resolver) collectFileDeclarations(file *ast.SourceFile, isLibrary bool)
 			r.resolveTypeDecl(d, isLibrary)
 		case *ast.InterfaceDecl:
 			r.resolveInterface(d, isLibrary)
+		case *ast.GVLDecl:
+			r.pendingGVLs = append(r.pendingGVLs, pendingGVL{decl: d, isLibrary: isLibrary})
+		}
+	}
+}
+
+// resolveGVL registers a GVL as a global symbol whose type is a struct of
+// its variables, so GVL.x resolves through ordinary member access. Variables
+// of a GVL without qualified_only are also inserted into the global scope so
+// bare x resolves. Variables of a qualified_only GVL are not: two such GVLs
+// may declare the same name, and the checker reports SEMA033 on bare access.
+func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
+	if d.Name == nil {
+		return
+	}
+	name := d.Name.Name
+	pos := astPosToSource(d.Name.Span().Start)
+	global := r.table.GlobalScope()
+
+	if existing := r.table.LookupGlobal(name); existing != nil {
+		if isLibrary && existing.IsLibrary {
+			return
+		}
+		if !isLibrary && existing.IsLibrary {
+			r.removeGVL(existing)
+		} else {
+			r.diags.Errorf(pos, CodeRedeclared,
+				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
+			return
+		}
+	}
+
+	info := &symbols.GVLInfo{
+		QualifiedOnly: ast.HasAttribute(d.Attributes, "qualified_only"),
+		Vars:          make(map[string]bool),
+		Constants:     make(map[string]bool),
+	}
+	for _, vb := range d.Blocks {
+		if ast.HasAttribute(vb.Attributes, "qualified_only") {
+			info.QualifiedOnly = true
+		}
+	}
+
+	st := &types.StructType{Name: name}
+	var bare []*symbols.Symbol
+	for _, vb := range d.Blocks {
+		for _, vd := range vb.Declarations {
+			typ := r.resolveTypeSpec(vd.Type)
+			for _, id := range vd.Names {
+				key := strings.ToUpper(id.Name)
+				st.Members = append(st.Members, types.StructMember{Name: id.Name, Type: typ})
+				info.Vars[key] = true
+				if vb.IsConstant {
+					info.Constants[key] = true
+				}
+				if !info.QualifiedOnly {
+					bare = append(bare, &symbols.Symbol{
+						Name:       id.Name,
+						Kind:       symbols.KindVariable,
+						Pos:        astPosToSource(id.Span().Start),
+						ParamDir:   ast.VarGlobal,
+						Type:       typ,
+						IsLibrary:  isLibrary,
+						IsConstant: vb.IsConstant,
+					})
+				}
+			}
+		}
+	}
+
+	_ = global.Insert(&symbols.Symbol{
+		Name:      name,
+		Kind:      symbols.KindGVL,
+		Pos:       pos,
+		Type:      st,
+		IsLibrary: isLibrary,
+		GVL:       info,
+	})
+	for _, sym := range bare {
+		if err := global.Insert(sym); err != nil {
+			r.diags.Errorf(sym.Pos, CodeRedeclared, "%s", err.Error())
+		}
+	}
+}
+
+// removeGVL deletes a library symbol that user code overrides. For a library
+// GVL its bare variables are deleted too, so the user GVL can redeclare them.
+func (r *Resolver) removeGVL(existing *symbols.Symbol) {
+	global := r.table.GlobalScope()
+	r.table.RemovePOU(existing.Name)
+	if existing.Kind != symbols.KindGVL || existing.GVL.QualifiedOnly {
+		return
+	}
+	for key := range existing.GVL.Vars {
+		if v := global.LookupLocal(key); v != nil && v.IsLibrary && v.ParamDir == ast.VarGlobal {
+			global.Delete(key)
 		}
 	}
 }

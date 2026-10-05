@@ -28,6 +28,10 @@ const (
 	CodeATNotAllowedHere = "SEMA031" // AT address in wrong POU type
 	CodeATOverlap        = "SEMA032" // overlapping AT address ranges
 
+	// Global variable lists
+	CodeGVLQualifiedOnly = "SEMA033" // bare access to a qualified_only GVL variable
+	CodeAssignToConstant = "SEMA034" // assignment to a VAR_GLOBAL CONSTANT member
+
 	// Vendor warnings
 	CodeVendorOOP       = "VEND001" // OOP not supported by target vendor
 	CodeVendorPointer   = "VEND002" // POINTER TO not supported

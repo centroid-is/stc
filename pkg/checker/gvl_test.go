@@ -168,7 +168,7 @@ func TestGVL(t *testing.T) {
 
 	t.Run("library GVL: duplicates ignored, user GVL overrides", func(t *testing.T) {
 		lib := parseGVLFiles(t, []gvlFile{{"G.st", gvlG}, {"G.st", gvlG}})
-		ds, table := runGVL(t, []gvlFile{{"G.st", "VAR_GLOBAL\n\tz : INT;\nEND_VAR\n"}, progUsing("G.z := 1; b := b;")},
+		ds, table := runGVL(t, []gvlFile{{"G.st", "VAR_GLOBAL\n\tz : INT;\n\tx : INT;\nEND_VAR\n"}, progUsing("G.z := 1; x := 1; b := b;")},
 			ResolveOpts{LibraryFiles: lib})
 		assert.Empty(t, errorsOf(ds))
 		sym := table.LookupGlobal("G")
@@ -178,6 +178,25 @@ func TestGVL(t *testing.T) {
 		_, table = runGVL(t, nil, ResolveOpts{LibraryFiles: lib})
 		require.NotNil(t, table.LookupGlobal("G"))
 		assert.True(t, table.LookupGlobal("G").IsLibrary)
+	})
+
+	t.Run("user GVL overrides a library POU or qualified_only GVL", func(t *testing.T) {
+		lib := parseGVLFiles(t, []gvlFile{{"lib.st", "PROGRAM G\nEND_PROGRAM\n"}, {"Q.st", gvlGQualified}})
+		ds, table := runGVL(t, []gvlFile{{"G.st", gvlG}, {"Q.st", "VAR_GLOBAL\n\tq1 : INT;\nEND_VAR\n"}}, ResolveOpts{LibraryFiles: lib})
+		assert.Empty(t, diagsWithCode(ds, CodeRedeclared))
+		assert.Equal(t, symbols.KindGVL, table.LookupGlobal("G").Kind)
+		assert.Nil(t, table.LookupPOU("G"))
+		assert.False(t, table.LookupGlobal("Q").GVL.QualifiedOnly)
+	})
+
+	t.Run("GVLDecl without a name is skipped", func(t *testing.T) {
+		file := parser.Parse("G.st", gvlG).File
+		file.Declarations[0].(*ast.GVLDecl).Name = nil
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{file})
+		assert.Empty(t, diags.All())
+		assert.Nil(t, table.LookupGlobal("x"))
 	})
 
 	t.Run("AT addresses in a GVL", func(t *testing.T) {

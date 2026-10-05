@@ -1,11 +1,14 @@
 package checker
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/iomap"
+	"github.com/centroid-is/stc/pkg/source"
 	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/centroid-is/stc/pkg/types"
 )
@@ -45,6 +48,8 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 				if st, ok := d.Type.(*ast.StructType); ok {
 					c.checkStructATAddresses(st)
 				}
+			case *ast.GVLDecl:
+				c.checkATAddresses(d.Blocks, "GVL")
 			case *ast.FunctionDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION")
@@ -222,6 +227,9 @@ func (c *Checker) checkStmt(stmt ast.Statement) {
 }
 
 func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
+	if s.Value != nil {
+		c.checkConstantTarget(s.Target)
+	}
 	targetType := c.checkExpr(s.Target)
 	valueType := c.checkExpr(s.Value)
 
@@ -488,9 +496,7 @@ func (c *Checker) checkIdent(e *ast.Ident) types.Type {
 	}
 	sym := c.currentScope.Lookup(e.Name)
 	if sym == nil {
-		pos := astPosToSource(e.Span().Start)
-		c.diags.Errorf(pos, CodeUndeclared,
-			"undeclared identifier %q", e.Name)
+		c.reportUndeclared(astPosToSource(e.Span().Start), e.Name)
 		return types.Invalid
 	}
 	sym.MarkUsed()
@@ -501,6 +507,61 @@ func (c *Checker) checkIdent(e *ast.Ident) types.Type {
 		}
 	}
 	return types.Invalid
+}
+
+// reportUndeclared reports a name that resolves to nothing. When the name is
+// a variable of one or more qualified_only GVLs the error is SEMA033 and
+// points at the qualified form; otherwise it is the usual SEMA010.
+func (c *Checker) reportUndeclared(pos source.Pos, name string) {
+	gvls := c.qualifiedOnlyGVLs(name)
+	if len(gvls) == 0 {
+		c.diags.Errorf(pos, CodeUndeclared, "undeclared identifier %q", name)
+		return
+	}
+	msg := fmt.Sprintf("GVL '%s' is qualified_only; use %s.%s", gvls[0], gvls[0], name)
+	if len(gvls) > 1 {
+		msg += fmt.Sprintf(" (also declared in %s)", strings.Join(gvls[1:], ", "))
+	}
+	c.diags.Errorf(pos, CodeGVLQualifiedOnly, "%s", msg)
+}
+
+// qualifiedOnlyGVLs returns the sorted names of qualified_only GVLs that
+// declare a variable called name.
+func (c *Checker) qualifiedOnlyGVLs(name string) []string {
+	key := strings.ToUpper(name)
+	var out []string
+	for _, sym := range c.table.GlobalScope().Symbols() {
+		if sym.Kind == symbols.KindGVL && sym.GVL.QualifiedOnly && sym.GVL.Vars[key] {
+			out = append(out, sym.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// checkConstantTarget reports SEMA034 when an assignment writes a
+// VAR_GLOBAL CONSTANT member, either bare (x := ...) or qualified (G.x := ...).
+func (c *Checker) checkConstantTarget(target ast.Expr) {
+	var name string
+	constant := false
+	switch t := target.(type) {
+	case *ast.Ident:
+		sym := c.currentScope.Lookup(t.Name)
+		name = t.Name
+		constant = sym != nil && sym.IsConstant
+	case *ast.MemberAccessExpr:
+		obj, ok := t.Object.(*ast.Ident)
+		if !ok || t.Member == nil {
+			return
+		}
+		sym := c.currentScope.Lookup(obj.Name)
+		name = t.Member.Name
+		constant = sym != nil && sym.Kind == symbols.KindGVL && sym.GVL.Constants[strings.ToUpper(name)]
+	}
+	if constant {
+		c.diags.Errorf(astPosToSource(target.Span().Start), CodeAssignToConstant,
+			"cannot assign to constant '%s'", name)
+	}
 }
 
 func (c *Checker) checkLiteral(e *ast.Literal) types.Type {
@@ -624,9 +685,7 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 	if c.currentScope != nil {
 		sym := c.currentScope.Lookup(calleeName)
 		if sym == nil {
-			pos := astPosToSource(e.Callee.Span().Start)
-			c.diags.Errorf(pos, CodeUndeclared,
-				"undeclared identifier %q", calleeName)
+			c.reportUndeclared(astPosToSource(e.Callee.Span().Start), calleeName)
 			return types.Invalid
 		}
 		sym.MarkUsed()
