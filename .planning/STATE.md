@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Vendor Libraries & I/O
-status: complete
-stopped_at: Completed phases 15-18
-last_updated: "2026-03-30T18:00:00.000Z"
-last_activity: 2026-03-30
+milestone: v1.2
+milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
+status: ready_to_plan
+last_updated: "2026-10-05T21:46:20.030Z"
+last_activity: 2026-10-05
 progress:
-  total_phases: 18
-  completed_phases: 18
-  total_plans: 42
-  completed_plans: 42
-  percent: 100
+  total_phases: 11
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** v1.1 milestone complete
+**Current focus:** v1.2 Phase 19 -- TwinCAT Declaration Syntax
 
 ## Current Position
 
-Phase: 18 (final)
-Plan: Complete
-Status: v1.1 milestone complete -- all 18 phases shipped
-Last activity: 2026-03-30
+Phase: 19 of 29 (TwinCAT Declaration Syntax) -- first of 11 v1.2 phases (19-29)
+Plan: —
+Status: Ready to plan
+Last activity: 2026-10-05 — v1.2 roadmap created (11 phases, 47/47 requirements mapped)
 
-Progress: [##########] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -75,17 +74,27 @@ Recent decisions affecting current work:
 - [Phase 14-mock-framework]: IOTable created per test case for isolation; auto-stub warnings aggregated at run level
 - [Phase 15]: MC_Power.Override parameter renamed to Override_V to avoid conflict with OVERRIDE keyword in stc lexer
 - [Phase 18]: RunOpts.Defines field threads preprocessor defines through test runner to pipeline.Parse
+- [v1.2 Roadmap]: Dialect parity split into declaration syntax (Phase 19) and expression semantics + parse gate (Phase 20); nothing downstream starts until flattened ST301 parses clean
+- [v1.2 Roadmap]: Symbol tree with dotted-path Get/Set (Phase 22) is the shared backbone for EtherCAT binding, OPC UA, ST test built-ins and MCP tools; design it so an ADS server (v2) is a thin adapter
+- [v1.2 Roadmap]: EtherCAT simulated at process-image/PDO level only; ATV320 + Tc2_EtherCAT mocks isolated in Phase 26 as the highest-fidelity risk
+- [v1.2 Roadmap]: Phase 28 opens with an awcullen/opcua spike for struct DataTypeDefinition (fallback NodeSet2 import) before building the address space
 
 ### Pending Todos
 
-None -- v1.1 milestone complete.
+None yet.
 
 ### Blockers/Concerns
 
-None -- all blockers resolved during implementation.
+- awcullen/opcua support for StructureDefinition DataTypeDefinitions is unverified (Phase 28 spike)
+- Phase 29 needs a stored browse fixture from the real ST301 TF6100 server, captured once from the plant network
+- The Flutter HMI may require SignAndEncrypt; Phase 28 must support Basic256Sha256 with self-signed certs
 
 ## Session Continuity
 
-Last session: 2026-03-30T18:00:00.000Z
-Stopped at: Completed phases 15-18 (v1.1 milestone complete)
+Last session: 2026-10-05
+Stopped at: v1.2 roadmap created
 Resume file: None
+
+## Operator Next Steps
+
+- Plan the first v1.2 phase with /gsd:plan-phase 19
