@@ -35,11 +35,17 @@ formatting and filtering. Supports Beckhoff (full CODESYS OOP), Schneider
 
 	cmd.Flags().String("target", "portable", "Vendor target: beckhoff, schneider, portable")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+	addGVLNameFlag(cmd)
 
 	return cmd
 }
 
 func runEmit(cmd *cobra.Command, args []string) error {
+	format, _ := cmd.Flags().GetString("format")
+	if err := validateGVLName(cmd, args, format); err != nil {
+		return err
+	}
+
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "error: no input files specified")
 		fmt.Fprintln(os.Stderr, "usage: stc emit <file.st> [file2.st ...] [--target <vendor>]")
@@ -48,7 +54,6 @@ func runEmit(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 
-	format, _ := cmd.Flags().GetString("format")
 	targetName, _ := cmd.Flags().GetString("target")
 	defineFlags, _ := cmd.Flags().GetStringSlice("define")
 	defines := pipeline.ParseDefines(defineFlags)
@@ -72,6 +77,7 @@ func runEmit(cmd *cobra.Command, args []string) error {
 		}
 
 		result := pipeline.Parse(filename, string(content), defines)
+		applyGVLName(cmd, result.File)
 
 		// Check for parse errors
 		fileHasErrors := false

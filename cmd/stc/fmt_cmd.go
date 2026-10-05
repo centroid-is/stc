@@ -34,11 +34,17 @@ and spacing. Comments attached to AST nodes are preserved.`,
 	cmd.Flags().String("indent", "    ", "Indentation string (default: 4 spaces)")
 	cmd.Flags().Bool("uppercase-keywords", true, "Use uppercase keywords (default: true)")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+	addGVLNameFlag(cmd)
 
 	return cmd
 }
 
 func runFmt(cmd *cobra.Command, args []string) error {
+	outputFormat, _ := cmd.Flags().GetString("format")
+	if err := validateGVLName(cmd, args, outputFormat); err != nil {
+		return err
+	}
+
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "error: no input files specified")
 		fmt.Fprintln(os.Stderr, "usage: stc fmt <file.st> [file2.st ...] [--indent <string>] [--uppercase-keywords]")
@@ -47,7 +53,6 @@ func runFmt(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 
-	outputFormat, _ := cmd.Flags().GetString("format")
 	indent, _ := cmd.Flags().GetString("indent")
 	uppercaseKeywords, _ := cmd.Flags().GetBool("uppercase-keywords")
 	defineFlags, _ := cmd.Flags().GetStringSlice("define")
@@ -70,6 +75,7 @@ func runFmt(cmd *cobra.Command, args []string) error {
 		}
 
 		result := pipeline.Parse(filename, string(content), defines)
+		applyGVLName(cmd, result.File)
 
 		// Check for parse errors
 		fileHasErrors := false
