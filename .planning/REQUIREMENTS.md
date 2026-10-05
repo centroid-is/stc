@@ -110,13 +110,59 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (filled by roadmap) | | |
+| DIAL-01 | Phase 19 | Pending |
+| DIAL-02 | Phase 19 | Pending |
+| DIAL-03 | Phase 19 | Pending |
+| DIAL-04 | Phase 20 | Pending |
+| DIAL-05 | Phase 19 | Pending |
+| DIAL-06 | Phase 20 | Pending |
+| DIAL-07 | Phase 20 | Pending |
+| DIAL-08 | Phase 19 | Pending |
+| DIAL-09 | Phase 20 | Pending |
+| DIAL-10 | Phase 20 | Pending |
+| IMPT-01 | Phase 21 | Pending |
+| IMPT-02 | Phase 21 | Pending |
+| IMPT-03 | Phase 21 | Pending |
+| IMPT-04 | Phase 21 | Pending |
+| IMPT-05 | Phase 21 | Pending |
+| RUNT-01 | Phase 22 | Pending |
+| RUNT-02 | Phase 22 | Pending |
+| RUNT-03 | Phase 23 | Pending |
+| RUNT-04 | Phase 23 | Pending |
+| RUNT-05 | Phase 22 | Pending |
+| RUNT-06 | Phase 22 | Pending |
+| RUNT-07 | Phase 23 | Pending |
+| RUNT-08 | Phase 20 | Pending |
+| RUNT-09 | Phase 23 | Pending |
+| ECAT-01 | Phase 24 | Pending |
+| ECAT-02 | Phase 24 | Pending |
+| ECAT-03 | Phase 24 | Pending |
+| ECAT-04 | Phase 25 | Pending |
+| ECAT-05 | Phase 26 | Pending |
+| ECAT-06 | Phase 25 | Pending |
+| ECAT-07 | Phase 24 | Pending |
+| ECAT-08 | Phase 26 | Pending |
+| ECAT-09 | Phase 27 | Pending |
+| ECAT-10 | Phase 27 | Pending |
+| OPCUA-01 | Phase 28 | Pending |
+| OPCUA-02 | Phase 28 | Pending |
+| OPCUA-03 | Phase 28 | Pending |
+| OPCUA-04 | Phase 28 | Pending |
+| OPCUA-05 | Phase 28 | Pending |
+| OPCUA-06 | Phase 28 | Pending |
+| OPCUA-07 | Phase 29 | Pending |
+| OPCUA-08 | Phase 29 | Pending |
+| OPCUA-09 | Phase 29 | Pending |
+| OPCUA-10 | Phase 29 | Pending |
+| DEVX-01 | Phase 27 | Pending |
+| DEVX-02 | Phase 29 | Pending |
+| DEVX-03 | Phase 29 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 47 total
-- Mapped to phases: 0
-- Unmapped: 47 ⚠️
+- Mapped to phases: 47
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-05*
-*Last updated: 2026-10-05 after milestone v1.2 scoping*
+*Last updated: 2026-10-05 after v1.2 roadmap creation*
