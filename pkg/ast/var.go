@@ -38,17 +38,20 @@ func (v VarSection) String() string {
 // VarBlock represents a variable declaration block (VAR...END_VAR).
 type VarBlock struct {
 	NodeBase
-	Section      VarSection `json:"section"`
-	IsConstant   bool       `json:"is_constant,omitempty"`
-	IsRetain     bool       `json:"is_retain,omitempty"`
-	IsPersistent bool       `json:"is_persistent,omitempty"`
-	Declarations []*VarDecl `json:"declarations"`
+	Section      VarSection    `json:"section"`
+	IsConstant   bool          `json:"is_constant,omitempty"`
+	IsRetain     bool          `json:"is_retain,omitempty"`
+	IsPersistent bool          `json:"is_persistent,omitempty"`
+	Declarations []*VarDecl    `json:"declarations"`
+	Attributes   []*Attribute  `json:"attributes,omitempty"`
+	Pragmas      []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *VarBlock) Children() []Node {
-	nodes := make([]Node, len(n.Declarations))
-	for i, d := range n.Declarations {
-		nodes[i] = d
+	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
+	for _, d := range n.Declarations {
+		nodes = append(nodes, d)
 	}
 	return nodes
 }
@@ -56,14 +59,17 @@ func (n *VarBlock) Children() []Node {
 // VarDecl represents a single variable declaration (e.g., x, y : INT := 0;).
 type VarDecl struct {
 	NodeBase
-	Names     []*Ident `json:"names"`
-	Type      TypeSpec `json:"type"`
-	InitValue Expr     `json:"init_value,omitempty"`
-	AtAddress *Ident   `json:"at_address,omitempty"`
+	Names      []*Ident      `json:"names"`
+	Type       TypeSpec      `json:"type"`
+	InitValue  Expr          `json:"init_value,omitempty"`
+	AtAddress  *Ident        `json:"at_address,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *VarDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	for _, name := range n.Names {
 		nodes = append(nodes, name)
 	}
@@ -79,7 +85,8 @@ func (n *VarDecl) Children() []Node {
 	return nodes
 }
 
-// PragmaNode represents a {attribute '...'} pragma.
+// PragmaNode represents a non-attribute pragma such as {warning disable C0001},
+// {region}, {endregion} or {text ...}, kept verbatim so fmt/emit round-trip it.
 type PragmaNode struct {
 	NodeBase
 	Text string `json:"text"`

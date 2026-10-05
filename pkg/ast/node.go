@@ -59,6 +59,12 @@ const (
 	// Var
 	KindVarBlock
 	KindVarDecl
+
+	// Phase 19 (TwinCAT declaration syntax). Appended at the end so the
+	// numeric values of every pre-existing kind stay stable.
+	KindGVLDecl
+	KindAttribute
+	KindPragma
 )
 
 var nodeKindNames = [...]string{
@@ -71,7 +77,7 @@ var nodeKindNames = [...]string{
 	KindPropertyDecl:      "PropertyDecl",
 	KindTypeDecl:          "TypeDecl",
 	KindActionDecl:        "ActionDecl",
-	KindTestCaseDecl:     "TestCaseDecl",
+	KindTestCaseDecl:      "TestCaseDecl",
 	KindAssignStmt:        "AssignStmt",
 	KindCallStmt:          "CallStmt",
 	KindIfStmt:            "IfStmt",
@@ -103,6 +109,9 @@ var nodeKindNames = [...]string{
 	KindStructType:        "StructType",
 	KindVarBlock:          "VarBlock",
 	KindVarDecl:           "VarDecl",
+	KindGVLDecl:           "GVLDecl",
+	KindAttribute:         "Attribute",
+	KindPragma:            "Pragma",
 }
 
 // String returns the human-readable name of a NodeKind.

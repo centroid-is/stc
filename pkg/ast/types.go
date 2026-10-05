@@ -83,7 +83,7 @@ func (n *ReferenceType) typeSpecNode() {}
 type StringType struct {
 	NodeBase
 	IsWide bool `json:"is_wide,omitempty"`
-	Length Expr  `json:"length,omitempty"`
+	Length Expr `json:"length,omitempty"`
 }
 
 func (n *StringType) Children() []Node {
@@ -120,8 +120,8 @@ func (n *SubrangeType) typeSpecNode() {}
 // EnumType represents an enumeration type declaration.
 type EnumType struct {
 	NodeBase
-	BaseType TypeSpec      `json:"base_type,omitempty"`
-	Values   []*EnumValue  `json:"values"`
+	BaseType TypeSpec     `json:"base_type,omitempty"`
+	Values   []*EnumValue `json:"values"`
 }
 
 func (n *EnumType) Children() []Node {
@@ -139,12 +139,15 @@ func (n *EnumType) typeSpecNode() {}
 // EnumValue represents a single member of an enumeration with optional init value.
 type EnumValue struct {
 	NodeBase
-	Name  *Ident `json:"name"`
-	Value Expr   `json:"value,omitempty"`
+	Name       *Ident        `json:"name"`
+	Value      Expr          `json:"value,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *EnumValue) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -175,10 +178,15 @@ type StructMember struct {
 	Name      *Ident   `json:"name"`
 	Type      TypeSpec `json:"type"`
 	InitValue Expr     `json:"init_value,omitempty"`
+	// AtAddress holds a direct address such as %I* or %QX0.0 on a member.
+	AtAddress  *Ident        `json:"at_address,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *StructMember) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -187,6 +195,9 @@ func (n *StructMember) Children() []Node {
 	}
 	if n.InitValue != nil {
 		nodes = append(nodes, n.InitValue)
+	}
+	if n.AtAddress != nil {
+		nodes = append(nodes, n.AtAddress)
 	}
 	return nodes
 }

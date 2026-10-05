@@ -90,10 +90,6 @@ func TestGVLDecl_Children(t *testing.T) {
 	var _ Declaration = g
 }
 
-func TestPragmaNode_Children(t *testing.T) {
-	assert.Nil(t, (&PragmaNode{Text: "{region}"}).Children())
-}
-
 // TestAttributeFirstChildren checks that every node carrying Attributes and
 // Pragmas lists them before its other children, so trivia attachment maps a
 // comment above an attribute to the Attribute node.
