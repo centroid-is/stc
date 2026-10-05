@@ -26,6 +26,7 @@ type PlantBinding struct {
 // SimConfig configures a simulation run.
 type SimConfig struct {
 	Program        *ast.ProgramDecl // The ST program to simulate
+	GVLs           []*ast.GVLDecl   // Global variable lists the program can use
 	NumCycles      int              // Number of scan cycles to run
 	CycleDt        time.Duration    // Time step per cycle (e.g., 10ms)
 	Waveforms      []WaveformBinding
@@ -47,6 +48,7 @@ func NewSimulationEngine(cfg SimConfig) *SimulationEngine {
 		cfg.RecordInterval = 1
 	}
 	scan := interp.NewScanCycleEngine(cfg.Program)
+	scan.SetGlobals(cfg.GVLs)
 	scan.Initialize()
 	return &SimulationEngine{
 		cfg:  cfg,

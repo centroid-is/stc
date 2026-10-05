@@ -77,6 +77,7 @@ VAR_GLOBAL
 END_VAR
 
 FUNCTION_BLOCK FB_Bump
+VAR_INPUT n : INT; END_VAR
 g_test.x := g_test.x + 10;
 x := x + 100;
 END_FUNCTION_BLOCK
@@ -87,7 +88,7 @@ END_FUNCTION
 
 TEST_CASE 'fb uses GVL'
 VAR b : FB_Bump; END_VAR
-b();
+b(n := 1);
 ASSERT_EQ(g_test.x, 111);
 ASSERT_EQ(GetX(), 222);
 END_TEST_CASE

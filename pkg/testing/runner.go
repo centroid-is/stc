@@ -162,6 +162,9 @@ type fileContext struct {
 	funcDecls map[string]*ast.FunctionDecl
 	// ifaceDecls maps upper-case interface names to their InterfaceDecl.
 	ifaceDecls map[string]*ast.InterfaceDecl
+	// gvlDecls lists the file's GVLs in source order. They are registered
+	// afresh for every TEST_CASE so GVL state never leaks between cases.
+	gvlDecls []*ast.GVLDecl
 }
 
 // runFile parses a single .st file and executes all TEST_CASE blocks.
@@ -213,6 +216,8 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 			if d.Name != nil {
 				ctx.ifaceDecls[strings.ToUpper(d.Name.Name)] = d
 			}
+		case *ast.GVLDecl:
+			ctx.gvlDecls = append(ctx.gvlDecls, d)
 		}
 	}
 
@@ -296,8 +301,18 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	ioTable := iomap.NewIOTable()
 	registerIOFunctions(interpreter, ioTable)
 
-	// Create isolated environment
-	env := interp.NewEnv(nil)
+	// Register the file's GVLs on this test case's interpreter. Types and
+	// FB declarations are registered above, so GVL members of user types and
+	// FB types are built correctly.
+	if ctx != nil {
+		for _, g := range ctx.gvlDecls {
+			interpreter.RegisterGVL(g)
+		}
+	}
+
+	// Create isolated environment; non qualified_only GVLs are its ancestors
+	// so their variables resolve as bare names.
+	env := interp.NewEnv(interpreter.GlobalParent())
 
 	// Initialize variables from VarBlocks
 	initializeTestEnv(interpreter, env, tc.VarBlocks, ctx)
@@ -351,8 +366,9 @@ func registerUserFunctions(interpreter *interp.Interpreter, ctx *fileContext) {
 
 // callUserFunction executes a user-defined FUNCTION with the given arguments.
 func callUserFunction(parentInterp *interp.Interpreter, decl *ast.FunctionDecl, args []interp.Value) (interp.Value, error) {
-	// Create a new environment for the function call
-	env := interp.NewEnv(nil)
+	// Create a new environment for the function call. Its parent is the
+	// chain of non qualified_only GVLs, so bare GVL names resolve.
+	env := interp.NewEnv(parentInterp.GlobalParent())
 
 	// Initialize return variable (function name holds the return value)
 	retTypeName := ""

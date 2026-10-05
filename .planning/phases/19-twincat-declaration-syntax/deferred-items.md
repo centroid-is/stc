@@ -16,3 +16,9 @@
 - **pkg/parser/expr.go, pkg/emit/emit_final_coverage_test.go, pkg/checker/check_coverage_test.go and pkg/checker/vendor.go are not gofmt-clean.** Pre-existing; not touched by 19-04.
 - **Lexer rejects unknown address areas such as `%Z9` as Illegal tokens.** The parse error comes before the checker, so SEMA030 only fires for addresses that lex but fail `iomap.ParseAddress` (e.g. `%IX0.9`).
 - **Trailing comma before `)` in call arguments is still a parse error.** st301.st has 5 calls like `SPB03.speedBatcher(a := x, q => y,\n);` and svncorecomponents.st has 1 similar error. This is not an empty formal argument, so 19-04 did not change it. Accepting it is a one-line change in parseCallArgs (stop when `,` is followed by `)`), but it needs a decision on whether fmt keeps or drops the comma.
+
+## From 19-06 (GVL runtime)
+
+- **Zero-argument FB instance calls fail at runtime.** `b();` on an FB instance parses as an expression statement with a CallExpr, and `evalCall` reports `undefined function: B`. `G.f();` on a GVL FB instance hits `evalMethodCall` and reports `method 'f' not found`. Reproduced without any GVL, so it predates 19-06. Calls with at least one argument go through `execCallStmt` and work. 19-08 touches the same evalCall branch for actions and could fall back to running an FB instance there.
+- **Library and mock files' GVLs are not registered in the test runner.** Only GVLs declared in the `*_test.st` file itself are registered per TEST_CASE.
+- **`stc sim` does not register TYPE or FUNCTION_BLOCK declarations.** A GVL member of a user struct type in a sim program zero-fills as DINT, so `G.s.a` is a RuntimeError there. It works in the test runner.

@@ -55,12 +55,17 @@ func runSim(cmd *cobra.Command, args []string) error {
 
 	result := pipeline.Parse(filename, string(content), defines)
 
-	// Find the first ProgramDecl
+	// Find the first ProgramDecl and collect the file's GVLs
 	var prog *ast.ProgramDecl
+	var gvls []*ast.GVLDecl
 	for _, d := range result.File.Declarations {
-		if p, ok := d.(*ast.ProgramDecl); ok {
-			prog = p
-			break
+		switch d := d.(type) {
+		case *ast.ProgramDecl:
+			if prog == nil {
+				prog = d
+			}
+		case *ast.GVLDecl:
+			gvls = append(gvls, d)
 		}
 	}
 	if prog == nil {
@@ -85,6 +90,7 @@ func runSim(cmd *cobra.Command, args []string) error {
 
 	cfg := sim.SimConfig{
 		Program:   prog,
+		GVLs:      gvls,
 		NumCycles: cycles,
 		CycleDt:   dt,
 		Waveforms: waveforms,
