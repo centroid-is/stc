@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-05T23:26:05.728Z"
+last_updated: "2026-10-05T23:35:17.465Z"
 last_activity: 2026-10-05
 progress:
   total_phases: 29
   completed_phases: 14
   total_plans: 48
-  completed_plans: 43
+  completed_plans: 44
   percent: 48
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 19 (TwinCAT Declaration Syntax) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Ready to execute
 Last activity: 2026-10-05
 
-Progress: [█████████░] 90%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-03: printers emit owner attributes (with their own comments) before the owner's leading trivia; attributes are emitted for every vendor target
 - [Phase 19]: 19-05: GVL access rules (qualified_only, constants) live on the KindGVL symbol as GVLInfo so PurgeFile cannot leave stale entries
 - [Phase 19]: 19-05: GVLs resolve in a deferred pendingGVLs pass after all TYPEs are registered
+- [Phase 19]: 19-06: GVL member writes to undeclared names are RuntimeErrors; non qualified_only GVL envs chain as parents of program/test/FUNCTION envs via Interpreter.GlobalParent
 
 ### Pending Todos
 
@@ -99,7 +100,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-05T23:25:59.579Z
+Last session: 2026-10-05T23:35:10.105Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
