@@ -227,6 +227,7 @@ func (f *formatter) emitProgramDecl(d *ast.ProgramDecl) {
 	f.write(f.kw("END_PROGRAM"))
 	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
+	f.emitPOUActions(d.Actions)
 }
 
 func (f *formatter) emitFunctionBlockDecl(d *ast.FunctionBlockDecl) {
@@ -269,6 +270,7 @@ func (f *formatter) emitFunctionBlockDecl(d *ast.FunctionBlockDecl) {
 	f.write(f.kw("END_FUNCTION_BLOCK"))
 	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
+	f.emitPOUActions(d.Actions)
 }
 
 func (f *formatter) emitFunctionDecl(d *ast.FunctionDecl) {
@@ -457,11 +459,24 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 	}
 }
 
+// emitPOUActions prints a POU's actions after its END keyword, each
+// preceded by a blank line, in the CODESYS text export form.
+func (f *formatter) emitPOUActions(actions []*ast.ActionDecl) {
+	for _, a := range actions {
+		f.newline()
+		f.emitActionDecl(a)
+	}
+}
+
+// emitActionDecl prints ACTION name, the action's attributes above it and
+// its other pragmas (such as {warning disable C0139}) as the first body lines.
 func (f *formatter) emitActionDecl(d *ast.ActionDecl) {
+	f.emitAttrs(d.Attributes, nil)
 	f.emitLeadingTrivia(&d.NodeBase)
-	f.writef("%s %s:", f.kw("ACTION"), d.Name.Name)
+	f.writef("%s %s", f.kw("ACTION"), d.Name.Name)
 	f.newline()
 	f.indent++
+	f.emitAttrs(nil, d.Pragmas)
 	for _, s := range d.Body {
 		f.emitIndentedStmt(s)
 	}
@@ -674,8 +689,10 @@ func (f *formatter) emitStmt(s ast.Statement) {
 
 func (f *formatter) emitAssignStmt(s *ast.AssignStmt) {
 	f.emitExpr(s.Target)
-	f.write(" := ")
+	// A nil Value is an expression statement such as the zero-argument
+	// call A1(); (a bad right-hand side parses as an ErrorNode instead).
 	if s.Value != nil {
+		f.write(" := ")
 		f.emitExpr(s.Value)
 	}
 	f.write(";")
