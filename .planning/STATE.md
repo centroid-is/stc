@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Vendor Libraries & I/O
-status: Awaiting next milestone
-stopped_at: Completed phases 15-18 (v1.1 milestone complete)
-last_updated: "2026-10-05T21:44:24.263Z"
-last_activity: 2026-10-05 — Milestone v1.1 completed and archived
+milestone: v1.2
+milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
+status: planning
+last_updated: "2026-10-05T21:46:20.030Z"
+last_activity: 2026-10-05
 progress:
-  total_phases: 18
-  completed_phases: 14
-  total_plans: 38
-  completed_plans: 38
-  percent: 78
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 ## Current Position
 
-Phase: Milestone v1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-05 — Milestone v1.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-10-05 — Milestone v1.2 started
 
 ## Performance Metrics
 

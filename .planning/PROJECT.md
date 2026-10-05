@@ -27,17 +27,25 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 - Incremental compilation with file caching — v1.0
 - MCP server with 6 tool handlers — v1.0
 - Claude Code skills for ST workflows — v1.0
+- Vendor library stub loading from .st declaration files — v1.1
+- ST-based mock framework with auto-generated zero-value stubs and behavioural mocks — v1.1
+- I/O address parser and mock I/O table (%I/%Q/%M, explicit addresses) — v1.1
+- Shipped starter stubs for Beckhoff, Schneider, Allen Bradley — v1.1
+- Auto-defined STC_TEST/STC_SIM preprocessor symbols and TcPOU stub extractor — v1.1
 
-## Current Milestone: v1.1 Vendor Libraries & I/O
+## Current Milestone: v1.2 TwinCAT Import, EtherCAT Simulation & OPC UA
 
-**Goal:** Enable stc to type-check, test, and simulate code that uses vendor-specific function blocks and hardware I/O, with a mockable framework for host-based testing.
+**Goal:** Run a real TwinCAT 3 project (sildarvinnsla ST301 + SVNCoreComponents) on the host unmodified, with simulated EtherCAT terminals and drives behind its `TcLinkTo` links and a TF6100-compatible OPC UA server that the existing Flutter HMI can connect to.
 
 **Target features:**
-- Vendor library stub loading from .st declaration files
-- ST-based mock framework for testing with vendor FBs
-- I/O address mapping (%I*, %Q*, %M*) with mock I/O table
-- Shipped starter stubs: Beckhoff, Schneider, Allen Bradley
-- Auto-define STC_TEST/STC_SIM preprocessor symbols
+- TwinCAT dialect parity: pragmas retained in the AST, GVL files, `AT %I*` in structs/FBs, bit access, empty call arguments, named function arguments, qualified enums, ACTIONs, `REF=`/`THIS^`
+- `stc vendor import` of `.tsproj`/`.plcproj` (TcPOU, TcGVL, TcDUT, methods, actions, library refs) and Tc2_EtherCAT / Tc2_System / Tc2_ModbusSrv stubs
+- Runtime model: symbol tree with dotted-path read/write, multi-POU tasks with configured cycle time, PERSISTENT state, correct integer wrap and initialisers
+- EtherCAT process-image simulator loaded from TwinCAT `EtherCATConfig` exports, resolving `TcLinkTo` pragmas, with device models (EL1008/EL2008/EP2338, EL3054, EL9222-5500, PS2001, ATV320 with CiA402 + CoE, EL6001 serial), InfoData/WcState/master state, Tc2_EtherCAT behavioural mocks, fault injection
+- OPC UA server (awcullen/opcua) honouring `OPC.UA.DA`, `.Access`, `.StructuredType`, `.Description` with Beckhoff namespace/NodeId layout, struct DataTypeDefinitions and enum strings
+- `stc serve` and test/MCP built-ins to drive the simulated plant
+
+**Research:** `.planning/research/v1.2/`
 
 ## Current State
 
@@ -68,7 +76,8 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 
 - Allen Bradley support in v1 — restricted ST dialect, no OOP, different tag model; defer to v2
 - LLVM backend — transpile to C++ first, LLVM later when interpreter and test runner are proven
-- Real-time PLC execution — this is a development/testing toolchain, not a runtime
+- Real-time PLC execution — this is a development/testing toolchain, not a runtime (v1.2 adds a host-paced free-running mode for HMI development, not a deterministic real-time runtime)
+- Frame-level EtherCAT emulation (ESC registers, mailbox protocol, DC) — simulate at process-image/PDO level only; frame level is TE1111 / acontis territory
 - Vendor IDE replacement — augments existing workflows, engineers still paste into TwinCAT/Unity Pro/Studio 5000
 - GUI — CLI-first with MCP and skills for AI integration
 
@@ -127,4 +136,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after initialization*
+*Last updated: 2026-10-05 after starting milestone v1.2*
