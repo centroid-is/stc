@@ -205,3 +205,147 @@ END_PROGRAM
 		})
 	}
 }
+
+// attrNames returns the attribute names of node in source order.
+func attrNames(node map[string]any) []string {
+	var names []string
+	attrs, _ := node["attributes"].([]any)
+	for _, a := range attrs {
+		m, _ := a.(map[string]any)
+		s, _ := m["name"].(string)
+		names = append(names, s)
+	}
+	return names
+}
+
+// varDeclNamed returns the VarDecl that declares name.
+func varDeclNamed(t *testing.T, root any, name string) map[string]any {
+	t.Helper()
+	decls := findNodes(root, func(m map[string]any) bool {
+		if m["kind"] != "VarDecl" {
+			return false
+		}
+		names, _ := m["names"].([]any)
+		for _, n := range names {
+			if nm, _ := n.(map[string]any); nm["name"] == name {
+				return true
+			}
+		}
+		return false
+	})
+	if len(decls) != 1 {
+		t.Fatalf("expected 1 VarDecl %s, got %d", name, len(decls))
+	}
+	return decls[0]
+}
+
+func TestParseJSONECT(t *testing.T) {
+	parseECT := func(t *testing.T, extra ...string) map[string]any {
+		t.Helper()
+		args := append([]string{"parse", "--format", "json"}, extra...)
+		args = append(args, ectProbe)
+		stdout, stderr, code := runStc(t, args...)
+		if code != 0 {
+			t.Fatalf("exit %d; stderr: %s", code, stderr)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		return doc
+	}
+	doc := parseECT(t)
+	root := doc["ast"]
+
+	gvl := func(t *testing.T, root any) map[string]any {
+		t.Helper()
+		gvls := findNodes(root, func(m map[string]any) bool { return m["kind"] == "GVLDecl" })
+		if len(gvls) != 1 {
+			t.Fatalf("expected 1 GVLDecl, got %d", len(gvls))
+		}
+		return gvls[0]
+	}
+
+	t.Run("no diagnostics", func(t *testing.T) {
+		if diags, _ := doc["diagnostics"].([]any); len(diags) != 0 {
+			t.Errorf("expected no diagnostics, got %v", diags)
+		}
+		if doc["has_errors"] != false {
+			t.Errorf("has_errors = %v, want false", doc["has_errors"])
+		}
+	})
+
+	t.Run("GVLDecl named ECT with qualified_only", func(t *testing.T) {
+		g := gvl(t, root)
+		if got := identName(g, "name"); got != "ECT" {
+			t.Errorf("GVLDecl name = %q, want ECT", got)
+		}
+		attrs, _ := g["attributes"].([]any)
+		if len(attrs) != 1 {
+			t.Fatalf("expected 1 GVL attribute, got %d", len(attrs))
+		}
+		a := attrs[0].(map[string]any)
+		if a["name"] != "qualified_only" {
+			t.Errorf("attribute name = %v, want qualified_only", a["name"])
+		}
+		if _, has := a["value"]; has {
+			t.Errorf("qualified_only must have no value key, got %v", a["value"])
+		}
+	})
+
+	t.Run("X attributes in source order", func(t *testing.T) {
+		got := strings.Join(attrNames(varDeclNamed(t, root, "X")), ",")
+		want := "TcLinkTo,OPC.UA.DA,OPC.UA.DA.StructuredType"
+		if got != want {
+			t.Errorf("X attributes = %s, want %s", got, want)
+		}
+	})
+
+	t.Run("nLost description unescapes apostrophe", func(t *testing.T) {
+		attrs, _ := varDeclNamed(t, root, "nLost")["attributes"].([]any)
+		if len(attrs) != 1 {
+			t.Fatalf("expected 1 attribute on nLost, got %d", len(attrs))
+		}
+		a := attrs[0].(map[string]any)
+		if a["name"] != "OPC.UA.DA.Description" {
+			t.Errorf("attribute name = %v", a["name"])
+		}
+		if v, _ := a["value"].(string); !strings.Contains(v, "controller's") {
+			t.Errorf("value = %q, want an unescaped apostrophe", v)
+		}
+	})
+
+	t.Run("ST_EL1008.I1 at_address", func(t *testing.T) {
+		types := findNodes(root, func(m map[string]any) bool {
+			return m["kind"] == "TypeDecl" && identName(m, "name") == "ST_EL1008"
+		})
+		if len(types) != 1 {
+			t.Fatalf("expected TypeDecl ST_EL1008, got %d", len(types))
+		}
+		members := findNodes(types[0], func(m map[string]any) bool {
+			_, hasAt := m["at_address"]
+			return hasAt && identName(m, "name") == "I1"
+		})
+		if len(members) != 1 {
+			t.Fatalf("expected struct member I1 with at_address, got %d", len(members))
+		}
+		if got := identName(members[0], "at_address"); got != "%I*" {
+			t.Errorf("I1 at_address = %q, want %%I*", got)
+		}
+	})
+
+	t.Run("gvl-name ECT2 keeps attributes", func(t *testing.T) {
+		renamed := parseECT(t, "--gvl-name", "ECT2")
+		g1, g2 := gvl(t, root), gvl(t, renamed["ast"])
+		if got := identName(g2, "name"); got != "ECT2" {
+			t.Errorf("GVLDecl name = %q, want ECT2", got)
+		}
+		a1, _ := json.Marshal(g1["attributes"])
+		a2, _ := json.Marshal(g2["attributes"])
+		b1, _ := json.Marshal(g1["blocks"])
+		b2, _ := json.Marshal(g2["blocks"])
+		if string(a1) != string(a2) || string(b1) != string(b2) {
+			t.Errorf("attributes or blocks changed by --gvl-name")
+		}
+	})
+}
