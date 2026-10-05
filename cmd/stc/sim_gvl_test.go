@@ -27,9 +27,7 @@ END_PROGRAM
 
 	var result struct {
 		Cycles []struct {
-			Outputs map[string]struct {
-				Int int64 `json:"Int"`
-			} `json:"outputs"`
+			Outputs map[string]int64 `json:"outputs"`
 		} `json:"cycles"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
@@ -38,7 +36,7 @@ END_PROGRAM
 	if len(result.Cycles) != 2 {
 		t.Fatalf("want 2 cycles, got %d:\n%s", len(result.Cycles), stdout)
 	}
-	if got := result.Cycles[1].Outputs["OUT"].Int; got != 8 {
+	if got := result.Cycles[1].Outputs["OUT"]; got != 8 {
 		t.Errorf("cycle 1 OUT = %d, want 8 (program must see the GVL value):\n%s", got, stdout)
 	}
 }
