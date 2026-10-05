@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-05T23:48:40.545Z"
+last_updated: "2026-10-05T23:53:47.864Z"
 last_activity: 2026-10-05
 progress:
   total_phases: 29
   completed_phases: 14
   total_plans: 48
-  completed_plans: 45
+  completed_plans: 46
   percent: 48
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 19 (TwinCAT Declaration Syntax) — EXECUTING
-Plan: 8 of 10
+Plan: 9 of 10
 Status: Ready to execute
 Last activity: 2026-10-05
 
-Progress: [█████████░] 94%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -90,6 +90,7 @@ Recent decisions affecting current work:
 - [Phase 19]: ACTION bodies stop at END_ACTION, the next ACTION, the POU end or any top-level declaration keyword
 - [Phase 19]: FB methods are FunctionType symbols in the FB scope so actions and the FB body can call them unqualified
 - [Phase 19]: DIAL-08 stays pending until 19-08 adds runtime action execution
+- [Phase 19]: 19-10: --gvl-name is applied after parsing (after ia.Parse in check), never in the incremental parse path; more than one input file is a usage error, a JSON {error} object under --format json
 
 ### Pending Todos
 
@@ -103,7 +104,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-05T23:48:27.069Z
+Last session: 2026-10-05T23:53:42.597Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
