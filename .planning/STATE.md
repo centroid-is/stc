@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-05T23:35:17.465Z"
+last_updated: "2026-10-05T23:48:40.545Z"
 last_activity: 2026-10-05
 progress:
   total_phases: 29
   completed_phases: 14
   total_plans: 48
-  completed_plans: 44
+  completed_plans: 45
   percent: 48
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 19 (TwinCAT Declaration Syntax) — EXECUTING
-Plan: 7 of 10
+Plan: 8 of 10
 Status: Ready to execute
 Last activity: 2026-10-05
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -87,6 +87,9 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-05: GVL access rules (qualified_only, constants) live on the KindGVL symbol as GVLInfo so PurgeFile cannot leave stale entries
 - [Phase 19]: 19-05: GVLs resolve in a deferred pendingGVLs pass after all TYPEs are registered
 - [Phase 19]: 19-06: GVL member writes to undeclared names are RuntimeErrors; non qualified_only GVL envs chain as parents of program/test/FUNCTION envs via Interpreter.GlobalParent
+- [Phase 19]: ACTION bodies stop at END_ACTION, the next ACTION, the POU end or any top-level declaration keyword
+- [Phase 19]: FB methods are FunctionType symbols in the FB scope so actions and the FB body can call them unqualified
+- [Phase 19]: DIAL-08 stays pending until 19-08 adds runtime action execution
 
 ### Pending Todos
 
@@ -100,7 +103,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-05T23:35:10.105Z
+Last session: 2026-10-05T23:48:27.069Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 

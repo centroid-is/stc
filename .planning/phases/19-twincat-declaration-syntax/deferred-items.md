@@ -22,3 +22,11 @@
 - **Zero-argument FB instance calls fail at runtime.** `b();` on an FB instance parses as an expression statement with a CallExpr, and `evalCall` reports `undefined function: B`. `G.f();` on a GVL FB instance hits `evalMethodCall` and reports `method 'f' not found`. Reproduced without any GVL, so it predates 19-06. Calls with at least one argument go through `execCallStmt` and work. 19-08 touches the same evalCall branch for actions and could fall back to running an FB instance there.
 - **Library and mock files' GVLs are not registered in the test runner.** Only GVLs declared in the `*_test.st` file itself are registered per TEST_CASE.
 - **`stc sim` does not register TYPE or FUNCTION_BLOCK declarations.** A GVL member of a user struct type in a sim program zero-fills as DINT, so `G.s.a` is a RuntimeError there. It works in the test runner.
+
+## From 19-07 (ACTION parse and check)
+
+- **Integer literals type as DINT, so `n := n + 1;` with `n : INT` reports `cannot assign DINT to INT`.** Reproduced on the 19-06 binary. It hits action_inside.st line 13. The 19-07 checker tests use DINT counters instead.
+- **METHOD bodies are never checked.** `CheckBodies` checks PROGRAM, FUNCTION_BLOCK, FUNCTION and now ACTION bodies, but not methods, and methods have no scope of their own. A method calling an action is therefore accepted without any checking.
+- **Inherited methods (EXTENDS) are not in the derived FB's scope.** 19-07 inserts only the FB's own methods, so calling a base-class method unqualified still reports SEMA010.
+- **Named arguments in expression position still fail to parse** (Phase 20). `u := find_order(prio := x);` parses as `u := find_order` plus a parse error. Since 19-07 registers methods, the checker now says `cannot assign find_order to UINT` there instead of `undeclared identifier "find_order"`. That is 2 lines in st301 and 4 in svncorecomponents. The error count is unchanged.
+- **pkg/symbols/scope.go is not gofmt-clean.** Pre-existing; not touched by 19-07.
