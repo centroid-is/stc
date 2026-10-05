@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-05T23:15:31.958Z"
+last_updated: "2026-10-05T23:26:05.728Z"
 last_activity: 2026-10-05
 progress:
   total_phases: 29
   completed_phases: 14
   total_plans: 48
-  completed_plans: 42
+  completed_plans: 43
   percent: 48
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 19 (TwinCAT Declaration Syntax) — EXECUTING
-Plan: 5 of 10
+Plan: 6 of 10
 Status: Ready to execute
 Last activity: 2026-10-05
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -84,6 +84,8 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-02: Attributes/Pragmas also on VarBlock; new NodeKinds appended after KindVarDecl (=40, pinned by test)
 - [Phase 19]: 19-03: trailing pragmas before END_VAR attach to the VarBlock, before END_STRUCT or ) to the last member/value; ownerless pragmas (EOF, empty struct/enum) are dropped
 - [Phase 19]: 19-03: printers emit owner attributes (with their own comments) before the owner's leading trivia; attributes are emitted for every vendor target
+- [Phase 19]: 19-05: GVL access rules (qualified_only, constants) live on the KindGVL symbol as GVLInfo so PurgeFile cannot leave stale entries
+- [Phase 19]: 19-05: GVLs resolve in a deferred pendingGVLs pass after all TYPEs are registered
 
 ### Pending Todos
 
@@ -97,7 +99,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-05T23:15:27.555Z
+Last session: 2026-10-05T23:25:59.579Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
