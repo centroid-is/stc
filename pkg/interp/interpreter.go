@@ -968,6 +968,10 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 		if arg.Name == nil {
 			continue
 		}
+		if arg.Value == nil {
+			// Empty argument (name := ,): treated as omitted.
+			continue
+		}
 		argVal, err := interp.evalExpr(env, arg.Value)
 		if err != nil {
 			return err
