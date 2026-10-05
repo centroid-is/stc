@@ -26,6 +26,7 @@ const (
 	KindMethod                          // METHOD
 	KindProperty                        // PROPERTY
 	KindGVL                             // Global variable list (VAR_GLOBAL file)
+	KindAction                          // ACTION of a PROGRAM or FUNCTION_BLOCK
 )
 
 var symbolKindNames = [...]string{
@@ -39,6 +40,7 @@ var symbolKindNames = [...]string{
 	KindMethod:        "Method",
 	KindProperty:      "Property",
 	KindGVL:           "GVL",
+	KindAction:        "Action",
 }
 
 // String returns the human-readable name of the symbol kind.

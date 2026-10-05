@@ -45,7 +45,7 @@ func TestAction(t *testing.T) {
 		ds := runAction(t, `PROGRAM MAIN
 VAR
 	x : BOOL;
-	n : INT;
+	n : DINT;
 END_VAR
 A1();
 A2();
@@ -91,6 +91,11 @@ END_PROGRAM
 		require.Equal(t, 4, errs[0].Pos.Line)
 	})
 
+	t.Run("member call on an unknown or non-identifier root adds nothing", func(t *testing.T) {
+		ds := runAction(t, "PROGRAM MAIN\nnobody.coe();\nf().coe();\nEND_PROGRAM\n")
+		require.Empty(t, ds)
+	})
+
 	t.Run("inst.coe() on an FB instance is accepted", func(t *testing.T) {
 		ds := runAction(t, fbDrive+"PROGRAM MAIN\nVAR\n\tinst : FB_Drive;\nEND_VAR\ninst.coe();\ninst.sdo();\nEND_PROGRAM\n")
 		require.Empty(t, ds)
@@ -99,16 +104,16 @@ END_PROGRAM
 	t.Run("FB action calls a method and a method calls an action", func(t *testing.T) {
 		ds := runAction(t, `FUNCTION_BLOCK FB
 VAR_INPUT
-	k : INT;
+	k : DINT;
 END_VAR
 VAR_OUTPUT
-	q : INT;
+	q : DINT;
 	ok : BOOL;
 END_VAR
 A();
 METHOD M_Reset : BOOL
 VAR_INPUT
-	v : INT;
+	v : DINT;
 END_VAR
 q := v;
 A();
@@ -123,9 +128,25 @@ END_FUNCTION_BLOCK
 		require.Empty(t, ds)
 	})
 
+	t.Run("method called as a statement with formal arguments", func(t *testing.T) {
+		ds := runAction(t, "FUNCTION_BLOCK FB\nVAR_INPUT k : DINT; END_VAR\nVAR_OUTPUT q : DINT; END_VAR\n"+
+			"M(v := k, r => q);\nM(v := 1);\nM(nope := 1);\n"+
+			"METHOD M : BOOL\nVAR_INPUT v : DINT; END_VAR\nVAR_OUTPUT r : DINT; END_VAR\nEND_METHOD\nEND_FUNCTION_BLOCK\n")
+		errs := errorsOf(ds)
+		require.Equal(t, []string{CodeNoMember}, codesOf(errs))
+		require.Contains(t, errs[0].Message, `"nope"`)
+		require.Empty(t, ds[1:])
+	})
+
 	t.Run("method call arguments are checked like function calls", func(t *testing.T) {
 		ds := runAction(t, "FUNCTION_BLOCK FB\nVAR_OUTPUT q : BOOL; END_VAR\nq := M(1, 2);\nMETHOD M : BOOL\nEND_METHOD\nEND_FUNCTION_BLOCK\n")
 		require.Equal(t, []string{CodeWrongArgCount}, codesOf(errorsOf(ds)))
+	})
+
+	t.Run("method VAR_IN_OUT counts as a call parameter", func(t *testing.T) {
+		ds := runAction(t, "FUNCTION_BLOCK FB\nVAR_OUTPUT q : DINT; END_VAR\nM(q);\n"+
+			"METHOD M\nVAR_IN_OUT io : DINT; END_VAR\nVAR\n\tlocal : DINT;\nEND_VAR\nEND_METHOD\nEND_FUNCTION_BLOCK\n")
+		require.Empty(t, errorsOf(ds))
 	})
 
 	t.Run("method named like a variable is a redeclaration", func(t *testing.T) {

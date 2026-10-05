@@ -59,12 +59,18 @@ func checkUnreachableDecl(decl ast.Declaration, diags *diag.Collector) {
 	switch d := decl.(type) {
 	case *ast.ProgramDecl:
 		checkUnreachableStmts(d.Body, diags)
+		for _, a := range d.Actions {
+			checkUnreachableStmts(a.Body, diags)
+		}
 	case *ast.FunctionDecl:
 		checkUnreachableStmts(d.Body, diags)
 	case *ast.FunctionBlockDecl:
 		checkUnreachableStmts(d.Body, diags)
 		for _, m := range d.Methods {
 			checkUnreachableStmts(m.Body, diags)
+		}
+		for _, a := range d.Actions {
+			checkUnreachableStmts(a.Body, diags)
 		}
 	case *ast.MethodDecl:
 		checkUnreachableStmts(d.Body, diags)

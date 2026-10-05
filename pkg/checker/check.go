@@ -38,11 +38,13 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "PROGRAM")
 					c.checkPOUBody(d.Name.Name, d.Body)
+					c.checkActionBodies(d.Name.Name, d.Actions)
 				}
 			case *ast.FunctionBlockDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION_BLOCK")
 					c.checkPOUBody(d.Name.Name, d.Body)
+					c.checkActionBodies(d.Name.Name, d.Actions)
 				}
 			case *ast.TypeDecl:
 				if st, ok := d.Type.(*ast.StructType); ok {
@@ -179,6 +181,14 @@ func (c *Checker) checkATAddresses(varBlocks []*ast.VarBlock, pouType string) {
 					overlapStart, overlapEnd-1)
 			}
 		}
+	}
+}
+
+// checkActionBodies checks each action body in the owning POU's scope, so
+// variables used only inside actions are marked used.
+func (c *Checker) checkActionBodies(pouName string, actions []*ast.ActionDecl) {
+	for _, a := range actions {
+		c.checkPOUBody(pouName, a.Body)
 	}
 }
 
@@ -395,6 +405,13 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 		return
 	}
 
+	if fnType, ok := calleeType.(*types.FunctionType); ok {
+		// A FUNCTION, METHOD or ACTION called as a statement with formal
+		// arguments: M(a := x);
+		c.checkFuncCallStmtArgs(fnType, s.Args)
+		return
+	}
+
 	fbType, ok := calleeType.(*types.FunctionBlockType)
 	if !ok {
 		pos := astPosToSource(s.Callee.Span().Start)
@@ -457,6 +474,31 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 			}
 		}
 	}
+}
+
+// checkFuncCallStmtArgs checks the formal arguments of a function-like call
+// statement. Input names must be parameters of fnType; output bindings (=>)
+// are not validated because a FunctionType does not list outputs. Every
+// argument value is checked so its variables count as used.
+func (c *Checker) checkFuncCallStmtArgs(fnType *types.FunctionType, args []*ast.CallArg) {
+	for _, arg := range args {
+		if arg.Name != nil && !arg.IsOutput && !hasParam(fnType.Params, arg.Name.Name) {
+			c.diags.Errorf(astPosToSource(arg.Name.Span().Start), CodeNoMember,
+				"%s has no input parameter %q", fnType.Name, arg.Name.Name)
+		}
+		if arg.Value != nil {
+			c.checkExpr(arg.Value)
+		}
+	}
+}
+
+func hasParam(params []types.Parameter, name string) bool {
+	for _, p := range params {
+		if strings.EqualFold(p.Name, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkExpr type-checks an expression and returns its resolved type.
@@ -672,6 +714,9 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 	// Resolve callee
 	calleeName := exprName(e.Callee)
 	if calleeName == "" {
+		// Member callees (inst.A1(), GVL.fb()) are accepted unchecked;
+		// the instance they are called on still counts as used.
+		c.markRootUsed(e.Callee)
 		return types.Invalid
 	}
 
@@ -886,6 +931,26 @@ func isBooleanOp(op string) bool {
 		return true
 	}
 	return false
+}
+
+// markRootUsed marks the variable at the root of a member-access chain
+// (inst in inst.A1 or a.b.c) as used. Unknown roots are left alone: the
+// call is accepted without checking, so no diagnostic is added here.
+func (c *Checker) markRootUsed(e ast.Expr) {
+	for {
+		ma, ok := e.(*ast.MemberAccessExpr)
+		if !ok {
+			break
+		}
+		e = ma.Object
+	}
+	id, ok := e.(*ast.Ident)
+	if !ok || c.currentScope == nil {
+		return
+	}
+	if sym := c.currentScope.Lookup(id.Name); sym != nil {
+		sym.MarkUsed()
+	}
 }
 
 func exprName(e ast.Expr) string {

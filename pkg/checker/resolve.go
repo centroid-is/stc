@@ -228,6 +228,65 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 	}
 
 	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveActions(d.Actions, pouScope)
+}
+
+// resolveActions inserts each ACTION into its POU's scope as a VOID,
+// parameterless function so A1(); resolves through checkCallExpr. Actions
+// share the POU scope, so a clash with a variable or method is reported as
+// a redeclaration.
+func (r *Resolver) resolveActions(actions []*ast.ActionDecl, scope *symbols.Scope) {
+	for _, a := range actions {
+		r.insertCallable(scope, a.Name, symbols.KindAction,
+			&types.FunctionType{Name: a.Name.Name, ReturnType: types.TypeVOID})
+	}
+}
+
+// resolveMethods inserts each METHOD of a FUNCTION_BLOCK into the FB scope
+// as a function with the method's inputs as parameters, so the FB body and
+// its actions can call M(...) unqualified.
+func (r *Resolver) resolveMethods(methods []*ast.MethodDecl, scope *symbols.Scope) {
+	for _, m := range methods {
+		var ret types.Type = types.TypeVOID
+		if m.ReturnType != nil {
+			ret = r.resolveTypeSpec(m.ReturnType)
+		}
+		fn := &types.FunctionType{Name: m.Name.Name, ReturnType: ret}
+		fn.Params = r.callParams(m.VarBlocks)
+		r.insertCallable(scope, m.Name, symbols.KindMethod, fn)
+	}
+}
+
+// callParams lists the VAR_INPUT and VAR_IN_OUT parameters of a callable in
+// declaration order.
+func (r *Resolver) callParams(blocks []*ast.VarBlock) []types.Parameter {
+	var params []types.Parameter
+	for _, vb := range blocks {
+		var dir types.ParamDirection
+		switch vb.Section {
+		case ast.VarInput:
+			dir = types.DirInput
+		case ast.VarInOut:
+			dir = types.DirInOut
+		default:
+			continue
+		}
+		for _, vd := range vb.Declarations {
+			typ := r.resolveTypeSpec(vd.Type)
+			for _, n := range vd.Names {
+				params = append(params, types.Parameter{Name: n.Name, Type: typ, Direction: dir})
+			}
+		}
+	}
+	return params
+}
+
+func (r *Resolver) insertCallable(scope *symbols.Scope, name *ast.Ident, kind symbols.SymbolKind, fn *types.FunctionType) {
+	pos := astPosToSource(name.Span().Start)
+	sym := &symbols.Symbol{Name: name.Name, Kind: kind, Pos: pos, Type: fn}
+	if err := scope.Insert(sym); err != nil {
+		r.diags.Errorf(pos, CodeRedeclared, "%s", err.Error())
+	}
 }
 
 func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool) {
@@ -258,6 +317,8 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 	fbType := &types.FunctionBlockType{Name: name}
 
 	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveMethods(d.Methods, pouScope)
+	r.resolveActions(d.Actions, pouScope)
 
 	// Collect parameters from var blocks
 	for _, vb := range d.VarBlocks {
