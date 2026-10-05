@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/parser"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,8 +71,15 @@ END_FUNCTION_BLOCK`
 		assert.Equal(t, 3, got[0].Pos.Line)
 	})
 
+	t.Run("unknown area on STRUCT member is a parse error", func(t *testing.T) {
+		// %Z9 is rejected by the lexer, so it never reaches the checker.
+		r := parser.Parse("s.st", "TYPE S :\nSTRUCT\n    a AT %Z9 : BOOL;\nEND_STRUCT\nEND_TYPE")
+		require.NotEmpty(t, r.Diags)
+	})
+
 	t.Run("invalid address on STRUCT member is SEMA030", func(t *testing.T) {
-		src := "TYPE S :\nSTRUCT\n    a AT %Z9 : BOOL;\nEND_STRUCT\nEND_TYPE"
+		// %IX0.9 lexes as an address but bit 9 is out of range.
+		src := "TYPE S :\nSTRUCT\n    a AT %IX0.9 : BOOL;\nEND_STRUCT\nEND_TYPE"
 		ds := runChecker(src)
 		got := diagsWithCode(ds, CodeInvalidATAddress)
 		require.Len(t, got, 1, "diags: %v", ds)

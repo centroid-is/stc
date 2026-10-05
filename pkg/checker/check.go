@@ -41,6 +41,10 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION_BLOCK")
 					c.checkPOUBody(d.Name.Name, d.Body)
 				}
+			case *ast.TypeDecl:
+				if st, ok := d.Type.(*ast.StructType); ok {
+					c.checkStructATAddresses(st)
+				}
 			case *ast.FunctionDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION")
@@ -56,6 +60,29 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 					c.currentFunctionName = ""
 				}
 			}
+		}
+	}
+}
+
+// checkStructATAddresses validates AT addresses on STRUCT members.
+// Wildcards are silent; explicit addresses warn because every instance of the
+// struct would share the same I/O location.
+func (c *Checker) checkStructATAddresses(st *ast.StructType) {
+	for _, m := range st.Members {
+		if m.AtAddress == nil {
+			continue
+		}
+		pos := astPosToSource(m.AtAddress.Span().Start)
+		addr, err := iomap.ParseAddress(m.AtAddress.Name)
+		if err != nil {
+			c.diags.Errorf(pos, CodeInvalidATAddress,
+				"invalid I/O address %q: %s", m.AtAddress.Name, err)
+			continue
+		}
+		if !addr.IsWildcard {
+			c.diags.Warnf(pos, CodeATNotAllowedHere,
+				"explicit AT address on STRUCT member %q: all instances share the same address; use %%I* / %%Q*",
+				m.Name.Name)
 		}
 	}
 }
@@ -87,8 +114,9 @@ func (c *Checker) checkATAddresses(varBlocks []*ast.VarBlock, pouType string) {
 				continue
 			}
 
-			// Check POU type restriction
-			if pouType != "PROGRAM" {
+			// Check POU type restriction. Wildcards (%I*, %Q*, %M*) are
+			// linked by the IDE per instance and are valid in FBs.
+			if pouType != "PROGRAM" && pouType != "GVL" && !addr.IsWildcard {
 				c.diags.Warnf(pos, CodeATNotAllowedHere,
 					"AT address declarations are only valid in PROGRAM blocks, not %s", pouType)
 			}
