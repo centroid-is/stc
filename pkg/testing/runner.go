@@ -359,6 +359,12 @@ func registerUserFunctions(interpreter *interp.Interpreter, ctx *fileContext) {
 		funcDecl := decl // capture for closure
 		funcName := name
 		interpreter.RegisterFunction(funcName, func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
+			// A recursive FUNCTION fails at MaxCallDepth instead of
+			// overflowing the Go stack.
+			if err := interpreter.EnterCall(funcName, pos); err != nil {
+				return interp.Value{}, err
+			}
+			defer interpreter.ExitCall()
 			return callUserFunction(interpreter, funcDecl, args)
 		})
 	}

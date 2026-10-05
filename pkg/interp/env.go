@@ -3,6 +3,8 @@ package interp
 import (
 	"fmt"
 	"strings"
+
+	"github.com/centroid-is/stc/pkg/ast"
 )
 
 // SubrangeConstraint stores the bounds for a subrange variable.
@@ -15,9 +17,10 @@ type SubrangeConstraint struct {
 // Variables are stored with uppercase keys for case-insensitive IEC 61131-3
 // identifier lookup. A parent pointer enables scope chain walking.
 type Env struct {
-	parent     *Env
-	vars       map[string]Value
-	subranges  map[string]*SubrangeConstraint // optional subrange bounds per variable
+	parent    *Env
+	vars      map[string]Value
+	subranges map[string]*SubrangeConstraint // optional subrange bounds per variable
+	actions   map[string]*ast.ActionDecl     // ACTIONs owned by the POU whose env this is
 }
 
 // NewEnv creates a new environment with an optional parent scope.
@@ -122,4 +125,35 @@ func (e *Env) FindOwner(name string) *Env {
 		return e.parent.FindOwner(name)
 	}
 	return nil
+}
+
+// DefineAction registers an ACTION in this scope (case-insensitive). A later
+// definition with the same name replaces an earlier one, which is how a
+// derived FB's action overrides the base FB's action of the same name.
+func (e *Env) DefineAction(a *ast.ActionDecl) {
+	if a == nil || a.Name == nil {
+		return
+	}
+	if e.actions == nil {
+		e.actions = make(map[string]*ast.ActionDecl)
+	}
+	e.actions[strings.ToUpper(a.Name.Name)] = a
+}
+
+// LookupAction finds an ACTION by name (case-insensitive), walking the parent
+// chain. It returns the action and the env that owns it: the action body runs
+// against that env, i.e. the owning POU's variables.
+func (e *Env) LookupAction(name string) (*ast.ActionDecl, *Env) {
+	key := strings.ToUpper(name)
+	for cur := e; cur != nil; cur = cur.parent {
+		if a, ok := cur.actions[key]; ok {
+			return a, cur
+		}
+	}
+	return nil, nil
+}
+
+// localAction finds an ACTION defined in this scope only.
+func (e *Env) localAction(name string) *ast.ActionDecl {
+	return e.actions[strings.ToUpper(name)]
 }

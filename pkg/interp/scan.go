@@ -12,7 +12,7 @@ import (
 // IOBinding associates a variable name with a parsed I/O address for
 // scan-cycle synchronization between the interpreter env and the IOTable.
 type IOBinding struct {
-	VarName string         // uppercase variable name in env
+	VarName string // uppercase variable name in env
 	Address iomap.IOAddress
 }
 
@@ -240,6 +240,11 @@ func (interp *Interpreter) initVarDecl(env *Env, vd *ast.VarDecl) {
 func (e *ScanCycleEngine) initializeEnv() {
 	e.env = NewEnv(e.interp.GlobalParent())
 	e.initialized = true
+
+	// ACTIONs run against the program's own variables.
+	for _, a := range e.program.Actions {
+		e.env.DefineAction(a)
+	}
 
 	for _, vb := range e.program.VarBlocks {
 		for _, vd := range vb.Declarations {

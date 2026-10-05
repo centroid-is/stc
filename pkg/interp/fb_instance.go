@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -33,8 +34,8 @@ type FBInstance struct {
 	// delta shared by every FB in the scan -- calling the same TON twice in
 	// one scan must not advance it twice, because no time passed between the
 	// two calls on a real PLC.
-	lastRun    time.Duration
-	hasRun     bool
+	lastRun time.Duration
+	hasRun  bool
 
 	// For stdlib FBs (non-nil when wrapping a StandardFB implementation)
 	FB StandardFB
@@ -71,9 +72,26 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 		Env:      env,
 	}
 
+	// EXTENDS chain known to the FBDecls registry, base-most first, so the
+	// instance env also holds every inherited variable and ACTION, and a
+	// derived FB's declaration of the same name wins.
+	chain := fbExtendsChain(decl, interp)
+	if len(chain) > 1 {
+		inst.ParentDecl = chain[len(chain)-2]
+	}
+	for _, d := range chain {
+		for _, a := range d.Actions {
+			env.DefineAction(a)
+		}
+	}
+
 	// Walk VarBlocks, initialize variables, and track input/output names
 	resolve := interp.TypeResolverFunc()
-	for _, vb := range decl.VarBlocks {
+	var varBlocks []*ast.VarBlock
+	for _, d := range chain {
+		varBlocks = append(varBlocks, d.VarBlocks...)
+	}
+	for _, vb := range varBlocks {
 		for _, vd := range vb.Declarations {
 			// FB-typed member: instantiate rather than zero-fill. One shared
 			// value must never be defined for several names, so instantiate
@@ -123,6 +141,23 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 	}
 
 	return inst
+}
+
+// fbExtendsChain returns decl and the FBs it EXTENDS that the interpreter's
+// FBDecls registry knows, base-most first and decl last. A cycle or a chain
+// deeper than maxFBNestDepth stops the walk.
+func fbExtendsChain(decl *ast.FunctionBlockDecl, interp *Interpreter) []*ast.FunctionBlockDecl {
+	chain := []*ast.FunctionBlockDecl{decl}
+	cur := decl
+	for len(chain) < maxFBNestDepth && cur.Extends != nil && interp != nil && interp.FBDecls != nil {
+		base := interp.FBDecls[strings.ToUpper(cur.Extends.Name)]
+		if base == nil || slices.Contains(chain, base) {
+			break
+		}
+		chain = append([]*ast.FunctionBlockDecl{base}, chain...)
+		cur = base
+	}
+	return chain
 }
 
 // deltaFor reports how much virtual time has passed since this instance last

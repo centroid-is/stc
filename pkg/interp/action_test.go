@@ -179,4 +179,175 @@ END_PROGRAM
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "undefined function: NOPE")
 	})
+
+	t.Run("action called with arguments is a runtime error", func(t *testing.T) {
+		eng := gvlEngine(t, "args.st", `
+PROGRAM MAIN
+VAR x : BOOL; END_VAR
+A1(1);
+END_PROGRAM
+ACTION A1
+x := TRUE;
+END_ACTION
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "action A1 takes no arguments")
+	})
+
+	t.Run("external action call with arguments is a runtime error", func(t *testing.T) {
+		eng := gvlEngine(t, "extargs.st", fbSrc+`
+PROGRAM MAIN
+VAR inst : FB_C; END_VAR
+inst.coe(1);
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "action coe takes no arguments")
+	})
+
+	t.Run("self-recursive method hits the call depth limit", func(t *testing.T) {
+		eng := gvlEngine(t, "G.st", `
+FUNCTION_BLOCK FB_R
+VAR n : DINT; END_VAR
+METHOD M : BOOL
+n := n + 1;
+M := G.r.M();
+END_METHOD
+END_FUNCTION_BLOCK
+VAR_GLOBAL
+    r : FB_R;
+END_VAR
+PROGRAM MAIN
+VAR ok : BOOL; END_VAR
+ok := G.r.M();
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "maximum call depth 256 exceeded calling M")
+		assert.Equal(t, int64(MaxCallDepth), gvlVar(t, eng, "G", "r").FBRef.GetMember("n").Int)
+		assert.Equal(t, 0, eng.interp.callDepth)
+	})
+}
+
+// TestZeroArgFBCall covers FB instance calls with no arguments, which parse
+// as expression statements and reach evalCall/evalMethodCall rather than
+// execCallStmt.
+func TestZeroArgFBCall(t *testing.T) {
+	fb := `
+FUNCTION_BLOCK FB_C
+VAR_OUTPUT n : INT; END_VAR
+n := n + 1;
+END_FUNCTION_BLOCK
+FUNCTION_BLOCK FB_Outer
+VAR inner : FB_C; END_VAR
+END_FUNCTION_BLOCK
+TYPE ST_H : STRUCT a : INT; END_STRUCT END_TYPE
+`
+	t.Run("plain instance b();", func(t *testing.T) {
+		eng := gvlEngine(t, "zb.st", fb+`
+PROGRAM MAIN
+VAR b : FB_C; t : TON; END_VAR
+b();
+t();
+END_PROGRAM
+`)
+		require.NoError(t, eng.Tick(time.Millisecond))
+		require.NoError(t, eng.Tick(time.Millisecond))
+		assert.Equal(t, int64(2), fbOutput(t, eng.env, "b", "n").Int)
+	})
+
+	t.Run("GVL instance G.f();", func(t *testing.T) {
+		eng := gvlEngine(t, "G.st", fb+`
+VAR_GLOBAL
+    f : FB_C;
+    k : INT;
+END_VAR
+PROGRAM MAIN
+G.f();
+END_PROGRAM
+`)
+		require.NoError(t, eng.Tick(time.Millisecond))
+		v := gvlVar(t, eng, "G", "f")
+		assert.Equal(t, int64(1), v.FBRef.GetMember("n").Int)
+	})
+
+	t.Run("GVL non-FB member call is an error", func(t *testing.T) {
+		eng := gvlEngine(t, "G.st", fb+`
+VAR_GLOBAL
+    k : INT;
+END_VAR
+PROGRAM MAIN
+G.k();
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "G.k is not callable")
+	})
+
+	t.Run("GVL unknown member call is an error", func(t *testing.T) {
+		eng := gvlEngine(t, "G.st", fb+`
+VAR_GLOBAL
+    k : INT;
+END_VAR
+PROGRAM MAIN
+G.nope();
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "has no variable 'nope'")
+	})
+
+	t.Run("nested instance outer.inner();", func(t *testing.T) {
+		eng := gvlEngine(t, "zn.st", fb+`
+PROGRAM MAIN
+VAR o : FB_Outer; END_VAR
+o.inner();
+END_PROGRAM
+`)
+		require.NoError(t, eng.Tick(time.Millisecond))
+		inner := fbOutput(t, eng.env, "o", "inner")
+		require.Equal(t, ValFBInstance, inner.Kind)
+		assert.Equal(t, int64(1), inner.FBRef.GetMember("n").Int)
+	})
+
+	t.Run("unknown member on FB is still method not found", func(t *testing.T) {
+		eng := gvlEngine(t, "zu.st", fb+`
+PROGRAM MAIN
+VAR o : FB_Outer; END_VAR
+o.missing();
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "method 'missing' not found")
+	})
+
+	t.Run("struct non-FB member call is an error", func(t *testing.T) {
+		eng := gvlEngine(t, "zs.st", fb+`
+PROGRAM MAIN
+VAR s : ST_H; END_VAR
+s.a();
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot call method 'a'")
+	})
+
+	t.Run("non-FB variable called is still undefined function", func(t *testing.T) {
+		eng := gvlEngine(t, "zv.st", fb+`
+PROGRAM MAIN
+VAR x : INT; END_VAR
+x();
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "undefined function: X")
+	})
 }
