@@ -187,50 +187,65 @@ func (e *ScanCycleEngine) Initialize() {
 	}
 }
 
+// SetGlobals registers gvls on the engine's interpreter, in declaration
+// order, so the program can use GVL.x and, for GVLs without qualified_only,
+// bare x. Call it before the first Tick or Initialize: the program env picks
+// up the GVL chain as its parent when it is created.
+func (e *ScanCycleEngine) SetGlobals(gvls []*ast.GVLDecl) {
+	for _, g := range gvls {
+		e.interp.RegisterGVL(g)
+	}
+}
+
+// initVarDecl defines every name of vd in env. Stdlib FB types become fresh
+// stdlib instances, user FB types registered in FBDecls become live user FB
+// instances whose env has env as parent, and anything else gets the zero value
+// of its type (resolving user TYPEs through TypeDecls) or its initialiser.
+// Each name gets its own value, so aggregates are never shared between names.
+// Shared by program and GVL environments.
+func (interp *Interpreter) initVarDecl(env *Env, vd *ast.VarDecl) {
+	typeName := typeNameFromSpec(vd.Type)
+	upperType := strings.ToUpper(typeName)
+	factory, isStdlibFB := StdlibFBFactory[upperType]
+	var fbDecl *ast.FunctionBlockDecl
+	if !isStdlibFB && typeName != "" && interp.FBDecls != nil {
+		fbDecl = interp.FBDecls[upperType]
+	}
+
+	for _, n := range vd.Names {
+		var val Value
+		switch {
+		case isStdlibFB:
+			val = Value{Kind: ValFBInstance, FBRef: &FBInstance{TypeName: typeName, FB: factory()}}
+		case fbDecl != nil:
+			val = Value{Kind: ValFBInstance, FBRef: NewUserFBInstance(typeName, fbDecl, interp, env)}
+		default:
+			val = zeroFromTypeSpecWith(vd.Type, interp.TypeResolverFunc(), 0)
+			if vd.InitValue != nil {
+				if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
+					val = iv
+				}
+			}
+			if val.IsAggregate() {
+				val = val.Clone()
+			}
+		}
+		env.Define(n.Name, val)
+	}
+}
+
 // initializeEnv creates and populates the program environment from VarBlocks.
 // Called once on the first Tick (lazy init). Variables persist across scan cycles.
+// The env's parent is the chain of non qualified_only GVLs, if any.
 func (e *ScanCycleEngine) initializeEnv() {
-	e.env = NewEnv(nil)
+	e.env = NewEnv(e.interp.GlobalParent())
 	e.initialized = true
 
 	for _, vb := range e.program.VarBlocks {
 		for _, vd := range vb.Declarations {
-			// Check if the type is a stdlib FB
-			var val Value
-			typeName := typeNameFromSpec(vd.Type)
-			if factory, ok := StdlibFBFactory[strings.ToUpper(typeName)]; ok {
-				// Create an FB instance for each variable of this type
-				for _, n := range vd.Names {
-					fb := factory()
-					inst := &FBInstance{
-						TypeName: typeName,
-						FB:       fb,
-					}
-					val = Value{Kind: ValFBInstance, FBRef: inst}
-					e.env.Define(n.Name, val)
-					upper := strings.ToUpper(n.Name)
-					switch vb.Section {
-					case ast.VarInput:
-						e.inputNames = append(e.inputNames, upper)
-					case ast.VarOutput:
-						e.outputNames = append(e.outputNames, upper)
-					}
-				}
-				continue
-			}
-
-			// Resolve zero value from the type spec
-			val = zeroFromTypeSpec(vd.Type)
-
-			// If there is an init value, try to evaluate it
-			if vd.InitValue != nil {
-				if iv, err := e.interp.evalExpr(e.env, vd.InitValue); err == nil {
-					val = iv
-				}
-			}
+			e.interp.initVarDecl(e.env, vd)
 
 			for _, n := range vd.Names {
-				e.env.Define(n.Name, val)
 				upper := strings.ToUpper(n.Name)
 				switch vb.Section {
 				case ast.VarInput:
@@ -239,7 +254,8 @@ func (e *ScanCycleEngine) initializeEnv() {
 					e.outputNames = append(e.outputNames, upper)
 				}
 
-				// Register AT address binding if present
+				// Register AT address binding if present. FB instances
+				// never carry an address binding.
 				if vd.AtAddress != nil {
 					addr, err := iomap.ParseAddress(vd.AtAddress.Name)
 					if err == nil && !addr.IsWildcard {

@@ -172,7 +172,7 @@ END_PROGRAM
 	t.Run("qualified_only on a VAR_GLOBAL block also counts", func(t *testing.T) {
 		gvl := &ast.GVLDecl{
 			Name: ident("Q"),
-			Blocks: []*ast.VarBlock{{
+			Blocks: []*ast.VarBlock{nil, {
 				Section:    ast.VarGlobal,
 				Attributes: []*ast.Attribute{{Name: "qualified_only"}},
 				Declarations: []*ast.VarDecl{{
@@ -269,6 +269,39 @@ END_PROGRAM
 				assert.Contains(t, err.Error(), "missing")
 			})
 		}
+	})
+
+	t.Run("calls and output bindings on unknown GVL members are RuntimeErrors", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"call":   "G.missing(IN := TRUE);",
+			"output": "G.t(IN := TRUE, PT := T#1MS, Q => G.nope);",
+		} {
+			t.Run(name, func(t *testing.T) {
+				eng := gvlEngine(t, "G.st", `
+VAR_GLOBAL t : TON; END_VAR
+PROGRAM P
+`+body+`
+END_PROGRAM
+`)
+				err := eng.Tick(time.Millisecond)
+				require.Error(t, err)
+				_, isRT := err.(*RuntimeError)
+				assert.True(t, isRT, "want *RuntimeError, got %T", err)
+			})
+		}
+	})
+
+	t.Run("output binding to an undeclared name defines it", func(t *testing.T) {
+		eng := gvlEngine(t, "G.st", `
+VAR_GLOBAL t : TON; END_VAR
+PROGRAM P
+G.t(IN := TRUE, PT := T#1MS, Q => fresh);
+END_PROGRAM
+`)
+		require.NoError(t, eng.Tick(2*time.Millisecond))
+		v, ok := eng.env.GetLocal("fresh")
+		require.True(t, ok)
+		assert.True(t, v.Bool)
 	})
 
 	t.Run("calling a non-FB GVL member is a RuntimeError", func(t *testing.T) {

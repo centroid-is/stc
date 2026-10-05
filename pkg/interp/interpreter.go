@@ -47,6 +47,9 @@ type Interpreter struct {
 	// declarations. FB instantiation consults this so that an FB-typed VAR
 	// inside another FB is created as a live nested instance.
 	FBDecls map[string]*ast.FunctionBlockDecl
+
+	// gvls holds the registered global variable lists; see RegisterGVL.
+	gvls gvlState
 }
 
 // TypeResolverFunc returns a TypeResolver backed by the interpreter's
@@ -943,18 +946,30 @@ func valuesInRange(v, low, high Value) bool {
 // It resolves the callee in the environment, sets inputs from named args,
 // executes the FB, and copies output args back to the env.
 func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
-	// Resolve callee
-	calleeIdent, ok := s.Callee.(*ast.Ident)
-	if !ok {
+	// Resolve callee: a plain instance name, or a member path such as
+	// GVL.timer or s.fb that evaluates to an FB instance.
+	var v Value
+	var calleeName string
+	switch c := s.Callee.(type) {
+	case *ast.Ident:
+		calleeName = c.Name
+		var found bool
+		v, found = env.Get(c.Name)
+		if !found {
+			return &RuntimeError{Msg: fmt.Sprintf("undefined: %s", c.Name)}
+		}
+	case *ast.MemberAccessExpr:
+		calleeName = c.Member.Name
+		var err error
+		v, err = interp.evalMemberAccess(env, c)
+		if err != nil {
+			return err
+		}
+	default:
 		return &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", s.Callee)}
 	}
-
-	v, found := env.Get(calleeIdent.Name)
-	if !found {
-		return &RuntimeError{Msg: fmt.Sprintf("undefined: %s", calleeIdent.Name)}
-	}
 	if v.Kind != ValFBInstance || v.FBRef == nil {
-		return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", calleeIdent.Name)}
+		return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", calleeName)}
 	}
 
 	fbInst := v.FBRef
@@ -1020,9 +1035,15 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 		}
 		outVal := fbInst.GetOutput(arg.Name.Name)
 		// The value expression should be an identifier to assign to
-		if targetIdent, ok := arg.Value.(*ast.Ident); ok {
-			if !env.Set(targetIdent.Name, outVal) {
-				env.Define(targetIdent.Name, outVal)
+		switch target := arg.Value.(type) {
+		case *ast.Ident:
+			if !env.Set(target.Name, outVal) {
+				env.Define(target.Name, outVal)
+			}
+		case *ast.MemberAccessExpr:
+			// q => GVL.flag or q => s.member
+			if err := interp.execAssignMember(env, target, outVal); err != nil {
+				return err
 			}
 		}
 	}
@@ -1032,6 +1053,9 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 
 // evalMemberAccess evaluates obj.member where obj may be an FB instance or struct.
 func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (Value, error) {
+	if g, gvl := interp.gvlRoot(env, e.Object); g != nil {
+		return evalGVLMember(g, gvl, e.Member)
+	}
 	obj, err := interp.evalExpr(env, e.Object)
 	if err != nil {
 		return Value{}, err
@@ -1065,6 +1089,9 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 
 // execAssignMember handles assignment to a member: obj.member := val
 func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessExpr, val Value) error {
+	if g, gvl := interp.gvlRoot(env, target.Object); g != nil {
+		return assignGVLMember(g, gvl, target.Member, val)
+	}
 	obj, err := interp.evalExpr(env, target.Object)
 	if err != nil {
 		return err

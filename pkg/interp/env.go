@@ -41,6 +41,13 @@ func (e *Env) Get(name string) (Value, bool) {
 	return Value{}, false
 }
 
+// GetLocal looks up a variable (case-insensitive) in this scope only,
+// without walking the parent chain.
+func (e *Env) GetLocal(name string) (Value, bool) {
+	v, ok := e.vars[strings.ToUpper(name)]
+	return v, ok
+}
+
 // Set updates a variable in the scope where it was originally defined.
 // Returns false if the variable is not found in any scope.
 func (e *Env) Set(name string, v Value) bool {
