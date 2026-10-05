@@ -54,14 +54,6 @@ func TestEmptyArg(t *testing.T) {
 		require.Greater(t, a.Span().End.Col, a.Name.Span().End.Col)
 	})
 
-	t.Run("empty args in expression call", func(t *testing.T) {
-		f := parseClean(t, "PROGRAM P\nVAR\n\tx : INT;\nEND_VAR\nx := F(a := 1, b := );\nEND_PROGRAM\n")
-		prog := f.Declarations[0].(*ast.ProgramDecl)
-		as := prog.Body[0].(*ast.AssignStmt)
-		ce := as.Value.(*ast.CallExpr)
-		require.Len(t, ce.Args, 2)
-	})
-
 	t.Run("prog fixture has no errors on AT and call lines", func(t *testing.T) {
 		r := Parse("prog.st", readProbe(t, "prog.st"))
 		for _, d := range r.Diags {

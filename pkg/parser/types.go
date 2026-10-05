@@ -207,10 +207,21 @@ func (p *Parser) parseStructType() *ast.StructType {
 	}
 }
 
-// parseStructMember parses name : type [:= init] ;
+// parseStructMember parses name [AT addr] : type [:= init] ;
 func (p *Parser) parseStructMember() *ast.StructMember {
 	startTok := p.peek()
 	name := p.parseIdent()
+
+	// Optional AT address, e.g. I1 AT %I* : BOOL (TwinCAT terminal structs).
+	var atAddress *ast.Ident
+	if p.match(lexer.KwAt) {
+		if p.at(lexer.Ident) || p.at(lexer.DirectAddr) {
+			atAddress = makeIdent(p.advance())
+		} else {
+			p.error("expected address after AT, got %s", p.peek().Kind)
+		}
+	}
+
 	p.expect(lexer.Colon)
 	typeSpec := p.parseTypeSpec()
 
@@ -227,6 +238,7 @@ func (p *Parser) parseStructMember() *ast.StructMember {
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
 		Name:      name,
+		AtAddress: atAddress,
 		Type:      typeSpec,
 		InitValue: initValue,
 	}

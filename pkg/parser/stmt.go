@@ -414,7 +414,12 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 		nameTok := p.advance()
 		if p.at(lexer.Assign) {
 			p.advance()
-			value := p.parseExpr(0)
+			// Empty argument (TwinCAT auto-complete): name := followed by , or ).
+			// Value stays a nil interface so later passes can skip it.
+			var value ast.Expr
+			if !p.at(lexer.Comma) && !p.at(lexer.RParen) {
+				value = p.parseExpr(0)
+			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
@@ -425,7 +430,10 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 		}
 		if p.at(lexer.Arrow) {
 			p.advance()
-			value := p.parseExpr(0)
+			var value ast.Expr
+			if !p.at(lexer.Comma) && !p.at(lexer.RParen) {
+				value = p.parseExpr(0)
+			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
