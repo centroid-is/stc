@@ -12,12 +12,15 @@ import (
 func (p *Parser) parseDeclaration() ast.Declaration {
 	switch p.peek().Kind {
 	case lexer.Pragma:
-		// Skip pragmas between declarations (attach as trivia in future)
-		p.advance()
-		if !p.atEnd() {
-			return p.parseDeclaration()
+		// Pragmas between declarations belong to the declaration that
+		// follows. Pragmas at end of file have no owner and are dropped.
+		attrs, pragmas := p.collectPragmas()
+		if p.atEnd() {
+			return nil
 		}
-		return nil
+		decl := p.parseDeclaration()
+		attachDeclPragmas(decl, attrs, pragmas)
+		return decl
 	case lexer.KwProgram:
 		return p.parseProgram()
 	case lexer.KwFunctionBlock:
@@ -32,6 +35,29 @@ func (p *Parser) parseDeclaration() ast.Declaration {
 		return p.parseTestCase()
 	default:
 		return p.recoverDeclaration()
+	}
+}
+
+// attachDeclPragmas prepends attrs and pragmas to a top-level declaration
+// that can carry them. Other declarations (error nodes, test cases) drop them;
+// the error path has already reported a diagnostic.
+func attachDeclPragmas(decl ast.Declaration, attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	switch d := decl.(type) {
+	case *ast.ProgramDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.FunctionBlockDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.FunctionDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.InterfaceDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.TypeDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
 	}
 }
 
@@ -95,6 +121,19 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 	for !p.atEnd() && !p.at(lexer.KwEndFunctionBlock) {
 		savedPos := p.pos
 		switch p.peek().Kind {
+		case lexer.Pragma:
+			// Pragmas before a METHOD or PROPERTY belong to it; pragmas
+			// between body statements are dropped (statement level).
+			attrs, pragmas := p.collectPragmas()
+			if p.isMethodStart() {
+				m := p.parseMethod()
+				m.Attributes, m.Pragmas = attrs, pragmas
+				methods = append(methods, m)
+			} else if p.at(lexer.KwProperty) {
+				prop := p.parseProperty()
+				prop.Attributes, prop.Pragmas = attrs, pragmas
+				properties = append(properties, prop)
+			}
 		case lexer.KwMethod, lexer.KwPublic, lexer.KwPrivate, lexer.KwProtected, lexer.KwInternal,
 			lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride:
 			// Could be a method with access modifier
@@ -107,7 +146,7 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 			properties = append(properties, p.parseProperty())
 		default:
 			stmts := p.parseStatements(
-				lexer.KwEndFunctionBlock, lexer.KwMethod, lexer.KwProperty,
+				lexer.Pragma, lexer.KwEndFunctionBlock, lexer.KwMethod, lexer.KwProperty,
 				lexer.KwPublic, lexer.KwPrivate, lexer.KwProtected, lexer.KwInternal,
 				lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride,
 			)

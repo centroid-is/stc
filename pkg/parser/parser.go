@@ -101,16 +101,6 @@ func (p *Parser) match(kinds ...lexer.TokenKind) bool {
 	return false
 }
 
-// skipPragmas consumes any {attribute '...'} pragmas at the current position.
-// Pragmas may precede any declaration (POU, type, struct member, variable);
-// they carry no semantics for the compiler today, so they are skipped the same
-// way parseDeclaration skips them between top-level declarations.
-func (p *Parser) skipPragmas() {
-	for p.at(lexer.Pragma) {
-		p.advance()
-	}
-}
-
 // at returns true if the current token is of the given kind.
 func (p *Parser) at(kind lexer.TokenKind) bool {
 	return p.peek().Kind == kind

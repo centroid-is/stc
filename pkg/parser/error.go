@@ -27,6 +27,9 @@ var declarationStarts = map[lexer.TokenKind]bool{
 	lexer.KwFunction:      true,
 	lexer.KwType:          true,
 	lexer.KwInterface:     true,
+	// A pragma usually precedes the next declaration; recovery must stop
+	// there so the declaration keeps its attributes.
+	lexer.Pragma: true,
 }
 
 // statementStarts lists token kinds that begin a statement.

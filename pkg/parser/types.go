@@ -7,27 +7,27 @@ import (
 
 // primitiveTypeKeywords maps keyword token kinds to their type name text.
 var primitiveTypeKeywords = map[lexer.TokenKind]string{
-	lexer.KwBool:       "BOOL",
-	lexer.KwByte:       "BYTE",
-	lexer.KwWord:       "WORD",
-	lexer.KwDword:      "DWORD",
-	lexer.KwLword:      "LWORD",
-	lexer.KwSint:       "SINT",
-	lexer.KwInt:        "INT",
-	lexer.KwDint:       "DINT",
-	lexer.KwLint:       "LINT",
-	lexer.KwUsint:      "USINT",
-	lexer.KwUint:       "UINT",
-	lexer.KwUdint:      "UDINT",
-	lexer.KwUlint:      "ULINT",
-	lexer.KwReal:       "REAL",
-	lexer.KwLreal:      "LREAL",
-	lexer.KwTime:       "TIME",
-	lexer.KwDate:       "DATE",
-	lexer.KwTimeOfDay:  "TIME_OF_DAY",
-	lexer.KwTod:        "TOD",
+	lexer.KwBool:        "BOOL",
+	lexer.KwByte:        "BYTE",
+	lexer.KwWord:        "WORD",
+	lexer.KwDword:       "DWORD",
+	lexer.KwLword:       "LWORD",
+	lexer.KwSint:        "SINT",
+	lexer.KwInt:         "INT",
+	lexer.KwDint:        "DINT",
+	lexer.KwLint:        "LINT",
+	lexer.KwUsint:       "USINT",
+	lexer.KwUint:        "UINT",
+	lexer.KwUdint:       "UDINT",
+	lexer.KwUlint:       "ULINT",
+	lexer.KwReal:        "REAL",
+	lexer.KwLreal:       "LREAL",
+	lexer.KwTime:        "TIME",
+	lexer.KwDate:        "DATE",
+	lexer.KwTimeOfDay:   "TIME_OF_DAY",
+	lexer.KwTod:         "TOD",
 	lexer.KwDateAndTime: "DATE_AND_TIME",
-	lexer.KwDt:         "DT",
+	lexer.KwDt:          "DT",
 }
 
 // parseTypeSpec parses a type specifier.
@@ -176,15 +176,20 @@ func (p *Parser) parseStructType() *ast.StructType {
 	var members []*ast.StructMember
 	for !p.atEnd() {
 		// Pragmas may precede an individual struct member.
-		p.skipPragmas()
-		if p.at(lexer.KwEndStruct) {
+		attrs, pragmas := p.collectPragmas()
+		if p.at(lexer.KwEndStruct) || p.atEnd() {
+			// Trailing pragmas before END_STRUCT go to the last member;
+			// in an empty struct they have no owner.
+			if n := len(members); n > 0 {
+				members[n-1].Attributes = append(members[n-1].Attributes, attrs...)
+				members[n-1].Pragmas = append(members[n-1].Pragmas, pragmas...)
+			}
 			break
 		}
 		savedPos := p.pos
 		member := p.parseStructMember()
-		if member != nil {
-			members = append(members, member)
-		}
+		member.Attributes, member.Pragmas = attrs, pragmas
+		members = append(members, member)
 		// Guard against infinite loops when parseStructMember makes no progress.
 		if p.pos == savedPos {
 			p.advance()
@@ -233,9 +238,19 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 
 	var values []*ast.EnumValue
 	for !p.atEnd() && !p.at(lexer.RParen) {
+		// Pragmas may precede an enum value.
+		attrs, pragmas := p.collectPragmas()
+		if p.at(lexer.RParen) || p.atEnd() {
+			p.attachTrailingEnumPragmas(values, attrs, pragmas)
+			break
+		}
 		ev := p.parseEnumValue()
+		ev.Attributes, ev.Pragmas = attrs, pragmas
 		values = append(values, ev)
 		if !p.match(lexer.Comma) {
+			// A pragma may also sit between the last value and ")".
+			attrs, pragmas = p.collectPragmas()
+			p.attachTrailingEnumPragmas(values, attrs, pragmas)
 			break
 		}
 	}
@@ -248,6 +263,15 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
 		Values: values,
+	}
+}
+
+// attachTrailingEnumPragmas appends pragmas found before the closing ")" of
+// an enum to the last value; in an empty enum they have no owner.
+func (p *Parser) attachTrailingEnumPragmas(values []*ast.EnumValue, attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	if n := len(values); n > 0 {
+		values[n-1].Attributes = append(values[n-1].Attributes, attrs...)
+		values[n-1].Pragmas = append(values[n-1].Pragmas, pragmas...)
 	}
 }
 
