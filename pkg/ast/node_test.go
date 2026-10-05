@@ -55,12 +55,25 @@ func TestNodeKind_String(t *testing.T) {
 		{KindStructType, "StructType"},
 		{KindVarBlock, "VarBlock"},
 		{KindVarDecl, "VarDecl"},
+		{KindGVLDecl, "GVLDecl"},
+		{KindAttribute, "Attribute"},
+		{KindPragma, "Pragma"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.kind.String())
 		})
 	}
+}
+
+// TestNodeKind_StableValues pins numeric NodeKind values so new kinds are
+// only ever appended (JSON and external consumers depend on stability).
+func TestNodeKind_StableValues(t *testing.T) {
+	assert.Equal(t, NodeKind(0), KindSourceFile)
+	assert.Equal(t, NodeKind(40), KindVarDecl)
+	assert.Equal(t, KindVarDecl+1, KindGVLDecl)
+	assert.Equal(t, KindVarDecl+2, KindAttribute)
+	assert.Equal(t, KindVarDecl+3, KindPragma)
 }
 
 func TestNodeKind_String_Unknown(t *testing.T) {
