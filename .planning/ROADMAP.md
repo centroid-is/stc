@@ -365,18 +365,19 @@ Plans:
   3. `ST_EL1008` (struct members `I1 AT %I* : BOOL`) and FBs with `AT %I*`/`%Q*` in `VAR`/`VAR_INPUT`/`VAR_OUTPUT` check with no warnings, while an explicit `%IX0.0` inside an FB still reports SEMA031
   4. `t(IN := b, PT := , Q => , ET => );` parses and runs as if the empty arguments were omitted
   5. A MAIN that is a chain of action calls (CODESYS `ACTION ... END_ACTION` text form) parses, checks and executes each action against the owning POU's variables
-**Plans:** 9 plans
+**Plans:** 10 plans
 
 Plans:
 - [ ] 19-01-PLAN.md — Interp coverage lift, local coverage-gate script, committed TwinCAT probe fixtures, oracle baseline
 - [ ] 19-02-PLAN.md — AST contracts: Attribute, PragmaNode kind, GVLDecl, struct AT, POU actions, JSON
 - [ ] 19-03-PLAN.md — Attribute/pragma parsing, attachment, trivia order, fmt/emit round-trip (DIAL-01)
 - [ ] 19-04-PLAN.md — Wildcard AT on struct members and FBs, empty call arguments (DIAL-03, DIAL-05)
-- [ ] 19-05-PLAN.md — GVL parsing/printing, checker qualified_only SEMA033 and constants SEMA034, --gvl-name (DIAL-02)
+- [ ] 19-05-PLAN.md — GVL parsing/printing, checker qualified_only SEMA033 and constants SEMA034, unused-var exemption, deferred GVL resolution (DIAL-02)
 - [ ] 19-06-PLAN.md — Interpreter GVL env layer, test runner and sim wiring, twincat_dialect ST suite (DIAL-02)
 - [ ] 19-07-PLAN.md — ACTION parsing (inside and after POU), printing, checker resolution (DIAL-08)
 - [ ] 19-08-PLAN.md — ACTION execution in owner env with recursion guard; action and empty-arg ST suites (DIAL-08, DIAL-05)
 - [ ] 19-09-PLAN.md — Phase gate: fixture/oracle tests, LSP robustness, coverage gate, validation sign-off
+- [ ] 19-10-PLAN.md — --gvl-name flag on parse/check/fmt/emit and ECT JSON CLI acceptance test (DIAL-02)
 
 ### Phase 20: TwinCAT Expression Semantics
 **Goal**: Expression- and call-level TwinCAT constructs parse, type-check and execute, so the flattened sildarvinnsla sources parse cleanly and `stc check` reports only genuine problems

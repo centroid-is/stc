@@ -497,24 +497,28 @@ The enum example parses only for the attribute; `(...) UINT` base types stay Pha
 | A3 | Double-quoted attribute values use `""` doubling | Pattern 1 | Very low. No real data uses double-quoted values |
 | A4 | The phase-19 residual estimate (st301 about 715-965, svncore about 620-650) is approximate | Summary | Medium. It is a textual simulation, not an implementation. Use the residual-classification gate below rather than a hard number |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact diagnostic target for the oracle files.**
    - What we know: 2711 (st301) and 1430 (svncore) today; simulation suggests about a 2-3x reduction.
    - Recommendation: gate on classification, not a count. After the phase, no `stc parse` diagnostic on st301.st or svncorecomponents.st may sit on a line containing `{attribute`, `{warning`, `VAR_GLOBAL`, `ACTION`, `END_ACTION`, ` AT %`, `:= ,`, `:=,`, `=> ,`, `=>,` or `=> )`. Record the remaining count in the SUMMARY for Phase 20.
+   - **RESOLVED:** Adopted as the classification gate in 19-09 (Task 1 owned-token check in TestTwinCATProbeOracle, Task 3 records before/after counts against the 19-01 baseline). No numeric target.
 
 2. **Unowned parse gaps found while probing.**
    - Array and struct initialisers `:= [(a := 1, ...), ...]` and `s : ST := (a := 1)` do not parse at all [VERIFIED: probe], although ANALYSIS.md 2.1 item 11 says they do. RUNT-06 (Phase 22) only covers applying them.
    - `BYTE#16#10` (typed literal with a based number) fails to parse.
    - Recommendation: not Phase 19 scope. Flag both to the roadmap owner so Phase 20 (whose success criterion 4 is zero parse errors) absorbs them.
+   - **RESOLVED:** Out of Phase 19 scope. 19-09 Task 3 buckets every remaining oracle diagnostic by construct (including array/struct initialisers and typed based literals such as BYTE#16#10) and hands the buckets to Phase 20 in the SUMMARY.
 
 3. **Statement-level pragmas.**
    - `{warning disable C0139}` appears 15 times, always at the top of an ACTION body. It is skipped today and remains lost in fmt.
    - Recommendation: allowed under the locked decision (declarations only). Optionally keep a `Pragmas` slice on ActionDecl for pragmas that precede the first statement, which covers every real occurrence for a few lines of code.
+   - **RESOLVED:** Adopted. 19-02 adds ActionDecl.Pragmas (with JSON), and 19-07 fills it in parseAction via collectPragmas and prints it as the first body line in fmt/emit.
 
 4. **Ordering of aggregated GVL blocks in fmt.**
    - When VAR_GLOBAL blocks are interleaved with POUs, fmt prints all blocks at the GVL's first position. Idempotent but reorders.
    - Recommendation: accept and document.
+   - **RESOLVED:** Accepted by design. 19-05 Task 1 aggregates all blocks into one GVLDecl printed at the first block's position; output is idempotent and the reordering is documented in the 19-05 SUMMARY.
 
 ## Environment Availability
 

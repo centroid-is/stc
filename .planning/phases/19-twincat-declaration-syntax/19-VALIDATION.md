@@ -21,16 +21,16 @@ created: 2026-10-05
 | **Config file** | .testcoverage.yml, .github/workflows/{ci,coverage,st-tests}.yml |
 | **Quick run command** | `go test ./pkg/parser ./pkg/ast ./pkg/checker ./pkg/interp ./pkg/emit ./pkg/format -count=1` |
 | **Full suite command** | `go test ./... -count=1 && go test -coverprofile=cov.txt -covermode=atomic -coverpkg=./... ./... -count=1 && go run github.com/vladopajic/go-test-coverage/v2@latest --config .testcoverage.yml --profile cov.txt` |
-| **Estimated runtime** | ~19 seconds |
+| **Estimated runtime** | per-task targeted `go test ./pkg/<x> -run <Pattern>`: under 30 seconds; coverage gate (`bash scripts/coverage-gate.sh`, full -coverpkg suite): about 120 seconds |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run the quick run command above
-- **After every plan wave:** Run the full suite command above (coverage gate: pkg/parser, pkg/interp, pkg/types, pkg/emit, pkg/lexer >= 95%, pkg/checker >= 94%, total >= 85%)
+- **After every task commit:** Run the task's targeted `<automated>` command (`go test ./pkg/<x> -run <Pattern> -count=1`), under 30 seconds
+- **After every plan wave:** Run `bash scripts/coverage-gate.sh` (the full -coverpkg suite). It runs only as the last task's verify of plans 19-03, 19-05, 19-07, 19-08 and in 19-09 (coverage gate: pkg/parser, pkg/interp, pkg/types, pkg/emit, pkg/lexer >= 95%, pkg/checker >= 94%, total >= 85%)
 - **Before `/gsd:verify-work`:** Full suite must be green
-- **Max feedback latency:** 19 seconds
+- **Max feedback latency:** 30 seconds per task; about 120 seconds for the coverage gate once per wave
 
 ---
 
@@ -70,7 +70,7 @@ created: 2026-10-05
 - [ ] Sampling continuity: no 3 consecutive tasks without automated verify
 - [ ] Wave 0 covers all MISSING references
 - [ ] No watch-mode flags
-- [ ] Feedback latency < 19s
+- [ ] Per-task feedback latency < 30s; coverage gate only at wave end (~120s)
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** {pending / approved YYYY-MM-DD}
