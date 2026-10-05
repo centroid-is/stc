@@ -27,6 +27,9 @@ func (p *Parser) parseDeclaration() ast.Declaration {
 		return decl
 	case lexer.KwVarGlobal:
 		return p.parseGVLBlock(nil, nil)
+	case lexer.KwAction:
+		// After-POU form; parseSourceFile attaches it to the preceding POU.
+		return p.parseAction(nil, nil)
 	case lexer.KwProgram:
 		return p.parseProgram()
 	case lexer.KwFunctionBlock:
@@ -62,6 +65,9 @@ func attachDeclPragmas(decl ast.Declaration, attrs []*ast.Attribute, pragmas []*
 		d.Attributes = append(attrs, d.Attributes...)
 		d.Pragmas = append(pragmas, d.Pragmas...)
 	case *ast.TypeDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.ActionDecl:
 		d.Attributes = append(attrs, d.Attributes...)
 		d.Pragmas = append(pragmas, d.Pragmas...)
 	}
@@ -107,7 +113,30 @@ func (p *Parser) parseProgram() *ast.ProgramDecl {
 	p.match(lexer.Semicolon) // optional trailing semicolon
 
 	varBlocks := p.parseVarBlocks()
-	body := p.parseStatements(lexer.KwEndProgram)
+
+	// Body statements and ACTIONs written inside the PROGRAM.
+	var body []ast.Statement
+	var actions []*ast.ActionDecl
+	for !p.atEnd() && !p.at(lexer.KwEndProgram) {
+		savedPos := p.pos
+		switch p.peek().Kind {
+		case lexer.Pragma:
+			// Pragmas before an ACTION belong to it; pragmas between body
+			// statements are dropped (statement level).
+			attrs, pragmas := p.collectPragmas()
+			if p.at(lexer.KwAction) {
+				actions = append(actions, p.parseAction(attrs, pragmas))
+			}
+		case lexer.KwAction:
+			actions = append(actions, p.parseAction(nil, nil))
+		default:
+			body = append(body, p.parseStatements(lexer.Pragma, lexer.KwEndProgram, lexer.KwAction)...)
+		}
+		// Guard against infinite loops.
+		if p.pos == savedPos {
+			p.advance()
+		}
+	}
 
 	endTok := p.expect(lexer.KwEndProgram)
 	p.match(lexer.Semicolon)
@@ -120,6 +149,51 @@ func (p *Parser) parseProgram() *ast.ProgramDecl {
 		Name:      name,
 		VarBlocks: varBlocks,
 		Body:      body,
+		Actions:   actions,
+	}
+}
+
+// actionBodyStops ends an ACTION body. Besides END_ACTION it stops at the
+// end of the owning POU, at the next ACTION and at any token that starts a
+// top-level declaration, so a missing END_ACTION cannot swallow the rest of
+// the file.
+var actionBodyStops = []lexer.TokenKind{
+	lexer.KwEndAction, lexer.KwAction, lexer.KwEndProgram, lexer.KwEndFunctionBlock,
+	lexer.KwProgram, lexer.KwFunctionBlock, lexer.KwFunction, lexer.KwType,
+	lexer.KwInterface, lexer.KwVarGlobal, lexer.KwTestCase,
+}
+
+// parseAction parses ACTION name [:|;] ... END_ACTION [;]. Pragmas right
+// after the header (such as {warning disable C0139}) belong to the action;
+// they are appended after any pragmas collected before the ACTION keyword.
+func (p *Parser) parseAction(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) *ast.ActionDecl {
+	startTok := p.advance() // consume ACTION
+	name := p.parseIdent()
+	p.match(lexer.Colon)
+	p.match(lexer.Semicolon)
+
+	innerAttrs, innerPragmas := p.collectPragmas()
+	attrs = append(attrs, innerAttrs...)
+	pragmas = append(pragmas, innerPragmas...)
+
+	body := p.parseStatements(actionBodyStops...)
+
+	endTok := p.expect(lexer.KwEndAction)
+	if endTok.Kind != lexer.KwEndAction {
+		// Missing END_ACTION: end the span at the last consumed token.
+		endTok = p.tokens[p.pos-1]
+	}
+	p.match(lexer.Semicolon)
+
+	return &ast.ActionDecl{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindActionDecl,
+			NodeSpan: spanFromTokens(startTok, endTok),
+		},
+		Name:       name,
+		Body:       body,
+		Attributes: attrs,
+		Pragmas:    pragmas,
 	}
 }
 
@@ -156,6 +230,7 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 	var body []ast.Statement
 	var methods []*ast.MethodDecl
 	var properties []*ast.PropertyDecl
+	var actions []*ast.ActionDecl
 
 	for !p.atEnd() && !p.at(lexer.KwEndFunctionBlock) {
 		savedPos := p.pos
@@ -172,6 +247,8 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 				prop := p.parseProperty()
 				prop.Attributes, prop.Pragmas = attrs, pragmas
 				properties = append(properties, prop)
+			} else if p.at(lexer.KwAction) {
+				actions = append(actions, p.parseAction(attrs, pragmas))
 			}
 		case lexer.KwMethod, lexer.KwPublic, lexer.KwPrivate, lexer.KwProtected, lexer.KwInternal,
 			lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride:
@@ -183,9 +260,11 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 			}
 		case lexer.KwProperty:
 			properties = append(properties, p.parseProperty())
+		case lexer.KwAction:
+			actions = append(actions, p.parseAction(nil, nil))
 		default:
 			stmts := p.parseStatements(
-				lexer.Pragma, lexer.KwEndFunctionBlock, lexer.KwMethod, lexer.KwProperty,
+				lexer.Pragma, lexer.KwEndFunctionBlock, lexer.KwMethod, lexer.KwProperty, lexer.KwAction,
 				lexer.KwPublic, lexer.KwPrivate, lexer.KwProtected, lexer.KwInternal,
 				lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride,
 			)
@@ -212,6 +291,7 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 		Body:       body,
 		Methods:    methods,
 		Properties: properties,
+		Actions:    actions,
 	}
 }
 

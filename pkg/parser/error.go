@@ -28,6 +28,7 @@ var declarationStarts = map[lexer.TokenKind]bool{
 	lexer.KwType:          true,
 	lexer.KwInterface:     true,
 	lexer.KwVarGlobal:     true, // top-level VAR_GLOBAL starts a GVL block
+	lexer.KwAction:        true, // after-POU ACTION attaches to the preceding POU
 	// A pragma usually precedes the next declaration; recovery must stop
 	// there so the declaration keeps its attributes.
 	lexer.Pragma: true,

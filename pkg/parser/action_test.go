@@ -120,7 +120,7 @@ func TestAction(t *testing.T) {
 	t.Run("missing END_ACTION before END_PROGRAM is a diagnostic", func(t *testing.T) {
 		src := "PROGRAM P\nVAR x : INT; END_VAR\nACTION A\nx := 1;\nEND_PROGRAM\nPROGRAM Q\nEND_PROGRAM\n"
 		r := Parse("m.st", src)
-		require.True(t, hasDiag(r.Diags, "expected END_ACTION"))
+		require.True(t, hasDiag(r.Diags, "expected KwEndAction"))
 		require.Len(t, r.File.Declarations, 2)
 		prog := r.File.Declarations[0].(*ast.ProgramDecl)
 		require.Equal(t, "P", prog.Name.Name)
@@ -170,7 +170,7 @@ func TestAction(t *testing.T) {
 	// Adversarial inputs (T-19-14): each must finish without hanging.
 	t.Run("unterminated action at EOF", func(t *testing.T) {
 		r := Parse("u.st", "PROGRAM P\nEND_PROGRAM\nACTION A\nx := 1;\n")
-		require.True(t, hasDiag(r.Diags, "expected END_ACTION"))
+		require.True(t, hasDiag(r.Diags, "expected KwEndAction"))
 		require.Len(t, r.File.Declarations[0].(*ast.ProgramDecl).Actions, 1)
 	})
 
@@ -198,7 +198,7 @@ func TestAction(t *testing.T) {
 
 	t.Run("unterminated action does not swallow the next POU", func(t *testing.T) {
 		r := Parse("u.st", "ACTION A\nx := 1;\nFUNCTION F : INT\nEND_FUNCTION\n")
-		require.True(t, hasDiag(r.Diags, "expected END_ACTION"))
+		require.True(t, hasDiag(r.Diags, "expected KwEndAction"))
 		require.Len(t, r.File.Declarations, 2)
 		_, ok := r.File.Declarations[1].(*ast.FunctionDecl)
 		require.True(t, ok)
@@ -207,7 +207,7 @@ func TestAction(t *testing.T) {
 	t.Run("action span covers ACTION to END_ACTION", func(t *testing.T) {
 		r := Parse("action.st", readProbe(t, "action.st"))
 		a := r.File.Declarations[0].(*ast.ProgramDecl).Actions[0]
-		require.Equal(t, 8, a.Span().Start.Line)
-		require.Equal(t, 10, a.Span().End.Line)
+		require.Equal(t, 9, a.Span().Start.Line)
+		require.Equal(t, 11, a.Span().End.Line)
 	})
 }

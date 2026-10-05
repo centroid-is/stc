@@ -176,9 +176,17 @@ func (p *Parser) parseSourceFile() *ast.SourceFile {
 
 	for !p.atEnd() {
 		decl := p.parseDeclaration()
-		if decl != nil {
-			decls = append(decls, decl)
+		if decl == nil {
+			continue
 		}
+		if act, ok := decl.(*ast.ActionDecl); ok && attachAction(decls, act) {
+			continue
+		} else if ok {
+			start := act.Span().Start
+			p.errorAt(source.Pos{File: start.File, Line: start.Line, Col: start.Col, Offset: start.Offset},
+				"ACTION without a preceding PROGRAM or FUNCTION_BLOCK")
+		}
+		decls = append(decls, decl)
 	}
 
 	endTok := p.peek()
@@ -189,4 +197,22 @@ func (p *Parser) parseSourceFile() *ast.SourceFile {
 		},
 		Declarations: decls,
 	}
+}
+
+// attachAction appends an after-POU ACTION to the immediately preceding
+// declaration when it is a PROGRAM or FUNCTION_BLOCK. It reports false when
+// there is no such POU, so the caller keeps the action as an orphan.
+func attachAction(decls []ast.Declaration, act *ast.ActionDecl) bool {
+	if len(decls) == 0 {
+		return false
+	}
+	switch owner := decls[len(decls)-1].(type) {
+	case *ast.ProgramDecl:
+		owner.Actions = append(owner.Actions, act)
+		return true
+	case *ast.FunctionBlockDecl:
+		owner.Actions = append(owner.Actions, act)
+		return true
+	}
+	return false
 }
