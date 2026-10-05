@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -305,4 +306,186 @@ func TestWalkAndInspect(t *testing.T) {
 
 	// SourceFile -> ProgramDecl -> Ident("Main"), AssignStmt -> Ident("x"), Literal(1)
 	require.Equal(t, 6, count)
+}
+
+func marshalToMap(t *testing.T, n Node) map[string]interface{} {
+	t.Helper()
+	data, err := MarshalNode(n)
+	require.NoError(t, err)
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &m))
+	return m
+}
+
+func TestMarshalAttributes(t *testing.T) {
+	withVal := &Attribute{NodeBase: NodeBase{NodeKind: KindAttribute}, Name: "OPC.UA.DA", Value: "1", HasValue: true}
+	noVal := &Attribute{Name: "qualified_only"} // zero NodeKind must still marshal as Attribute
+	pragma := &PragmaNode{Text: "{warning disable C0139}"}
+	boolT := &NamedType{NodeBase: NodeBase{NodeKind: KindNamedType}, Name: &Ident{NodeBase: NodeBase{NodeKind: KindIdent}, Name: "BOOL"}}
+
+	nodes := map[string]Node{
+		"VarDecl":           &VarDecl{NodeBase: NodeBase{NodeKind: KindVarDecl}, Type: boolT},
+		"VarBlock":          &VarBlock{NodeBase: NodeBase{NodeKind: KindVarBlock}},
+		"StructMember":      &StructMember{NodeBase: NodeBase{NodeKind: 0}},
+		"EnumValue":         &EnumValue{},
+		"TypeDecl":          &TypeDecl{NodeBase: NodeBase{NodeKind: KindTypeDecl}},
+		"ProgramDecl":       &ProgramDecl{NodeBase: NodeBase{NodeKind: KindProgramDecl}},
+		"FunctionBlockDecl": &FunctionBlockDecl{NodeBase: NodeBase{NodeKind: KindFunctionBlockDecl}},
+		"FunctionDecl":      &FunctionDecl{NodeBase: NodeBase{NodeKind: KindFunctionDecl}},
+		"MethodDecl":        &MethodDecl{NodeBase: NodeBase{NodeKind: KindMethodDecl}},
+		"PropertyDecl":      &PropertyDecl{NodeBase: NodeBase{NodeKind: KindPropertyDecl}},
+		"InterfaceDecl":     &InterfaceDecl{NodeBase: NodeBase{NodeKind: KindInterfaceDecl}},
+		"ActionDecl":        &ActionDecl{NodeBase: NodeBase{NodeKind: KindActionDecl}},
+		"GVLDecl":           &GVLDecl{NodeBase: NodeBase{NodeKind: KindGVLDecl}},
+	}
+	set := func(n Node) {
+		a := []*Attribute{withVal, noVal}
+		p := []*PragmaNode{pragma}
+		switch v := n.(type) {
+		case *VarDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *VarBlock:
+			v.Attributes, v.Pragmas = a, p
+		case *StructMember:
+			v.Attributes, v.Pragmas = a, p
+		case *EnumValue:
+			v.Attributes, v.Pragmas = a, p
+		case *TypeDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *ProgramDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *FunctionBlockDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *FunctionDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *MethodDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *PropertyDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *InterfaceDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *ActionDecl:
+			v.Attributes, v.Pragmas = a, p
+		case *GVLDecl:
+			v.Attributes, v.Pragmas = a, p
+		}
+	}
+	for name, n := range nodes {
+		t.Run(name, func(t *testing.T) {
+			set(n)
+			m := marshalToMap(t, n)
+			attrs, ok := m["attributes"].([]interface{})
+			require.True(t, ok, "attributes array missing")
+			require.Len(t, attrs, 2)
+			a0 := attrs[0].(map[string]interface{})
+			assert.Equal(t, "Attribute", a0["kind"])
+			assert.Equal(t, "OPC.UA.DA", a0["name"])
+			assert.Equal(t, "1", a0["value"])
+			a1 := attrs[1].(map[string]interface{})
+			assert.Equal(t, "Attribute", a1["kind"])
+			assert.Equal(t, "qualified_only", a1["name"])
+			assert.NotContains(t, a1, "value")
+			prs, ok := m["pragmas"].([]interface{})
+			require.True(t, ok, "pragmas array missing")
+			require.Len(t, prs, 1)
+			assert.Equal(t, "{warning disable C0139}", prs[0].(map[string]interface{})["text"])
+		})
+	}
+
+	t.Run("empty value is kept", func(t *testing.T) {
+		m := marshalToMap(t, &Attribute{Name: "x", HasValue: true})
+		assert.Contains(t, m, "value")
+		assert.Equal(t, "", m["value"])
+	})
+
+	t.Run("absent when empty", func(t *testing.T) {
+		m := marshalToMap(t, &VarDecl{NodeBase: NodeBase{NodeKind: KindVarDecl}})
+		assert.NotContains(t, m, "attributes")
+		assert.NotContains(t, m, "pragmas")
+	})
+}
+
+func TestMarshalGVLDecl(t *testing.T) {
+	g := &GVLDecl{
+		NodeBase: NodeBase{NodeKind: KindGVLDecl},
+		Name:     &Ident{NodeBase: NodeBase{NodeKind: KindIdent}, Name: "ECT"},
+		Blocks:   []*VarBlock{{NodeBase: NodeBase{NodeKind: KindVarBlock}, Section: VarGlobal}},
+	}
+	m := marshalToMap(t, g)
+	assert.Equal(t, "GVLDecl", m["kind"])
+	assert.Equal(t, "ECT", m["name"].(map[string]interface{})["name"])
+	blocks, ok := m["blocks"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, blocks, 1)
+	assert.Equal(t, "VAR_GLOBAL", blocks[0].(map[string]interface{})["section"])
+
+	empty := marshalToMap(t, &GVLDecl{NodeBase: NodeBase{NodeKind: KindGVLDecl}})
+	assert.NotContains(t, empty, "name")
+	assert.NotContains(t, empty, "blocks")
+}
+
+func TestMarshalActions(t *testing.T) {
+	act := &ActionDecl{NodeBase: NodeBase{NodeKind: KindActionDecl}, Name: &Ident{NodeBase: NodeBase{NodeKind: KindIdent}, Name: "Reset"}}
+	for name, n := range map[string]Node{
+		"ProgramDecl":       &ProgramDecl{NodeBase: NodeBase{NodeKind: KindProgramDecl}, Actions: []*ActionDecl{act}},
+		"FunctionBlockDecl": &FunctionBlockDecl{NodeBase: NodeBase{NodeKind: KindFunctionBlockDecl}, Actions: []*ActionDecl{act}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := marshalToMap(t, n)
+			acts, ok := m["actions"].([]interface{})
+			require.True(t, ok)
+			require.Len(t, acts, 1)
+			assert.Equal(t, "ActionDecl", acts[0].(map[string]interface{})["kind"])
+		})
+	}
+	m := marshalToMap(t, &ProgramDecl{NodeBase: NodeBase{NodeKind: KindProgramDecl}})
+	assert.NotContains(t, m, "actions")
+}
+
+func TestMarshalStructMemberAT(t *testing.T) {
+	sm := &StructMember{
+		Name:      &Ident{NodeBase: NodeBase{NodeKind: KindIdent}, Name: "I1"},
+		AtAddress: &Ident{NodeBase: NodeBase{NodeKind: KindIdent}, Name: "%I*"},
+	}
+	m := marshalToMap(t, sm)
+	at, ok := m["at_address"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "%I*", at["name"])
+
+	m = marshalToMap(t, &StructMember{})
+	assert.NotContains(t, m, "at_address")
+}
+
+func TestMarshalCallStmtArgs(t *testing.T) {
+	ident := func(s string) *Ident { return &Ident{NodeBase: NodeBase{NodeKind: KindIdent}, Name: s} }
+	cs := &CallStmt{
+		NodeBase: NodeBase{NodeKind: KindCallStmt},
+		Callee:   ident("t"),
+		Args: []*CallArg{
+			{Name: ident("PT")},
+			{Name: ident("Q"), IsOutput: true},
+		},
+	}
+	m := marshalToMap(t, cs)
+	args, ok := m["args"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, args, 2)
+	for _, a := range args {
+		assert.NotContains(t, a.(map[string]interface{}), "value")
+	}
+	assert.Equal(t, true, args[1].(map[string]interface{})["is_output"])
+
+	withVal := &CallStmt{NodeBase: NodeBase{NodeKind: KindCallStmt}, Callee: ident("t"),
+		Args: []*CallArg{{Name: ident("IN"), Value: ident("x")}}}
+	m = marshalToMap(t, withVal)
+	assert.Contains(t, m["args"].([]interface{})[0].(map[string]interface{}), "value")
+
+	m = marshalToMap(t, &CallStmt{NodeBase: NodeBase{NodeKind: KindCallStmt}, Callee: ident("t")})
+	assert.NotContains(t, m, "args")
+}
+
+func TestMarshalPragma(t *testing.T) {
+	m := marshalToMap(t, &PragmaNode{Text: "{warning disable C0139}"})
+	assert.Equal(t, "Pragma", m["kind"])
+	assert.Equal(t, "{warning disable C0139}", m["text"])
 }
