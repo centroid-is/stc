@@ -192,9 +192,23 @@ func (f *formatter) emitDecl(decl ast.Declaration) {
 		f.emitActionDecl(d)
 	case *ast.TestCaseDecl:
 		f.emitTestCaseDecl(d)
+	case *ast.GVLDecl:
+		f.emitGVLDecl(d)
 	case *ast.ErrorNode:
 		// skip error nodes
 	}
+}
+
+// emitGVLDecl prints a GVL as its VAR_GLOBAL blocks: the GVL's own
+// attributes and comments first, then each block with its attributes. All
+// blocks print at the position of the first one.
+func (f *formatter) emitGVLDecl(d *ast.GVLDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
+	f.emitLeadingTrivia(&d.NodeBase)
+	for _, vb := range d.Blocks {
+		f.emitVarBlock(vb)
+	}
+	f.emitTrailingTrivia(&d.NodeBase)
 }
 
 func (f *formatter) emitProgramDecl(d *ast.ProgramDecl) {

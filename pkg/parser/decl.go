@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -18,9 +19,14 @@ func (p *Parser) parseDeclaration() ast.Declaration {
 		if p.atEnd() {
 			return nil
 		}
+		if p.at(lexer.KwVarGlobal) {
+			return p.parseGVLBlock(attrs, pragmas)
+		}
 		decl := p.parseDeclaration()
 		attachDeclPragmas(decl, attrs, pragmas)
 		return decl
+	case lexer.KwVarGlobal:
+		return p.parseGVLBlock(nil, nil)
 	case lexer.KwProgram:
 		return p.parseProgram()
 	case lexer.KwFunctionBlock:
@@ -59,6 +65,39 @@ func attachDeclPragmas(decl ast.Declaration, attrs []*ast.Attribute, pragmas []*
 		d.Attributes = append(attrs, d.Attributes...)
 		d.Pragmas = append(pragmas, d.Pragmas...)
 	}
+}
+
+// parseGVLBlock parses one top-level VAR_GLOBAL block. All such blocks in a
+// file aggregate into a single GVLDecl named after the file basename. The
+// first block creates the GVLDecl and its pragmas belong to the GVL; later
+// blocks keep their own pragmas, are appended to the existing GVLDecl, and
+// return nil so parseSourceFile does not add the GVL twice.
+func (p *Parser) parseGVLBlock(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) ast.Declaration {
+	vb := p.parseVarBlock()
+	if p.gvl != nil {
+		vb.Attributes = append(attrs, vb.Attributes...)
+		vb.Pragmas = append(pragmas, vb.Pragmas...)
+		p.gvl.Blocks = append(p.gvl.Blocks, vb)
+		p.gvl.NodeSpan.End = vb.Span().End
+		return nil
+	}
+	base := filepath.Base(p.filename)
+	name := ast.SanitizeGVLName(strings.TrimSuffix(base, filepath.Ext(base)))
+	start := vb.Span().Start
+	p.gvl = &ast.GVLDecl{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindGVLDecl,
+			NodeSpan: vb.Span(),
+		},
+		Name: &ast.Ident{
+			NodeBase: ast.NodeBase{NodeKind: ast.KindIdent, NodeSpan: ast.SpanFrom(start, start)},
+			Name:     name,
+		},
+		Blocks:     []*ast.VarBlock{vb},
+		Attributes: attrs,
+		Pragmas:    pragmas,
+	}
+	return p.gvl
 }
 
 // parseProgram parses PROGRAM name ... END_PROGRAM

@@ -59,6 +59,7 @@ type Parser struct {
 	filename  string
 	source    string
 	diags     *diag.Collector
+	gvl       *ast.GVLDecl // the file's GVL once a top-level VAR_GLOBAL is seen
 }
 
 // peek returns the current token without consuming it.
