@@ -1,144 +1,122 @@
-# Requirements: STC v1.1 -- Vendor Libraries & I/O
+# Requirements: STC v1.2 -- TwinCAT Import, EtherCAT Simulation & OPC UA
 
-**Defined:** 2026-03-30
+**Defined:** 2026-10-05
 **Core Value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
 
-## v1.1 Requirements
+Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla` (ST301 + SVNCoreComponents, plus Baader for serial). Research: `.planning/research/v1.2/`.
 
-Requirements for vendor library support, I/O mapping, and mock framework.
+## v1.2 Requirements
 
-### Vendor Library Loading
+### TwinCAT dialect parity (DIAL)
 
-- [x] **VLIB-01**: User can declare vendor FBs in .st stub files (declarations without bodies) and reference them from production code
-- [x] **VLIB-02**: User configures library paths via `[build.library_paths]` in stc.toml
-- [x] **VLIB-03**: `stc check` resolves vendor FB types from stubs and validates input/output parameter usage
-- [x] **VLIB-04**: LSP provides completion, hover, and go-to-definition for vendor FB inputs and outputs
-- [x] **VLIB-05**: Single-vendor enforcement -- project targets one vendor, stubs from other vendors produce warnings
+- [ ] **DIAL-01**: `{attribute 'name' := 'value'}` pragmas (single- or double-quoted, `''` escapes, blank lines before the declaration) are retained in the AST on VarDecl, StructMember, EnumValue, TypeDecl and POU nodes, appear in `stc parse --format json`, and round-trip through `stc fmt` and `stc emit`
+- [ ] **DIAL-02**: A file whose top level is `VAR_GLOBAL [PERSISTENT] [RETAIN] [CONSTANT] ... END_VAR` parses as a GVL declaration named from the file (or `--gvl-name`); `qualified_only` enforces `GVL.x` access in the checker
+- [ ] **DIAL-03**: `AT %I*` / `AT %Q*` is accepted on STRUCT members and on FB `VAR`/`VAR_INPUT`/`VAR_OUTPUT` without warnings (explicit `%IX..` addresses in FBs keep SEMA031)
+- [ ] **DIAL-04**: Bit access `x.N` on BYTE/WORD/DWORD/LWORD variables, struct members and array elements works for read and write with bounds checked by the checker
+- [ ] **DIAL-05**: Empty formal arguments in FB calls (`PT := ,` and `Q => ,`) parse and are ignored at runtime
+- [ ] **DIAL-06**: Named arguments in FUNCTION calls used as expressions (`n := F(a := 1, b := 2)`) parse, type-check and execute
+- [ ] **DIAL-07**: Qualified enum values (`E.v`) work in expressions, CASE labels, CASE label lists, initialisers and comparisons; enum declarations with a base type (`(a := 0, b := 1) UINT`) and the `strict`/`to_string` attributes are accepted
+- [ ] **DIAL-08**: `ACTION name ... END_ACTION` blocks (CODESYS text form after the POU and TcPOU `<Action>` XML) parse and are callable as `name()` inside their POU
+- [ ] **DIAL-09**: `REF=`, `THIS^` and `SUPER^` parse, type-check and execute
+- [ ] **DIAL-10**: `stc check` on the flattened ST301 + SVNCoreComponents sources (`.planning/research/v1.2` probes) reports zero parse errors
 
-### I/O Address Mapping
+### TwinCAT project import (IMPT)
 
-- [x] **IO-01**: Parser handles AT %IX0.0, %QX0.0, %IW0, %QW0, %MW0, %MD0 address syntax in VAR blocks
-- [x] **IO-02**: Interpreter maintains a mock I/O table mapping addresses to values
-- [x] **IO-03**: I/O values sync at scan cycle boundaries (inputs copied before execution, outputs copied after)
-- [x] **IO-04**: Tests can inject I/O values via the mock I/O table before assertions
-- [x] **IO-05**: Address overlap detection warns when byte and bit addresses conflict
+- [ ] **IMPT-01**: `stc vendor import <x.tsproj|x.plcproj>` reads TcPOU (declaration, implementation, methods, actions, properties), TcGVL and TcDUT files listed in the plcproj and builds one project model stc can check and run
+- [ ] **IMPT-02**: Library placeholder references in the plcproj resolve in order: project POUs, sibling library plcproj (SVNCoreComponents), shipped stubs; unresolved references are reported as diagnostics
+- [ ] **IMPT-03**: Task cycle time and PLC project name are read from the `.tsproj` and used by the runtime and the OPC UA namespace
+- [ ] **IMPT-04**: Shipped stubs cover Tc2_EtherCAT (`FB_EcGetSlaveState`, `FB_EcGetAllSlaveStates`, `FB_EcSetSlaveState`, `FB_EcGetMasterState`, `FB_EcGetAllSlaveCrcErrors`, `FB_EcGetSlaveCrcErrorEx`, `FB_EcCoESDoRead`, `FB_EcCoESDoWrite`, `FB_EcPhysicalWriteCmd`, `ST_EcSlaveState`, `E_EcSlaveState`), Tc2_System additions (`AMSADDR`, `T_AmsNetIdArr`, `F_CreateAmsNetId`, `MEMCPY`), Tc2_ModbusSrv, Tc3_Module and Tc2_SerialCom so the sildarvinnsla projects type-check
+- [ ] **IMPT-05**: `stc vendor extract` emits stubs that parse (closing keywords, methods included) and no longer silently skips TcGVL/TcDUT entries
 
-### Mock Framework
+### Runtime model (RUNT)
 
-- [x] **MOCK-01**: User can write ST mock FBs with full bodies that override vendor stubs by name
-- [x] **MOCK-02**: Mock paths configured via `[test.mock_paths]` in stc.toml
-- [x] **MOCK-03**: FBs without explicit mocks auto-generate zero-value instances (accept inputs, return zeros)
-- [x] **MOCK-04**: Mock signatures validated against stub signatures (parameter count and types must match)
-- [x] **MOCK-05**: Zero-value auto-stubs emit fidelity warnings in test output
+- [ ] **RUNT-01**: After analysis a symbol tree exists for every GVL, PROGRAM, FB instance, struct member and array element with IEC type, layout, enum strings and attributes, addressable by dotted path (`GVL.fb[2].HMI.p_stat_State`)
+- [ ] **RUNT-02**: The live interpreter supports `Get(path)` / `Set(path, value)` by dotted path with type coercion, usable from Go, tests, MCP and servers
+- [ ] **RUNT-03**: All GVLs are instantiated once and PROGRAMs run per task with the configured cycle time; `Tick()` stepping stays deterministic and a free-running mode paces the scan against wall-clock for interactive use
+- [ ] **RUNT-04**: `PERSISTENT`/`RETAIN` variables load from and save to a state file so `p_cfg_*` values survive restarts
+- [ ] **RUNT-05**: Integer arithmetic wraps per declared type (INT 32767+1 = -32768, UINT 0-1 = 65535) and untyped literals adopt the context type so `a := a + 1` checks for INT
+- [ ] **RUNT-06**: Array, struct and struct-array initialisers (`:= [(a := 1, s := 'x'), ...]`) with constant-expression bounds are applied at instantiation
+- [ ] **RUNT-07**: AT-bound variables read and write by declared type (sign-extended INT, REAL, enums, structs with `AT %I*` members) rather than by address width
+- [ ] **RUNT-08**: `stc check` knows the standard FBs (TON, TOF, TP, CTU, CTD, CTUD, R_TRIG, F_TRIG, SR, RS) and rejects unknown type names instead of treating them as empty FBs
+- [ ] **RUNT-09**: `stc sim` and `stc serve` can run PROGRAMs that use user-defined FBs, functions, methods and actions from the imported project
 
-### Shipped Stubs -- Beckhoff
+### EtherCAT process-image simulation (ECAT)
 
-- [x] **STUB-01**: Tc2_MC2 stubs shipped (MC_Power, MC_MoveAbsolute, MC_MoveRelative, MC_MoveVelocity, MC_Stop, MC_Home, MC_Reset, MC_ReadActualPosition, MC_ReadActualVelocity, MC_ReadStatus)
-- [x] **STUB-02**: Tc2_System stubs shipped (ADSREAD, ADSWRITE, FB_FileOpen, FB_FileClose, FB_FileRead, FB_FileWrite, MEMCPY, MEMSET, MEMMOVE)
-- [x] **STUB-03**: Tc2_Utilities stubs shipped (FB_FormatString, CRC16, CRC32)
-- [x] **STUB-04**: Tc3_EventLogger stubs shipped (FB_TcEventLogger, FB_TcAlarm)
-- [x] **STUB-05**: Common types shipped (AXIS_REF, MC_Direction, T_AmsNetId, T_AmsPort, E_OpenPath)
-- [x] **STUB-06**: Common EtherCAT terminal I/O patterns documented with example GVL stubs
+- [ ] **ECAT-01**: `pkg/ecat` loads TwinCAT `EtherCATConfig` exports (the `Device N.xml` files) into masters, slaves (name, model, vendor, product, phys addr, port physics, parent coupler) and their active TxPdo/RxPdo entries, reproducing the E-bus nesting and `Module N` segments used by `generate_gvl.py`
+- [ ] **ECAT-02**: `TcLinkTo` pragma strings (single target and multi-member `.m := path; ...` form) are parsed and resolved against the loaded topology to a (master, byte, bit) slot; `stc ecat validate` reports unresolved links and type-size mismatches with file positions
+- [ ] **ECAT-03**: Each master has an input and output process image; `AT %I*`/`%Q*` variables, struct members and FB members bound by `TcLinkTo` are copied from/to their slots at scan boundaries
+- [ ] **ECAT-04**: Device models selected by (VendorId, ProductCode) implement a common `Slave` interface and ship for EL1008/EL1018, EL2008, EP2338-0002/-1002, Festo CTEU outputs, EL3054/EL3064 (status word + scaled INT), EL9222-5500 (per-channel status/control with trip injection), PS2001-2410, EL2912/EP1918/EL1904 standard diagnostics, and couplers/passive terminals with no PDOs
+- [ ] **ECAT-05**: An ATV320 model implements the CiA402 state machine on CMD/ETA, frequency reference LFR to RFR with ACC/DEC ramps, LCR current, HMIS and LFT codes, DI/OL1R logic I/O, and a CoE object dictionary (0x6040/0x6041, 0x2002, 0x2016, 0x2029, 0x2032:01, 0x2037, 0x203C and the parameters written by `FB_Parameter`) so `FB_ATV320` reaches `cfgReady` and runs a motor unmodified
+- [ ] **ECAT-06**: An EL6001 model exposes the 22-byte serial PDO with a pluggable byte-stream peer so the Baader `md`/`mt1` protocol can be scripted against `FB_BaaderSerial`
+- [ ] **ECAT-07**: Every slave publishes `WcState`, `InfoData.State` and `InfoData.AdsAddr`; every master publishes `DevState`, `SlaveCount`, `Frm0State`, `Frm0WcState` and `InfoData.AmsNetId` with Beckhoff bit semantics, linkable through `TcLinkTo`
+- [ ] **ECAT-08**: Tc2_EtherCAT FBs (`FB_EcGetSlaveState`, `FB_EcGetAllSlaveStates`, `FB_EcSetSlaveState`, `FB_EcGetMasterState`, `FB_EcGetAllSlaveCrcErrors`, `FB_EcGetSlaveCrcErrorEx`, `FB_EcCoESDoRead/Write`, `FB_EcPhysicalWriteCmd`) have behavioural mocks backed by the simulator with asynchronous busy/done timing, so `FB_EcDeviceDiag` and the ATV320 configurator run unmodified
+- [ ] **ECAT-09**: A scenario file (TOML) and ST test built-ins can set inputs by variable path or link path, set analog values, trip an EL9222 channel, remove a slave (not present / link error), raise a drive fault with an LFT code and ramp a value over time, all deterministic against the scan clock
+- [ ] **ECAT-10**: `stc sim --project <plcproj|tsproj> --io <Device*.xml> --scenario <toml> --cycles N` runs the imported project against the simulator and reports outputs and diagnostics in text and JSON
 
-### Shipped Stubs -- Schneider
+### OPC UA server (OPCUA)
 
-- [x] **STUB-07**: Schneider motion stubs shipped (MC_Power, MC_MoveAbsolute, MC_Stop with Schneider-specific parameters)
-- [x] **STUB-08**: Schneider communication stubs shipped (READ_VAR, WRITE_VAR, SEND_REQ, RCV_REQ)
-- [x] **STUB-09**: Schneider system stubs shipped (GetBit, SetBit, RTC)
+- [ ] **OPCUA-01**: `stc serve --project ... --opcua :4840` starts an OPC UA server (awcullen/opcua) with SecurityPolicy None + Anonymous by default and optional Basic256Sha256 with self-signed certificates
+- [ ] **OPCUA-02**: The PLC namespace `urn:BeckhoffAutomation:Ua:PLC1` is registered at index 4; nodes are addressable as `ns=4;s=<GVL|PROGRAM>.<path>[i].<member>` with declared case; the standard Server object including `i=2259` ServerStatus.State is served
+- [ ] **OPCUA-03**: Exposure follows TF6100 rules: a symbol is published if it or any ancestor instance or type-level member has `OPC.UA.DA := '1'`; `'1'` inherits to children; `'0'` prunes a subtree; `'2'` publishes a struct without member nodes; type-level attributes inside FB/STRUCT declarations apply to every instance; intermediate FB/array object nodes are created when a descendant is exposed
+- [ ] **OPCUA-04**: `OPC.UA.DA.Access` 1/2/3 maps to AccessLevel (missing = read/write) and `OPC.UA.DA.Description` to the Description attribute
+- [ ] **OPCUA-05**: Structs with `OPC.UA.DA.StructuredType` (on the variable or on the TYPE/FB header) are readable as ExtensionObjects with a served DataTypeDefinition, while members remain individually addressable; enums are Int32 with EnumStrings/EnumValues; arrays are single nodes with ValueRank/ArrayDimensions
+- [ ] **OPCUA-06**: Data types map per PLCopen OPC 30000 (BOOL Boolean, INT Int16, UINT/WORD UInt16, DINT Int32, UDINT/DWORD UInt32, REAL Float, LREAL Double, STRING String, TIME Int64 ms, DT DateTime, TOD UInt32, BYTE Byte)
+- [ ] **OPCUA-07**: Writes go through the symbol tree with coercion so the `p_cmd_*` set-TRUE / FB-clears handshake works while the scan runs
+- [ ] **OPCUA-08**: Subscriptions and monitored items deliver data changes sampled from the running scan
+- [ ] **OPCUA-09**: The emulated address space for ST301 is diffed in CI against a stored browse fixture of the real TF6100 server (node ids, data types, access levels, struct definitions)
+- [ ] **OPCUA-10**: The sildarvinnsla Flutter HMI (tfc-hmi / open62541_dart) connects to `stc serve` running ST301 and shows live sensor, conveyor and drive HMI structs
 
-### Shipped Stubs -- Allen Bradley
+### Test and agent ergonomics (DEVX)
 
-- [x] **STUB-10**: AB type-check profile stubs (no OOP, no POINTER TO, no REFERENCE TO, tag-based I/O)
-- [x] **STUB-11**: AB timer stubs (TONR, TOFR, RTO -- different names from IEC)
-- [x] **STUB-12**: AB common instructions stubs (ADD, SUB, MUL, DIV, MOV, CMP, EQU, NEQ, GRT, LES, GEQ, LEQ)
+- [ ] **DEVX-01**: ST test built-ins `SET(path, value)`, `GET(path)`, `SIM_SET_LINK(linkpath, value)`, `SIM_TRIP(slave, channel)`, `SIM_SLAVE_STATE(slave, state)` and `RUN_CYCLES(n)` are available in `*_test.st` when a project and I/O config are loaded
+- [ ] **DEVX-02**: MCP tools `stc_sim_step`, `stc_sim_read`, `stc_sim_write` and `stc_opcua_browse` expose the running simulation to agents
+- [ ] **DEVX-03**: `docs/` gains a TwinCAT import, EtherCAT simulation and OPC UA guide, and the stale claims in `TESTING_GUIDE.md`, `ST_LANGUAGE_SUPPORT.md` and `stdlib/vendor/beckhoff/ethercat_io.md` are corrected
 
-### Behavioral Mocks
+## v2 Requirements
 
-- [x] **BMOCK-01**: Shipped behavioral mock for MC_MoveAbsolute (simulates motion with cycle counting)
-- [x] **BMOCK-02**: Shipped behavioral mock for MC_Power (simulates enable/disable with status)
-- [x] **BMOCK-03**: Shipped behavioral mock for MC_Home (simulates homing sequence)
-- [x] **BMOCK-04**: Shipped behavioral mock for MC_Stop (simulates deceleration)
-- [x] **BMOCK-05**: Shipped behavioral mock for ADSREAD (configurable response data)
+Deferred. Tracked but not in the current roadmap.
 
-### Test Integration
+### ADS server (ADS)
 
-- [x] **TEST-08**: `stc test` auto-defines STC_TEST preprocessor symbol
-- [x] **TEST-09**: `stc sim` auto-defines STC_SIM preprocessor symbol
+- **ADS-01**: ADS server on AMS port 851 with symbol upload, read/write by name and sum commands so pyads collectors (`Baader/collect/ads.py`, adslog) work against `stc serve`
+- **ADS-02**: ADSREAD/ADSWRITE from ST routed to the simulated master and slaves
 
-### Tooling
+### Extended simulation (ECATX)
 
-- [x] **TOOL-01**: `stc vendor extract <path.plcproj>` extracts FB stubs from TwinCAT project XML files
+- **ECATX-01**: EL40xx analog output, EL70xx stepper and EL72xx servo models
+- **ECATX-02**: Modbus TCP server/client emulation for Tc2_ModbusSrv
+- **ECATX-03**: TwinSAFE logic (EL6900 / FSoE) simulation beyond standard diagnostics
 
-## Future Requirements
+### Extended OPC UA (OPCUAX)
 
-### Community & Ecosystem
-- **COMM-01**: Community stub repository (DefinitelyTyped model)
-- **COMM-02**: `stc vendor install` command for downloading stubs
-
-### Advanced Mocking
-- **AMOCK-01**: Recording mocks that capture call history for assertion
-- **AMOCK-02**: Mock expectations (assert FB was called N times with specific params)
-
-### Allen Bradley Emission
-- **AB-01**: `stc emit --target allen_bradley` with AOI generation
-- **AB-02**: Tag-based variable model mapping for AB output
+- **OPCUAX-01**: `TcRpcEnable` method calls, `OPC.UA.DA.Property`, `AnalogItemType`, `Alias`, `Status`
+- **OPCUAX-02**: `LegacyArrayHandling` per-element nodes and `ImportBigEnumsNumeric`
+- **OPCUAX-03**: Username/password and certificate trust-list handling mirroring TF6100 TOFU behaviour
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| EtherCAT PDO configuration | Exists outside ST code -- hardware config, not compiler |
-| Distributed clocks | EtherCAT infrastructure, not compilable |
-| Beckhoff .library parsing | Proprietary binary format, undocumented |
-| AB emission in v1.1 | Dialect differences too deep for this milestone; type-checking only |
-| VAR_CONFIG remapping | Complex feature, defer to v2 |
-| Tc3_JsonXml stubs | Requires METHOD declarations in stubs -- needs design work |
+| Frame-level EtherCAT emulation (ESC registers, mailbox protocol, DC clocks) | Process-image/PDO level gives everything ST code can observe; frame level is TE1111 / acontis territory with no return for host testing |
+| Deterministic real-time guarantees in free-running mode | stc is a development tool; free-running mode exists for HMI development only |
+| Editing or generating `TcUaDaConfig.xml` / `TcUaServerConfig.xml` | stc emulates the server's behaviour, it does not configure the real one |
+| Changes to the Flutter HMI or tfc-hmi | The HMI is the acceptance oracle and must work unmodified |
+| Parsing `.library` / `.compiled-library` binaries | Still proprietary; stubs and plcproj import cover the need |
+| Generic ESI-driven device modelling for arbitrary slaves | Unbounded; models are hand-written per (VendorId, ProductCode) with a generic byte-passthrough fallback |
 
 ## Traceability
 
+Which phases cover which requirements. Updated during roadmap creation.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| IO-01 | Phase 12 | Complete |
-| IO-02 | Phase 12 | Complete |
-| IO-03 | Phase 12 | Complete |
-| IO-05 | Phase 12 | Complete |
-| VLIB-01 | Phase 13 | Complete |
-| VLIB-02 | Phase 13 | Complete |
-| VLIB-03 | Phase 13 | Complete |
-| VLIB-04 | Phase 13 | Complete |
-| VLIB-05 | Phase 13 | Complete |
-| MOCK-01 | Phase 14 | Complete |
-| MOCK-02 | Phase 14 | Complete |
-| MOCK-03 | Phase 14 | Complete |
-| MOCK-04 | Phase 14 | Complete |
-| MOCK-05 | Phase 14 | Complete |
-| IO-04 | Phase 14 | Complete |
-| STUB-01 | Phase 15 | Complete |
-| STUB-02 | Phase 15 | Complete |
-| STUB-03 | Phase 15 | Complete |
-| STUB-04 | Phase 15 | Complete |
-| STUB-05 | Phase 15 | Complete |
-| STUB-06 | Phase 15 | Complete |
-| STUB-07 | Phase 16 | Complete |
-| STUB-08 | Phase 16 | Complete |
-| STUB-09 | Phase 16 | Complete |
-| STUB-10 | Phase 16 | Complete |
-| STUB-11 | Phase 16 | Complete |
-| STUB-12 | Phase 16 | Complete |
-| BMOCK-01 | Phase 17 | Complete |
-| BMOCK-02 | Phase 17 | Complete |
-| BMOCK-03 | Phase 17 | Complete |
-| BMOCK-04 | Phase 17 | Complete |
-| BMOCK-05 | Phase 17 | Complete |
-| TEST-08 | Phase 18 | Complete |
-| TEST-09 | Phase 18 | Complete |
-| TOOL-01 | Phase 18 | Complete |
+| (filled by roadmap) | | |
 
 **Coverage:**
-- v1.1 requirements: 35 total
-- Mapped to phases: 35
-- Unmapped: 0
+- v1.2 requirements: 47 total
+- Mapped to phases: 0
+- Unmapped: 47 ⚠️
 
 ---
-*Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after phases 15-18 completion*
+*Requirements defined: 2026-10-05*
+*Last updated: 2026-10-05 after milestone v1.2 scoping*
