@@ -9,7 +9,7 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### TwinCAT dialect parity (DIAL)
 
-- [ ] **DIAL-01**: `{attribute 'name' := 'value'}` pragmas (single- or double-quoted, `''` escapes, blank lines before the declaration) are retained in the AST on VarDecl, StructMember, EnumValue, TypeDecl and POU nodes, appear in `stc parse --format json`, and round-trip through `stc fmt` and `stc emit`
+- [x] **DIAL-01**: `{attribute 'name' := 'value'}` pragmas (single- or double-quoted, `''` escapes, blank lines before the declaration) are retained in the AST on VarDecl, StructMember, EnumValue, TypeDecl and POU nodes, appear in `stc parse --format json`, and round-trip through `stc fmt` and `stc emit`
 - [ ] **DIAL-02**: A file whose top level is `VAR_GLOBAL [PERSISTENT] [RETAIN] [CONSTANT] ... END_VAR` parses as a GVL declaration named from the file (or `--gvl-name`); `qualified_only` enforces `GVL.x` access in the checker
 - [ ] **DIAL-03**: `AT %I*` / `AT %Q*` is accepted on STRUCT members and on FB `VAR`/`VAR_INPUT`/`VAR_OUTPUT` without warnings (explicit `%IX..` addresses in FBs keep SEMA031)
 - [ ] **DIAL-04**: Bit access `x.N` on BYTE/WORD/DWORD/LWORD variables, struct members and array elements works for read and write with bounds checked by the checker
@@ -110,7 +110,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIAL-01 | Phase 19 | Pending |
+| DIAL-01 | Phase 19 | Complete |
 | DIAL-02 | Phase 19 | Pending |
 | DIAL-03 | Phase 19 | Pending |
 | DIAL-04 | Phase 20 | Pending |

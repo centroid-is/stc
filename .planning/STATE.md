@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-05T22:54:41.526Z"
+last_updated: "2026-10-05T23:06:53.301Z"
 last_activity: 2026-10-05
 progress:
   total_phases: 29
   completed_phases: 14
   total_plans: 48
-  completed_plans: 40
+  completed_plans: 41
   percent: 48
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 19 (TwinCAT Declaration Syntax) — EXECUTING
-Plan: 3 of 10
+Plan: 4 of 10
 Status: Ready to execute
 Last activity: 2026-10-05
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -82,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-01: scripts/coverage-gate.sh is the per-plan coverage check (thresholds hard-coded from .testcoverage.yml) — Reproduces CI merged profile locally; go-test-coverage opt-in via STC_COVER_TOOL=1
 - [Phase 19]: 19-02: Attribute.String() quotes name and value with '' doubling; JSON value key present iff HasValue
 - [Phase 19]: 19-02: Attributes/Pragmas also on VarBlock; new NodeKinds appended after KindVarDecl (=40, pinned by test)
+- [Phase 19]: 19-03: trailing pragmas before END_VAR attach to the VarBlock, before END_STRUCT or ) to the last member/value; ownerless pragmas (EOF, empty struct/enum) are dropped
+- [Phase 19]: 19-03: printers emit owner attributes (with their own comments) before the owner's leading trivia; attributes are emitted for every vendor target
 
 ### Pending Todos
 
@@ -95,7 +97,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-05T22:52:30.314Z
+Last session: 2026-10-05T23:06:47.890Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
