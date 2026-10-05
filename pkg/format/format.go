@@ -146,6 +146,9 @@ func (f *formatter) emitStructMember(m *ast.StructMember) {
 	f.emitAttrs(m.Attributes, m.Pragmas)
 	f.emitIndent()
 	f.write(m.Name.Name)
+	if m.AtAddress != nil {
+		f.writef(" %s %s", f.kw("AT"), m.AtAddress.Name)
+	}
 	f.write(" : ")
 	f.emitTypeSpec(m.Type)
 	if m.InitValue != nil {
@@ -674,11 +677,16 @@ func (f *formatter) emitCallStmt(s *ast.CallStmt) {
 		}
 		if arg.Name != nil {
 			f.write(arg.Name.Name)
+			op := " :="
 			if arg.IsOutput {
-				f.write(" => ")
-			} else {
-				f.write(" := ")
+				op = " =>"
 			}
+			f.write(op)
+			if arg.Value == nil {
+				// Empty argument: print "name :=" with no trailing space.
+				continue
+			}
+			f.write(" ")
 		}
 		f.emitExpr(arg.Value)
 	}
