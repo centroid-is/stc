@@ -37,15 +37,18 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *ProgramDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
 		marshalVarBlocks(m, v.VarBlocks)
 		marshalBody(m, v.Body)
+		marshalActions(m, v.Actions)
 
 	case *FunctionBlockDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -75,10 +78,12 @@ func nodeToMap(n Node) map[string]interface{} {
 			}
 			m["properties"] = props
 		}
+		marshalActions(m, v.Actions)
 
 	case *FunctionDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -91,6 +96,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *InterfaceDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -105,6 +111,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *MethodDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.AccessModifier != AccessNone {
 			m["access_modifier"] = v.AccessModifier.String()
 		}
@@ -129,6 +136,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *PropertyDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.AccessModifier != AccessNone {
 			m["access_modifier"] = v.AccessModifier.String()
 		}
@@ -169,6 +177,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *TypeDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -179,6 +188,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *ActionDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -190,6 +200,21 @@ func nodeToMap(n Node) map[string]interface{} {
 		m["name"] = v.Name
 		marshalVarBlocks(m, v.VarBlocks)
 		marshalBody(m, v.Body)
+
+	case *GVLDecl:
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
+		if v.Name != nil {
+			m["name"] = nodeToMap(v.Name)
+		}
+		if len(v.Blocks) > 0 {
+			blocks := make([]interface{}, len(v.Blocks))
+			for i, b := range v.Blocks {
+				blocks[i] = nodeToMap(b)
+			}
+			m["blocks"] = blocks
+		}
 
 	// Statements
 	case *AssignStmt:
@@ -207,6 +232,13 @@ func nodeToMap(n Node) map[string]interface{} {
 		marshalTrivia(m, &v.NodeBase)
 		if v.Callee != nil {
 			m["callee"] = nodeToMap(v.Callee)
+		}
+		if len(v.Args) > 0 {
+			args := make([]interface{}, len(v.Args))
+			for i, a := range v.Args {
+				args[i] = nodeToMap(a)
+			}
+			m["args"] = args
 		}
 
 	case *IfStmt:
@@ -425,6 +457,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *EnumValue:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -446,6 +479,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *StructMember:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -455,11 +489,15 @@ func nodeToMap(n Node) map[string]interface{} {
 		if v.InitValue != nil {
 			m["init_value"] = nodeToMap(v.InitValue)
 		}
+		if v.AtAddress != nil {
+			m["at_address"] = nodeToMap(v.AtAddress)
+		}
 
 	// Var
 	case *VarBlock:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		m["section"] = v.Section.String()
 		if v.IsConstant {
 			m["is_constant"] = true
@@ -481,6 +519,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *VarDecl:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if len(v.Names) > 0 {
 			names := make([]interface{}, len(v.Names))
 			for i, n := range v.Names {
@@ -545,9 +584,22 @@ func nodeToMap(n Node) map[string]interface{} {
 		m["message"] = v.Message
 
 	case *PragmaNode:
+		// Parsers may build pragma and attribute nodes without setting
+		// NodeKind; the kind string is fixed so JSON never reports the
+		// zero kind ("SourceFile") for them.
+		m["kind"] = KindPragma.String()
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
 		m["text"] = v.Text
+
+	case *Attribute:
+		m["kind"] = KindAttribute.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		m["name"] = v.Name
+		if v.HasValue {
+			m["value"] = v.Value
+		}
 
 	default:
 		m["error"] = fmt.Sprintf("unknown node type: %T", n)
@@ -562,6 +614,35 @@ func marshalTrivia(m map[string]interface{}, nb *NodeBase) {
 	}
 	if len(nb.TrailingTrivia) > 0 {
 		m["trailing_trivia"] = nb.TrailingTrivia
+	}
+}
+
+// marshalAttrs sets "attributes" and "pragmas" only when non-empty, so files
+// without TwinCAT pragmas produce unchanged JSON.
+func marshalAttrs(m map[string]interface{}, attrs []*Attribute, pragmas []*PragmaNode) {
+	if len(attrs) > 0 {
+		list := make([]interface{}, len(attrs))
+		for i, a := range attrs {
+			list[i] = nodeToMap(a)
+		}
+		m["attributes"] = list
+	}
+	if len(pragmas) > 0 {
+		list := make([]interface{}, len(pragmas))
+		for i, p := range pragmas {
+			list[i] = nodeToMap(p)
+		}
+		m["pragmas"] = list
+	}
+}
+
+func marshalActions(m map[string]interface{}, actions []*ActionDecl) {
+	if len(actions) > 0 {
+		list := make([]interface{}, len(actions))
+		for i, a := range actions {
+			list[i] = nodeToMap(a)
+		}
+		m["actions"] = list
 	}
 }
 
