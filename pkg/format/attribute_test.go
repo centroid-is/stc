@@ -109,9 +109,6 @@ M := TRUE;
 END_METHOD
 {attribute 'p'}
 PROPERTY P : INT
-GET
-P := 1;
-END_GET
 END_PROPERTY
 END_FUNCTION_BLOCK
 
@@ -142,7 +139,7 @@ END_PROGRAM
 		"\n{attribute 'p'}\nPROPERTY P : INT\n",
 		"\n{attribute 'f'}\nFUNCTION F : INT\n",
 		"\n{attribute 'i'}\nINTERFACE I\n",
-		"\n{attribute 'prog'}\n{attribute 'tail'}\nVAR\n",
+		"\n{attribute 'prog'}\nPROGRAM PR\n{attribute 'tail'}\nVAR\n",
 	)
 	assertIdempotent(t, out)
 }

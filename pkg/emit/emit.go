@@ -77,6 +77,69 @@ func (e *emitter) emitTrailingTrivia(n *ast.NodeBase) {
 	e.emitTrivia(n.TrailingTrivia)
 }
 
+// --- attributes and pragmas ---
+
+// emitAttrs prints an owner's attributes and pragmas in source order, one per
+// line at the current indent, each with its own comments. Attributes use the
+// canonical ast.Attribute.String form so emit and format agree.
+func (e *emitter) emitAttrs(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	i, j := 0, 0
+	for i < len(attrs) || j < len(pragmas) {
+		if j == len(pragmas) || (i < len(attrs) && attrs[i].NodeSpan.Start.Offset <= pragmas[j].NodeSpan.Start.Offset) {
+			e.emitAttrLine(&attrs[i].NodeBase, attrs[i].String())
+			i++
+		} else {
+			e.emitAttrLine(&pragmas[j].NodeBase, pragmas[j].Text)
+			j++
+		}
+	}
+}
+
+func (e *emitter) emitAttrLine(nb *ast.NodeBase, text string) {
+	for _, t := range nb.LeadingTrivia {
+		if t.Kind == ast.TriviaLineComment || t.Kind == ast.TriviaBlockComment {
+			e.emitIndent()
+			e.write(t.Text)
+			e.newline()
+		}
+	}
+	e.emitIndent()
+	e.write(text)
+	for _, t := range nb.TrailingTrivia {
+		if t.Kind == ast.TriviaLineComment || t.Kind == ast.TriviaBlockComment {
+			e.write(" ")
+			e.write(t.Text)
+		}
+	}
+	e.newline()
+}
+
+// emitInlineAttrs prints attributes and pragmas on the current line, each
+// followed by a space, for owners printed inline (enum values in a type spec).
+func (e *emitter) emitInlineAttrs(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	for _, a := range attrs {
+		e.write(a.String() + " ")
+	}
+	for _, p := range pragmas {
+		e.write(p.Text + " ")
+	}
+}
+
+// emitStructMember prints one struct member, preceded by its attributes.
+func (e *emitter) emitStructMember(m *ast.StructMember) {
+	e.emitAttrs(m.Attributes, m.Pragmas)
+	e.emitIndent()
+	e.write(m.Name.Name)
+	e.write(" : ")
+	e.emitTypeSpec(m.Type)
+	if m.InitValue != nil {
+		e.write(" := ")
+		e.emitExpr(m.InitValue)
+	}
+	e.write(";")
+	e.newline()
+}
+
 // --- source file ---
 
 func (e *emitter) emitSourceFile(file *ast.SourceFile) {
@@ -116,6 +179,7 @@ func (e *emitter) emitDecl(decl ast.Declaration) {
 }
 
 func (e *emitter) emitProgramDecl(d *ast.ProgramDecl) {
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
 	e.writef("%s %s", e.kw("PROGRAM"), d.Name.Name)
 	e.newline()
@@ -131,6 +195,7 @@ func (e *emitter) emitProgramDecl(d *ast.ProgramDecl) {
 }
 
 func (e *emitter) emitFunctionBlockDecl(d *ast.FunctionBlockDecl) {
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
 	e.writef("%s %s", e.kw("FUNCTION_BLOCK"), d.Name.Name)
 	if d.Extends != nil {
@@ -172,6 +237,7 @@ func (e *emitter) emitFunctionBlockDecl(d *ast.FunctionBlockDecl) {
 }
 
 func (e *emitter) emitFunctionDecl(d *ast.FunctionDecl) {
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
 	e.writef("%s %s", e.kw("FUNCTION"), d.Name.Name)
 	if d.ReturnType != nil {
@@ -194,6 +260,7 @@ func (e *emitter) emitInterfaceDecl(d *ast.InterfaceDecl) {
 	if !e.opts.Target.supportsOOP() {
 		return
 	}
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
 	e.writef("%s %s", e.kw("INTERFACE"), d.Name.Name)
 	if len(d.Extends) > 0 {
@@ -221,6 +288,7 @@ func (e *emitter) emitMethodDecl(d *ast.MethodDecl) {
 	if !e.opts.Target.supportsOOP() {
 		return
 	}
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
 	e.write(e.kw("METHOD"))
 	if d.AccessModifier != ast.AccessNone {
@@ -256,6 +324,7 @@ func (e *emitter) emitPropertyDecl(d *ast.PropertyDecl) {
 	if !e.opts.Target.supportsOOP() {
 		return
 	}
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
 	e.write(e.kw("PROPERTY"))
 	if d.AccessModifier != ast.AccessNone {
@@ -309,6 +378,7 @@ func (e *emitter) emitPropertySignature(d *ast.PropertySignature) {
 }
 
 func (e *emitter) emitTypeDecl(d *ast.TypeDecl) {
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
 	e.writef("%s %s :", e.kw("TYPE"), d.Name.Name)
 	e.newline()
@@ -325,16 +395,7 @@ func (e *emitter) emitTypeBody(ts ast.TypeSpec) {
 		e.newline()
 		e.indent++
 		for _, m := range t.Members {
-			e.emitIndent()
-			e.write(m.Name.Name)
-			e.write(" : ")
-			e.emitTypeSpec(m.Type)
-			if m.InitValue != nil {
-				e.write(" := ")
-				e.emitExpr(m.InitValue)
-			}
-			e.write(";")
-			e.newline()
+			e.emitStructMember(m)
 		}
 		e.indent--
 		e.write(e.kw("END_STRUCT"))
@@ -344,6 +405,7 @@ func (e *emitter) emitTypeBody(ts ast.TypeSpec) {
 		e.newline()
 		e.indent++
 		for i, v := range t.Values {
+			e.emitAttrs(v.Attributes, v.Pragmas)
 			e.emitIndent()
 			e.write(v.Name.Name)
 			if v.Value != nil {
@@ -438,6 +500,7 @@ func (e *emitter) emitVarBlock(vb *ast.VarBlock) {
 		return
 	}
 
+	e.emitAttrs(vb.Attributes, vb.Pragmas)
 	e.emitLeadingTrivia(&vb.NodeBase)
 	e.write(vb.Section.String())
 	if vb.IsConstant {
@@ -461,6 +524,7 @@ func (e *emitter) emitVarBlock(vb *ast.VarBlock) {
 }
 
 func (e *emitter) emitVarDecl(vd *ast.VarDecl) {
+	e.emitAttrs(vd.Attributes, vd.Pragmas)
 	e.emitLeadingTrivia(&vd.NodeBase)
 	e.emitIndent()
 	for i, name := range vd.Names {
@@ -534,6 +598,7 @@ func (e *emitter) emitTypeSpec(ts ast.TypeSpec) {
 			if i > 0 {
 				e.write(", ")
 			}
+			e.emitInlineAttrs(v.Attributes, v.Pragmas)
 			e.write(v.Name.Name)
 			if v.Value != nil {
 				e.write(" := ")
@@ -546,16 +611,7 @@ func (e *emitter) emitTypeSpec(ts ast.TypeSpec) {
 		e.newline()
 		e.indent++
 		for _, m := range t.Members {
-			e.emitIndent()
-			e.write(m.Name.Name)
-			e.write(" : ")
-			e.emitTypeSpec(m.Type)
-			if m.InitValue != nil {
-				e.write(" := ")
-				e.emitExpr(m.InitValue)
-			}
-			e.write(";")
-			e.newline()
+			e.emitStructMember(m)
 		}
 		e.indent--
 		e.emitIndent()
