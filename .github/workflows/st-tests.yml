@@ -36,5 +36,8 @@ jobs:
       - name: Run stdlib_comprehensive tests
         run: go run ./cmd/stc test tests/stdlib_comprehensive
 
+      - name: TwinCAT dialect
+        run: go run ./cmd/stc test tests/twincat_dialect
+
       - name: Run corpus parse test
         run: go test ./tests/ -run TestCorpusParse -v -count=1 -timeout 5m
