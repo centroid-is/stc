@@ -356,3 +356,42 @@ END_FUNCTION_BLOCK
 		assert.Contains(t, got[1].Message, "expected REFERENCE TO UINT")
 	})
 }
+
+// TestInOutBinding covers review ME-03: a VAR_IN_OUT must be bound to a
+// variable, and a call with named arguments must bind every VAR_IN_OUT.
+func TestInOutBinding(t *testing.T) {
+	clean := []string{
+		"n := F_Out(a := 1, io := k);",
+		"n := F_Out(1, k);",
+		"n := F_Out(a := 1, io := (k));",
+		"F_Out(a := 1, io := k);",
+	}
+	for _, body := range clean {
+		t.Run(body, func(t *testing.T) {
+			assert.Empty(t, runNamed(t, body))
+		})
+	}
+	bad := []struct{ body, msg string }{
+		{"n := F_Out(a := 1, io := 5);", `VAR_IN_OUT "io" of F_Out must be bound to a variable`},
+		{"n := F_Out(1, k + 1);", `VAR_IN_OUT "io" of F_Out must be bound to a variable`},
+		{"F_Out(a := 1, io := 5);", `VAR_IN_OUT "io" of F_Out must be bound to a variable`},
+		{"n := F_Out(a := 1);", `VAR_IN_OUT "io" of F_Out is not bound`},
+		{"n := F_Out(a := 1, io := );", `VAR_IN_OUT "io" of F_Out is not bound`},
+	}
+	for _, tc := range bad {
+		t.Run(tc.body, func(t *testing.T) {
+			ds := runNamed(t, tc.body)
+			require.Len(t, ds, 1, "%v", ds)
+			assert.Equal(t, CodeWrongArgType, ds[0].Code)
+			assert.Contains(t, ds[0].Message, tc.msg)
+		})
+	}
+
+	t.Run("FB VAR_IN_OUT bound to a literal", func(t *testing.T) {
+		src := "FUNCTION_BLOCK FB_IO\nVAR_IN_OUT\n\tio : INT;\nEND_VAR\nio := 7;\nEND_FUNCTION_BLOCK\n" +
+			"PROGRAM P\nVAR\n\tfb : FB_IO;\n\tk : INT;\nEND_VAR\nfb(io := k);\nfb(io := 5);\nEND_PROGRAM\n"
+		ds := errorsOf(runAction(t, src))
+		require.Len(t, ds, 1, "%v", ds)
+		assert.Contains(t, ds[0].Message, `VAR_IN_OUT "io" of FB_IO must be bound to a variable`)
+	})
+}

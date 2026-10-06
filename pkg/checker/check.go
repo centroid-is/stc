@@ -453,7 +453,7 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 
 		// Find the parameter in the FB type
 		var paramType types.Type
-		found := false
+		found, inOut := false, false
 		if arg.IsOutput {
 			for _, out := range fbType.Outputs {
 				if strings.ToUpper(out.Name) == argName {
@@ -468,6 +468,7 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 				if strings.ToUpper(in.Name) == argName {
 					paramType = in.Type
 					found = true
+					inOut = in.Direction == types.DirInOut
 					break
 				}
 			}
@@ -484,6 +485,9 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 		}
 
 		if arg.Value != nil {
+			if inOut && !c.checkInOutArg(fbType.Name, types.Parameter{Name: arg.Name.Name}, arg.Value) {
+				continue
+			}
 			argType := c.checkExpr(arg.Value)
 			if argType != types.Invalid && paramType != nil && involvesEnum(argType, paramType) {
 				from, to := argType, paramType

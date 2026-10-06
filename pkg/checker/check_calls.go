@@ -27,9 +27,11 @@ func (c *Checker) checkCallArgs(e *ast.CallExpr, fn *types.FunctionType) bool {
 //   - name => target binds the VAR_OUTPUT called name to a variable.
 //
 // An all-positional call must supply every parameter. Once any argument is
-// named, omitted inputs take their defaults. Unknown names and parameters
-// bound twice are SEMA024, too many arguments SEMA020 and type mismatches
-// SEMA021. Every argument value is checked, so its variables count as used.
+// named, omitted inputs take their defaults; a VAR_IN_OUT has no default and
+// must still be bound. Unknown names and parameters bound twice are SEMA024,
+// too many arguments SEMA020, and type mismatches, a VAR_IN_OUT bound to a
+// non-variable and an unbound VAR_IN_OUT SEMA021. Every argument value is
+// checked, so its variables count as used.
 func (c *Checker) bindCallArgs(call ast.Node, fn *types.FunctionType, args []*ast.CallArg) bool {
 	named := false
 	for _, a := range args {
@@ -47,6 +49,7 @@ func (c *Checker) bindCallArgs(call ast.Node, fn *types.FunctionType, args []*as
 	}
 
 	bound := make(map[string]bool)
+	inOutBound := make(map[string]bool)
 	for i, a := range args {
 		var p types.Parameter
 		var found bool
@@ -78,13 +81,39 @@ func (c *Checker) bindCallArgs(call ast.Node, fn *types.FunctionType, args []*as
 		}
 		bound[key] = true
 
-		if a.IsOutput {
+		switch {
+		case a.IsOutput:
 			c.checkOutputBinding(p, a.Value)
-		} else {
+		case p.Direction == types.DirInOut && a.Value != nil:
+			inOutBound[key] = true
+			if c.checkInOutArg(fn.Name, p, a.Value) {
+				c.checkInputArg(p, a, i)
+			}
+		default:
 			c.checkInputArg(p, a, i)
 		}
 	}
+	for _, p := range fn.Params {
+		if p.Direction == types.DirInOut && !inOutBound[strings.ToUpper(p.Name)] {
+			c.diags.Errorf(astPosToSource(call.Span().Start), CodeWrongArgType,
+				"VAR_IN_OUT %q of %s is not bound", p.Name, fn.Name)
+		}
+	}
 	return true
+}
+
+// checkInOutArg reports SEMA021 when a VAR_IN_OUT argument is not a
+// variable: the callee writes it back, so a literal or computed value has
+// nowhere to go. It returns false after reporting (the value is still
+// checked for usage marks).
+func (c *Checker) checkInOutArg(callee string, p types.Parameter, v ast.Expr) bool {
+	if isLValue(v) {
+		return true
+	}
+	c.checkExpr(v)
+	c.diags.Errorf(astPosToSource(v.Span().Start), CodeWrongArgType,
+		"VAR_IN_OUT %q of %s must be bound to a variable", p.Name, callee)
+	return false
 }
 
 // checkArgValue type-checks an argument value only for its side effects
