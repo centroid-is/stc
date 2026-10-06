@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,19 +32,26 @@ const (
 // Config configures a Server. Start from DefaultConfig: several defaults are
 // true, which a zero Config cannot express.
 //
-// Security note: the server is a development emulator. It accepts anonymous
-// clients (with write permission, gated per node by AccessLevel) and trusts
-// any client certificate (WithInsecureSkipVerify).
+// Security note: the server is a development emulator. It trusts any
+// client certificate (WithInsecureSkipVerify), both for the secure channel
+// and as an X509 user identity. Anonymous clients may write (gated per node
+// by AccessLevel) unless AllowAnonymousWrite is false.
 type Config struct {
-	// Endpoint is "host:port". awcullen listens on ":port", i.e. on ALL
-	// interfaces, whatever the host; the host only shapes the advertised
-	// URL (empty means os.Hostname()). Port 0 is rejected because the
-	// advertised URL would keep ":0".
+	// Endpoint is "host:port". The listener binds that host only; an empty
+	// host, "0.0.0.0" or "::" binds all interfaces. The host also shapes
+	// the advertised URL (empty means os.Hostname()). Port 0 is rejected
+	// because the advertised URL would keep ":0".
 	Endpoint       string
 	ApplicationURI string
 	PLCNamespace   string // forced to namespace index 4
 	AllowNone      bool   // advertise SecurityPolicy None
-	AllowAnonymous bool   // must be true: anonymous is the only identity supported
+	// AllowAnonymous accepts the Anonymous identity. It may only be false
+	// on a secure-only server (EnableBasic256Sha256, !AllowNone), where
+	// clients then authenticate with an X509 certificate identity.
+	AllowAnonymous bool
+	// AllowAnonymousWrite grants the Anonymous role Write permission. When
+	// false, anonymous clients can browse, read and subscribe only.
+	AllowAnonymousWrite bool
 	// EnableBasic256Sha256 records that a secured endpoint is wanted.
 	// awcullen v1.4.0 always advertises its secured policies (Basic256Sha256
 	// among them) once a certificate is loaded, so this flag does not toggle
@@ -64,26 +72,29 @@ type Config struct {
 // None with Anonymous, and the Beckhoff PLC namespace.
 func DefaultConfig() Config {
 	return Config{
-		Endpoint:        ":4840",
-		ApplicationURI:  "urn:stc:opcua",
-		PLCNamespace:    "urn:BeckhoffAutomation:Ua:PLC1",
-		AllowNone:       true,
-		AllowAnonymous:  true,
-		ProductName:     "stc TF6100 emulator",
-		SoftwareVersion: "dev",
+		Endpoint:       ":4840",
+		ApplicationURI: "urn:stc:opcua",
+		PLCNamespace:   "urn:BeckhoffAutomation:Ua:PLC1",
+		AllowNone:      true,
+		AllowAnonymous: true,
+		// The tfc-hmi app connects anonymously and writes commands.
+		AllowAnonymousWrite: true,
+		ProductName:         "stc TF6100 emulator",
+		SoftwareVersion:     "dev",
 	}
 }
 
 // Server is an OPC UA server with the PLC namespace at index 4.
 type Server struct {
-	cfg  Config
-	url  string // advertised endpoint URL
-	port string
-	host string // host used for the readiness probe
-	srv  *server.Server
-	nm   *server.NamespaceManager
-	ns   uint16
-	reg  typeRegistry // custom enum and struct DataTypes (datatypes.go)
+	cfg    Config
+	url    string // advertised endpoint URL
+	port   string
+	host   string // host used for the readiness probe
+	listen string // address the listener binds; ":port" is all interfaces
+	srv    *server.Server
+	nm     *server.NamespaceManager
+	ns     uint16
+	reg    typeRegistry // custom enum and struct DataTypes (datatypes.go)
 
 	dsOnce sync.Once // Objects/DeviceSet/PLC1 (deviceset.go)
 	dsErr  error
@@ -102,8 +113,8 @@ func New(cfg Config) (*Server, error) {
 	if !cfg.AllowNone && !cfg.EnableBasic256Sha256 {
 		return nil, errors.New("opcua: no security policy enabled (set AllowNone or EnableBasic256Sha256)")
 	}
-	if !cfg.AllowAnonymous {
-		return nil, errors.New("opcua: anonymous is the only identity this server supports")
+	if !cfg.AllowAnonymous && (cfg.AllowNone || !cfg.EnableBasic256Sha256) {
+		return nil, errors.New("opcua: anonymous can only be disabled on a secure-only (Basic256Sha256) server")
 	}
 	if cfg.ApplicationURI == "" {
 		return nil, errors.New("opcua: ApplicationURI is empty")
@@ -139,12 +150,22 @@ func New(cfg Config) (*Server, error) {
 		probeHost = "127.0.0.1"
 	}
 	endpointURL := "opc.tcp://" + net.JoinHostPort(advHost, port)
+	listen := net.JoinHostPort(host, port)
+	if allInterfaces(host) {
+		listen = ":" + port
+	}
 
 	// awcullen's default role permissions give Anonymous only Browse|Read,
 	// which makes every anonymous write BadUserAccessDenied. Per-node
 	// AccessLevel still decides what is writable.
-	const perms = ua.PermissionTypeBrowse | ua.PermissionTypeRead | ua.PermissionTypeWrite | ua.PermissionTypeReceiveEvents
+	const readPerms = ua.PermissionTypeBrowse | ua.PermissionTypeRead | ua.PermissionTypeReceiveEvents
+	const perms = readPerms | ua.PermissionTypeWrite
+	anonPerms := ua.PermissionType(readPerms)
+	if cfg.AllowAnonymousWrite {
+		anonPerms = perms
+	}
 	opts := []server.Option{
+		server.WithListenAddress(listen),
 		server.WithBuildInfo(ua.BuildInfo{
 			ProductURI:       "urn:stc",
 			ManufacturerName: "stc",
@@ -157,9 +178,15 @@ func New(cfg Config) (*Server, error) {
 		server.WithInsecureSkipVerify(),
 		server.WithServerDiagnostics(false),
 		server.WithRolePermissions([]ua.RolePermissionType{
-			{RoleID: ua.ObjectIDWellKnownRoleAnonymous, Permissions: perms},
+			{RoleID: ua.ObjectIDWellKnownRoleAnonymous, Permissions: anonPerms},
 			{RoleID: ua.ObjectIDWellKnownRoleAuthenticatedUser, Permissions: perms},
 		}),
+	}
+	if !cfg.AllowAnonymous {
+		// Without Anonymous a client needs another identity: accept its
+		// certificate (trusted like the channel's, see the security note).
+		opts = append(opts, server.WithAuthenticateX509IdentityFunc(
+			func(ua.X509Identity, string, string) error { return nil }))
 	}
 	if cfg.MaxWorkerThreads > 0 {
 		opts = append(opts, server.WithMaxWorkerThreads(cfg.MaxWorkerThreads))
@@ -184,8 +211,20 @@ func New(cfg Config) (*Server, error) {
 		_ = srv.Close()
 		return nil, fmt.Errorf("opcua: PLC namespace %q landed at index %d, want %d", cfg.PLCNamespace, ns, plcNamespaceIdx)
 	}
-	return &Server{cfg: cfg, url: endpointURL, port: port, host: probeHost, srv: srv, nm: nm, ns: ns}, nil
+	return &Server{cfg: cfg, url: endpointURL, port: port, host: probeHost, listen: listen, srv: srv, nm: nm, ns: ns}, nil
 }
+
+// allInterfaces reports whether an endpoint host means every interface.
+func allInterfaces(host string) bool {
+	return host == "" || host == "0.0.0.0" || host == "::"
+}
+
+// ListenAddr is the address the listener binds: "host:port", or ":port"
+// for all interfaces.
+func (s *Server) ListenAddr() string { return s.listen }
+
+// AllInterfaces reports whether the listener binds every interface.
+func (s *Server) AllInterfaces() bool { return strings.HasPrefix(s.listen, ":") }
 
 // splitEndpoint validates "host:port" with a port in 1..65535.
 func splitEndpoint(ep string) (host, port string, err error) {
@@ -219,11 +258,11 @@ func (s *Server) Start() error {
 	if s.started || s.stopped {
 		return errors.New("opcua: server already started or stopped")
 	}
-	// ListenAndServe binds ":port"; check that first so a port held by
+	// ListenAndServe binds s.listen; check that first so a port held by
 	// another process fails here instead of fooling the readiness probe.
-	ln, err := net.Listen("tcp", ":"+s.port)
+	ln, err := net.Listen("tcp", s.listen)
 	if err != nil {
-		return fmt.Errorf("opcua: listen on port %s: %w", s.port, err)
+		return fmt.Errorf("opcua: listen on %s: %w", s.listen, err)
 	}
 	_ = ln.Close()
 

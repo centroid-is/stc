@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"runtime"
@@ -45,8 +46,15 @@ TwinCAT TF6100 address space (Objects/DeviceSet/PLC1, namespace 4, NodeIds
 ns=4;s=<GVL>.<path>). Reads come from one consistent scan image; writes are
 queued and applied between scans; subscriptions sample the live scan at
 their sampling interval. A runtime error then stops the scan while
-the address space keeps serving the last values. The listener binds all
-interfaces. Without --opcua no server is started.
+the address space keeps serving the last values. The listener binds only
+the given host; an empty host (":4840") or 0.0.0.0 binds all interfaces.
+Without --opcua no server is started.
+
+Anonymous clients may write (--allow-anonymous-write, default true) on
+--security none. --security basic256sha256 requires a client certificate
+identity and accepts anonymous clients only with --allow-anonymous.
+Client certificates are not verified: stc serve is a development
+emulator.
 
 On stop the final status (tasks, runs, overruns, sim_time_ns, diagnostics,
 warnings) is printed; --format json prints it as one object, preceded by the
@@ -59,8 +67,10 @@ OPC UA start-up object when --opcua is given.`,
 	cmd.Flags().Duration("duration", 0, "Stop after this wall time (0 = until SIGINT/SIGTERM)")
 	cmd.Flags().Duration("run-for", 0, "Alias of --duration")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
-	cmd.Flags().String("opcua", "", "Serve OPC UA on host:port, e.g. :4840 (the listener binds all interfaces; empty = no server)")
-	cmd.Flags().String("security", "none", "OPC UA security mode: none (SecurityPolicy None + Anonymous) or basic256sha256 (secure only)")
+	cmd.Flags().String("opcua", "", "Serve OPC UA on host:port; binds only host, :4840 or 0.0.0.0:4840 binds all interfaces (empty = no server)")
+	cmd.Flags().String("security", "none", "OPC UA security mode: none (SecurityPolicy None + Anonymous) or basic256sha256 (secure only, certificate identity)")
+	cmd.Flags().Bool("allow-anonymous-write", true, "Let anonymous OPC UA clients write (false: browse, read and subscribe only)")
+	cmd.Flags().Bool("allow-anonymous", true, "Accept anonymous OPC UA clients; with --security basic256sha256 it defaults to false")
 	cmd.Flags().String("cert", "", "OPC UA server certificate (DER or PEM); generated when empty")
 	cmd.Flags().String("key", "", "OPC UA server private key; required with --cert")
 	cmd.Flags().String("pki-dir", "", "Directory for generated OPC UA certificates (default: user cache dir)")
@@ -74,6 +84,8 @@ type serveInfo struct {
 	NamespaceIndex uint16            `json:"namespace_index"`
 	NodeCount      int               `json:"node_count"`
 	Cycle          string            `json:"cycle"`
+	Listen         string            `json:"listen"`
+	AnonymousWrite bool              `json:"anonymous_write"`
 	Diagnostics    []diag.Diagnostic `json:"diagnostics"`
 }
 
@@ -184,9 +196,19 @@ func startOPCUA(r *projectRunner, cfg opcua.Config, out, errOut io.Writer, forma
 	if diags == nil {
 		diags = []diag.Diagnostic{}
 	}
+	anonWrite := cfg.AllowAnonymous && cfg.AllowAnonymousWrite
+	if anonWrite && exposed(srv.ListenAddr()) {
+		warn := fmt.Errorf("anonymous OPC UA clients can write on %s; bind a loopback host or pass --allow-anonymous-write=false", srv.ListenAddr())
+		if format == "json" {
+			reportServe(errOut, format, "warning", warn)
+		} else {
+			fmt.Fprintf(errOut, "warning: %v\n", warn)
+		}
+	}
 	printServeInfo(out, errOut, format, serveInfo{Endpoint: srv.Endpoint(),
 		NamespaceIndex: srv.NamespaceIndex(), NodeCount: len(space.Nodes),
-		Cycle: r.P.BaseTick().String(), Diagnostics: diags})
+		Cycle: r.P.BaseTick().String(), Listen: srv.ListenAddr(), AnonymousWrite: anonWrite,
+		Diagnostics: diags})
 	return srv, nil
 }
 
@@ -199,16 +221,38 @@ func serveConfig(cmd *cobra.Command) (opcua.Config, error) {
 	cfg.KeyFile, _ = cmd.Flags().GetString("key")
 	cfg.PKIDir, _ = cmd.Flags().GetString("pki-dir")
 	cfg.SoftwareVersion = cmd.Root().Version
+	cfg.AllowAnonymousWrite, _ = cmd.Flags().GetBool("allow-anonymous-write")
+	cfg.AllowAnonymous, _ = cmd.Flags().GetBool("allow-anonymous")
 	sec, _ := cmd.Flags().GetString("security")
 	switch strings.ToLower(sec) {
 	case "none":
+		if !cfg.AllowAnonymous {
+			return cfg, errors.New("--allow-anonymous=false needs --security basic256sha256: SecurityPolicy None only supports anonymous clients")
+		}
 	case "basic256sha256":
 		cfg.AllowNone = false
 		cfg.EnableBasic256Sha256 = true
+		if !cmd.Flags().Changed("allow-anonymous") {
+			cfg.AllowAnonymous = false
+		}
 	default:
 		return cfg, fmt.Errorf("invalid --security %q: want none or basic256sha256", sec)
 	}
 	return cfg, nil
+}
+
+// exposed reports whether a listen address is reachable from other hosts:
+// all interfaces, or a host that is not loopback.
+func exposed(listen string) bool {
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil || host == "" {
+		return true
+	}
+	if host == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip == nil || !ip.IsLoopback()
 }
 
 func printServeInfo(out, errOut io.Writer, format string, info serveInfo) {
@@ -220,7 +264,11 @@ func printServeInfo(out, errOut io.Writer, format string, info serveInfo) {
 	for _, d := range info.Diagnostics {
 		fmt.Fprintln(errOut, d.String())
 	}
-	fmt.Fprintf(out, "OPC UA server listening on %s (all interfaces)\n", info.Endpoint)
+	where := "only " + info.Listen
+	if strings.HasPrefix(info.Listen, ":") {
+		where = "all interfaces"
+	}
+	fmt.Fprintf(out, "OPC UA server listening on %s (%s)\n", info.Endpoint, where)
 	fmt.Fprintf(out, "namespace %d, %d nodes, scan cycle %s\n", info.NamespaceIndex, info.NodeCount, info.Cycle)
 }
 
