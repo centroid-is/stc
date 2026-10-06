@@ -180,6 +180,11 @@ func (r *Runtime) Snapshot() any {
 func (r *Runtime) Set(path string, v any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.set(path, v)
+}
+
+// set is Set without taking r.mu; the caller holds it.
+func (r *Runtime) set(path string, v any) error {
 	loc, err := r.resolve(path)
 	if err != nil {
 		return err

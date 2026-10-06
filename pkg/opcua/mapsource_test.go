@@ -117,3 +117,49 @@ func TestMapSourceConcurrent(t *testing.T) {
 		t.Fatalf("write log length = %d, want 400", n)
 	}
 }
+
+func TestMapSourceWriteBatch(t *testing.T) {
+	m := NewMapSource(map[string]any{"a": 1, "b": 2})
+	if err := m.WriteBatch([]PathWrite{{"a", 10}, {"nope", 3}}); !errors.Is(err, ErrUnknownSymbol) {
+		t.Fatalf("unknown path in batch = %v", err)
+	}
+	m.FailWrite("b", ErrNotWritable)
+	if err := m.WriteBatch([]PathWrite{{"a", 10}, {"b", 20}}); !errors.Is(err, ErrNotWritable) {
+		t.Fatalf("injected failure in batch = %v", err)
+	}
+	if v, _ := m.Get("a"); v != 1 || len(m.Writes()) != 0 {
+		t.Fatalf("rejected batch applied: a=%v writes=%v", v, m.Writes())
+	}
+	m.FailWrite("b", nil)
+	if err := m.WriteBatch([]PathWrite{{"a", 10}, {"b", 20}}); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := m.Get("a"); a != 10 {
+		t.Errorf("a = %v", a)
+	}
+	if n := len(m.Writes()); n != 2 {
+		t.Errorf("writes = %d", n)
+	}
+}
+
+// leafOnly hides MapSource.WriteBatch, so writeLeaves falls back to one
+// Write per leaf.
+type leafOnly struct{ m *MapSource }
+
+func (l leafOnly) Read(p string) (any, error)                   { return l.m.Read(p) }
+func (l leafOnly) Write(p string, v any) error                  { return l.m.Write(p, v) }
+func (l leafOnly) Snapshot(ps []string) (map[string]any, error) { return l.m.Snapshot(ps) }
+
+func TestWriteLeavesFallback(t *testing.T) {
+	m := NewMapSource(map[string]any{"a": 1, "b": 2})
+	src := leafOnly{m}
+	if err := writeLeaves(src, []leafWrite{{"a", 5}, {"b", 6}}); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(m.Writes()); n != 2 {
+		t.Errorf("writes = %d", n)
+	}
+	if err := writeLeaves(src, []leafWrite{{"nope", 1}}); !errors.Is(err, ErrUnknownSymbol) {
+		t.Errorf("fallback error = %v", err)
+	}
+}

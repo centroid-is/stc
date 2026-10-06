@@ -1,6 +1,9 @@
 package interp
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // CheckSet reports the error Set(path, v) would return without writing
 // anything, so callers that queue writes (the OPC UA server applies them
@@ -8,6 +11,36 @@ import "fmt"
 func (r *Runtime) CheckSet(path string, v any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.checkSet(path, v)
+}
+
+// SetMany writes vals[i] to paths[i] as one unit: every write is validated
+// first (as CheckSet), and only if all pass are they applied, in order,
+// within one critical section. No Tick or reader can observe a partial
+// batch, and a rejected batch changes nothing. The error is that of the
+// first rejected write.
+func (r *Runtime) SetMany(paths []string, vals []any) error {
+	if len(paths) != len(vals) {
+		return fmt.Errorf("SetMany: %d paths for %d values", len(paths), len(vals))
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, p := range paths {
+		if err := r.checkSet(p, vals[i]); err != nil {
+			return err
+		}
+	}
+	var errs []error
+	for i, p := range paths {
+		if err := r.set(p, vals[i]); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// checkSet is CheckSet without taking r.mu; the caller holds it.
+func (r *Runtime) checkSet(path string, v any) error {
 	loc, err := r.resolve(path)
 	if err != nil {
 		return err
