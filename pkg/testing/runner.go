@@ -435,6 +435,11 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 							val = iv
 						}
 					}
+					// An enum variable's value carries the enum tag, so
+					// later stores into it keep the tag (TO_STRING).
+					if _, isEnum := typeSpec.(*ast.EnumType); isEnum && val.Kind == interp.ValInt {
+						val.Enum = upperTypeName
+					}
 					for _, n := range vd.Names {
 						env.Define(n.Name, val)
 					}

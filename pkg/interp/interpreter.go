@@ -665,6 +665,7 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 				}
 				return nil
 			}
+			val = adoptEnumTag(existing, val)
 		}
 		// Check subrange constraints
 		if msg := env.CheckSubrange(target.Name, val); msg != "" {
@@ -731,7 +732,7 @@ func (interp *Interpreter) execAssignIndex(env *Env, target *ast.IndexExpr, val 
 	if val.IsAggregate() {
 		val = val.Clone()
 	}
-	arr.Array[i] = val
+	arr.Array[i] = adoptEnumTag(arr.Array[i], val)
 	if id, ok := target.Object.(*ast.Ident); ok {
 		// Through assignToTarget, so a reference variable writes its target
 		// instead of being replaced by a copy of the array.
@@ -1169,7 +1170,7 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 	case ValStruct:
 		if obj.Struct != nil {
 			key := strings.ToUpper(memberName)
-			obj.Struct[key] = val
+			obj.Struct[key] = adoptEnumTag(obj.Struct[key], val)
 			// Write back the struct to the env; a reference variable
 			// writes its target instead of being replaced by a copy.
 			if objIdent, ok := target.Object.(*ast.Ident); ok {
@@ -1203,7 +1204,8 @@ func (interp *Interpreter) execAssignDeref(env *Env, target *ast.DerefExpr, val 
 	if ptr.PtrEnv == nil || ptr.PtrVar == "" {
 		return &RuntimeError{Msg: "nil pointer dereference"}
 	}
-	if !ptr.PtrEnv.Set(ptr.PtrVar, val) {
+	cur, _ := ptr.PtrEnv.Get(ptr.PtrVar)
+	if !ptr.PtrEnv.Set(ptr.PtrVar, adoptEnumTag(cur, val)) {
 		return &RuntimeError{Msg: fmt.Sprintf("dangling pointer: variable '%s' no longer exists", ptr.PtrVar)}
 	}
 	return nil

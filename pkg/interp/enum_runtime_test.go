@@ -23,6 +23,7 @@ func enumEngine(t *testing.T, filename, src string) *ScanCycleEngine {
 	typeDecls := map[string]ast.TypeSpec{}
 	fbDecls := map[string]*ast.FunctionBlockDecl{}
 	var enums []*ast.TypeDecl
+	var funcDecls []*ast.FunctionDecl
 	for _, d := range res.File.Declarations {
 		switch d := d.(type) {
 		case *ast.ProgramDecl:
@@ -36,10 +37,15 @@ func enumEngine(t *testing.T, filename, src string) *ScanCycleEngine {
 			}
 		case *ast.FunctionBlockDecl:
 			fbDecls[strings.ToUpper(d.Name.Name)] = d
+		case *ast.FunctionDecl:
+			funcDecls = append(funcDecls, d)
 		}
 	}
 	require.NotNil(t, prog, "no PROGRAM in source")
 	eng := NewScanCycleEngine(prog)
+	for _, d := range funcDecls {
+		eng.interp.RegisterFunctionDecl(d)
+	}
 	eng.interp.TypeDecls = typeDecls
 	eng.interp.FBDecls = fbDecls
 	for _, d := range enums {
@@ -332,4 +338,50 @@ END_PROGRAM
 		in.RegisterInlineEnums("P", []*ast.VarBlock{nil})
 		assert.Len(t, in.EnumDefs, 1)
 	})
+}
+
+// TestEnumTagFollowsDestination covers review ME-01: a stored value takes
+// the enum tag of its destination, so an INT that receives an enum value
+// formats as a number and an enum variable that receives a number formats
+// as a value name.
+func TestEnumTagFollowsDestination(t *testing.T) {
+	eng := enumRun(t, "P.st", enumDecls+`
+TYPE ST : STRUCT n : INT; s : S; END_STRUCT END_TYPE
+FUNCTION F_Str : STRING
+VAR_INPUT v : INT; END_VAR
+F_Str := TO_STRING(v);
+END_FUNCTION
+FUNCTION_BLOCK FB_In
+VAR_INPUT v : INT; END_VAR
+VAR_OUTPUT s : STRING; END_VAR
+s := TO_STRING(v);
+END_FUNCTION_BLOCK
+PROGRAM P
+VAR
+	e : S; i : INT; arr : ARRAY[0..1] OF INT; st : ST; fb : FB_In;
+	s1, s2, s3, s4, s5, s6, s7 : STRING;
+END_VAR
+e := S.stop;
+i := e;
+s1 := TO_STRING(i);
+s2 := F_Str(v := e);
+arr[0] := e;
+s3 := TO_STRING(arr[0]);
+st.n := e;
+s4 := TO_STRING(st.n);
+fb(v := e);
+s5 := fb.s;
+e := 5;
+s6 := TO_STRING(e);
+st.s := 6;
+s7 := TO_STRING(st.s);
+END_PROGRAM
+`)
+	assert.Equal(t, "6", progVar(t, eng, "s1").Str, "assignment to INT")
+	assert.Equal(t, "6", progVar(t, eng, "s2").Str, "INT function input")
+	assert.Equal(t, "6", progVar(t, eng, "s3").Str, "INT array element")
+	assert.Equal(t, "6", progVar(t, eng, "s4").Str, "INT struct member")
+	assert.Equal(t, "6", progVar(t, eng, "s5").Str, "INT FB input")
+	assert.Equal(t, "run", progVar(t, eng, "s6").Str, "integer stored into an enum variable")
+	assert.Equal(t, "stop", progVar(t, eng, "s7").Str, "integer stored into an enum struct member")
 }

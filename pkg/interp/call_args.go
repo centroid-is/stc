@@ -142,6 +142,9 @@ func (interp *Interpreter) bindArgs(env, callee *Env, blocks []*ast.VarBlock, po
 		for _, vd := range vb.Declarations {
 			for _, n := range vd.Names {
 				if v, ok := bc.inputs[strings.ToUpper(n.Name)]; ok && isParam {
+					if v.Kind == ValInt {
+						v = adoptEnumTag(zeroFromTypeSpecWith(vd.Type, resolve, 0), v)
+					}
 					callee.Define(n.Name, v)
 					continue
 				}

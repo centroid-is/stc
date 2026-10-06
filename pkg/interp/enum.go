@@ -120,6 +120,17 @@ func (interp *Interpreter) enumString(v Value) (string, bool) {
 	return name, ok
 }
 
+// adoptEnumTag returns v, an integer about to be stored over dst, carrying
+// dst's enum tag: the tag follows the destination's declared type, so an
+// enum value stored into an INT loses it and an integer stored into an enum
+// variable gains it. Non-integer values are returned unchanged.
+func adoptEnumTag(dst, v Value) Value {
+	if v.Kind == ValInt && dst.Kind == ValInt {
+		v.Enum = dst.Enum
+	}
+	return v
+}
+
 // zeroEnum returns the default value of an enumeration: its first value,
 // typed by its base type.
 func zeroEnum(et *ast.EnumType) Value {
