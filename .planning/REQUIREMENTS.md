@@ -45,7 +45,7 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 - [x] **ECAT-01**: `pkg/ecat` loads TwinCAT `EtherCATConfig` exports (the `Device N.xml` files) into masters, slaves (name, model, vendor, product, phys addr, port physics, parent coupler) and their active TxPdo/RxPdo entries, reproducing the E-bus nesting and `Module N` segments used by `generate_gvl.py`
 - [x] **ECAT-02**: `TcLinkTo` pragma strings (single target and multi-member `.m := path; ...` form) are parsed and resolved against the loaded topology to a (master, byte, bit) slot; `stc ecat validate` reports unresolved links and type-size mismatches with file positions
 - [x] **ECAT-03**: Each master has an input and output process image; `AT %I*`/`%Q*` variables, struct members and FB members bound by `TcLinkTo` are copied from/to their slots at scan boundaries
-- [ ] **ECAT-04**: Device models selected by (VendorId, ProductCode) implement a common `Slave` interface and ship for EL1008/EL1018, EL2008, EP2338-0002/-1002, Festo CTEU outputs, EL3054/EL3064 (status word + scaled INT), EL9222-5500 (per-channel status/control with trip injection), PS2001-2410, EL2912/EP1918/EL1904 standard diagnostics, and couplers/passive terminals with no PDOs
+- [x] **ECAT-04**: Device models selected by (VendorId, ProductCode) implement a common `Slave` interface and ship for EL1008/EL1018, EL2008, EP2338-0002/-1002, Festo CTEU outputs, EL3054/EL3064 (status word + scaled INT), EL9222-5500 (per-channel status/control with trip injection), PS2001-2410, EL2912/EP1918/EL1904 standard diagnostics, and couplers/passive terminals with no PDOs
 - [ ] **ECAT-05**: An ATV320 model implements the CiA402 state machine on CMD/ETA, frequency reference LFR to RFR with ACC/DEC ramps, LCR current, HMIS and LFT codes, DI/OL1R logic I/O, and a CoE object dictionary (0x6040/0x6041, 0x2002, 0x2016, 0x2029, 0x2032:01, 0x2037, 0x203C and the parameters written by `FB_Parameter`) so `FB_ATV320` reaches `cfgReady` and runs a motor unmodified
 - [x] **ECAT-06**: An EL6001 model exposes the 22-byte serial PDO with a pluggable byte-stream peer so the Baader `md`/`mt1` protocol can be scripted against `FB_BaaderSerial`
 - [x] **ECAT-07**: Every slave publishes `WcState`, `InfoData.State` and `InfoData.AdsAddr`; every master publishes `DevState`, `SlaveCount`, `Frm0State`, `Frm0WcState` and `InfoData.AmsNetId` with Beckhoff bit semantics, linkable through `TcLinkTo`
@@ -137,7 +137,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ECAT-01 | Phase 24 | Complete |
 | ECAT-02 | Phase 24 | Complete |
 | ECAT-03 | Phase 24 | Complete |
-| ECAT-04 | Phase 25 | Pending |
+| ECAT-04 | Phase 25 | Complete |
 | ECAT-05 | Phase 26 | Pending |
 | ECAT-06 | Phase 25 | Complete |
 | ECAT-07 | Phase 24 | Complete |
