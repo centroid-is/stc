@@ -37,3 +37,16 @@
 - **Unqualified METHOD calls inside an FB fail at runtime.** `Inc();` in an FB body or in one of its actions reports `undefined function: INC`. Only `inst.Inc()` works. The 19-07 checker accepts the unqualified form, so an action that calls its FB's method checks clean and then fails when run. Pre-existing for FB bodies; fixing it means resolving methods through the env like actions.
 - **Action lookup walks past the FB boundary.** `Env.LookupAction` follows the parent chain, and an FB instance env's parent is the env that declared the instance. An FB body calling an action name that only the enclosing PROGRAM defines would run the PROGRAM's action. The checker reports SEMA010 for that call, so only unchecked code reaches it.
 - **ErrExit/ErrContinue leaking out of an action body are not caught.** Same as METHOD bodies today: `EXIT;` at the top level of an action propagates to the caller's loop.
+
+## From the Phase 19 code review (19-REVIEW.md)
+
+- **Resolved by ME-01: pragmas in an empty STRUCT or empty enum (from 19-03).** They are now kept as the struct's or enum's end pragmas and printed before `END_STRUCT` or `)`. A pragma at end of file still has no owner.
+- **ME-04 (partial): ACTIONs, attributes and `AT %I*` struct members are emitted unchanged for every target.** Schneider is CODESYS-derived and supports ACTIONs and attributes, so its output is correct. No Allen Bradley target exists in `pkg/emit` or the checker's vendor profiles yet. Gating these constructs belongs with that target. `POINTER TO` and similar types in struct members are also not stripped by `stc emit` for schneider and portable, though `stc check --vendor` now warns on them.
+- **LO-02: a METHOD sharing a name with an FB variable is now a redeclaration.** Needs confirmation against TwinCAT before choosing between keeping the error and a separate callable namespace.
+- **LO-03: `--gvl-name` on `fmt` and `emit` has no effect.** The GVL name is never printed. Decide whether to drop the flag there or print the name as a leading comment.
+- **LO-04: LSP go-to-definition for a `qualified_only` GVL member lands on the first `VAR_GLOBAL`, and the hover fallback over-matches unresolved identifiers.** Needs per-member positions in `GVLInfo` and a fallback limited to `MemberAccessExpr` on a `KindGVL` object.
+- **LO-05: GVL JSON uses `blocks` while POUs use `var_blocks`.** Changing the key is a JSON contract change for MCP and `--format json` consumers.
+- **LO-06: statement-level pragmas in POU bodies are still deleted by fmt.** Needs a `PragmaStmt` node or body trivia.
+- **LO-08: SEMA034 misses output bindings (`q => c`), indexed writes (`arr[1] := ...`) and member writes (`s.a := ...`) to constants.**
+- **LO-10: `scripts/coverage-gate.sh` duplicates the `.testcoverage.yml` thresholds and never removes its work directory.**
+- **LO-11: the probe fixture test checks idempotence only, and skips probes with any diagnostic.** ME-01 now has anchor-order tests in `pkg/format` and `pkg/emit`; the probe-level comparison of pragma sequences is still open.
