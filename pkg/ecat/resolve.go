@@ -60,7 +60,7 @@ func Resolve(topo *Topology, vars []LinkedVar) ([]Binding, []diag.Diagnostic) {
 			continue
 		}
 		if v.HasAT && v.Dir != slot.Dir {
-			add(diag.Error, v, CodeDirMismatch, "direction mismatch: %s is declared %s but %q is an %s entry", v.Path, atName(v.Dir), v.Link, slot.Dir)
+			add(diag.Error, v, CodeDirMismatch, "direction mismatch: %s is declared %s but %q is an %s entry", v.Path, atName(v.Dir), v.Link, dirWord(slot.Dir))
 			continue
 		}
 		key := slotKey{slot.Master, slot.Dir, slot.Byte, slot.Bit}
@@ -72,6 +72,13 @@ func Resolve(topo *Topology, vars []LinkedVar) ([]Binding, []diag.Diagnostic) {
 		bindings = append(bindings, Binding{Var: v, Slot: slot})
 	}
 	sort.SliceStable(bindings, func(i, j int) bool { return bindingLess(bindings[i], bindings[j]) })
+	SortDiagnostics(diags)
+	return bindings, diags
+}
+
+// SortDiagnostics orders diagnostics by file, line and column, keeping the
+// input order for equal positions.
+func SortDiagnostics(diags []diag.Diagnostic) {
 	sort.SliceStable(diags, func(i, j int) bool {
 		a, b := diags[i].Pos, diags[j].Pos
 		if a.File != b.File {
@@ -82,7 +89,6 @@ func Resolve(topo *Topology, vars []LinkedVar) ([]Binding, []diag.Diagnostic) {
 		}
 		return a.Col < b.Col
 	})
-	return bindings, diags
 }
 
 // widthOK reports whether v's declared width fits the slot. Unknown widths
@@ -100,6 +106,13 @@ func atName(d Dir) string {
 		return "AT %Q*"
 	}
 	return "AT %I*"
+}
+
+func dirWord(d Dir) string {
+	if d == DirOut {
+		return "output"
+	}
+	return "input"
 }
 
 // nearest describes the longest existing '^'-prefix of target and up to

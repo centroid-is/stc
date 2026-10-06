@@ -6,6 +6,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/source"
 )
 
 func demoTopology(t *testing.T) *Topology {
@@ -35,13 +38,13 @@ func TestResolveDemo(t *testing.T) {
 		byPath[b.Var.Path] = b
 	}
 	checks := map[string]string{
-		"ECT.A1_01.I1":       "Device 1 (EtherCAT) in 0.0 1",
+		"ECT.A1_01.I1":        "Device 1 (EtherCAT) in 0.0 1",
 		"ECT.A1_03.p_Current": "Device 1 (EtherCAT) in 10.0 16",
-		"ECT.CN01.q_uCMD":    "Device 1 (EtherCAT) out 10.0 16",
-		"ECT.CN01.amsaddr":   "Device 1 (EtherCAT) in 88.0 64",
-		"ECT.Dev1_AmsNetId":  "Device 1 (EtherCAT) in 137.0 48",
-		"ECT.D2_I1":          "Device 2 (EtherCAT) in 25.0 1",
-		"ECT.V1_C1":          "Device 1 (EtherCAT) out 15.0 8",
+		"ECT.CN01.q_uCMD":     "Device 1 (EtherCAT) out 10.0 16",
+		"ECT.CN01.amsaddr":    "Device 1 (EtherCAT) in 88.0 64",
+		"ECT.Dev1_AmsNetId":   "Device 1 (EtherCAT) in 137.0 48",
+		"ECT.D2_I1":           "Device 2 (EtherCAT) in 25.0 1",
+		"ECT.V1_C1":           "Device 1 (EtherCAT) out 15.0 8",
 	}
 	for path, want := range checks {
 		b, ok := byPath[path]
@@ -128,5 +131,20 @@ func TestBindingLessTieBreak(t *testing.T) {
 	b := Binding{Var: LinkedVar{Path: "X", Link: "TIID^b"}}
 	if !bindingLess(a, b) || bindingLess(b, a) {
 		t.Error("tie-break by link failed")
+	}
+}
+
+func TestSortDiagnostics(t *testing.T) {
+	mk := func(file string, line, col int, code string) diag.Diagnostic {
+		return diag.Diagnostic{Pos: source.Pos{File: file, Line: line, Col: col}, Code: code}
+	}
+	ds := []diag.Diagnostic{mk("b.st", 1, 1, "A"), mk("a.st", 2, 5, "B"), mk("a.st", 2, 1, "C"), mk("a.st", 1, 9, "D"), mk("a.st", 2, 1, "E")}
+	SortDiagnostics(ds)
+	var got []string
+	for _, d := range ds {
+		got = append(got, d.Code)
+	}
+	if strings.Join(got, "") != "DCEBA" {
+		t.Errorf("order = %v", got)
 	}
 }
