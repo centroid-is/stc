@@ -937,8 +937,8 @@ func TestWalk_NilNode(t *testing.T) {
 }
 
 type stoppingVisitor struct {
-	count   int
-	stopAt  NodeKind
+	count  int
+	stopAt NodeKind
 }
 
 func (v *stoppingVisitor) Visit(node Node) Visitor {
