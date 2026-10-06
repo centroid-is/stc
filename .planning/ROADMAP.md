@@ -397,7 +397,7 @@ Plans:
 - [x] 20-03-PLAN.md -- Lexer and declaration parsing: typed based literals, enum base type and TYPE default, namespace-qualified types, struct/array initialisers, stray semicolons
 - [x] 20-04-PLAN.md -- Checker resolver: pointer-stable two-pass registration, ten standard FBs with aliases, inherited EXTENDS scope, SEMA037 with fixture audit
 - [x] 20-05-PLAN.md -- Interpreter values: bit read/write, enum numbering/qualified/inline values, TO_STRING, standard FB input aliases
-- [ ] 20-06-PLAN.md -- Checker metadata and calls: enum metadata and inline enums, FUNCTION outputs, bit access SEMA035 (read and write), named-arg binding
+- [x] 20-06-PLAN.md -- Checker metadata and calls: enum metadata and inline enums, FUNCTION outputs, bit access SEMA035 (read and write), named-arg binding
 - [ ] 20-07-PLAN.md -- Interpreter calls and references: shared arg binder, FUNCTIONs in pkg/interp, unqualified methods, THIS^/SUPER^, path-based REF=
 - [ ] 20-09-PLAN.md -- Checker semantics: enum rules SEMA036 and TO_STRING, REF=/THIS/SUPER SEMA038 with reference auto-deref, initialiser checks
 - [ ] 20-08-PLAN.md -- Acceptance gate: ST dialect suites, probe gate without allowances, zero-parse-error oracle, hand-off re-run, validation sign-off
@@ -529,7 +529,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 17. Behavioral Mocks | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 18. Auto-Defines & TcPOU Extractor | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 19. TwinCAT Declaration Syntax | v1.2 | 10/10 | Complete    | 2026-10-06 |
-| 20. TwinCAT Expression Semantics | v1.2 | 5/9 | In Progress|  |
+| 20. TwinCAT Expression Semantics | v1.2 | 6/9 | In Progress|  |
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 0/TBD | Not started | - |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |

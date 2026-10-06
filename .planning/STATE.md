@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
-stopped_at: v1.2 roadmap created
-last_updated: "2026-10-06T02:34:58.004Z"
+stopped_at: Completed 20-06-PLAN.md
+last_updated: "2026-10-06T02:53:33.982Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 15
   total_plans: 57
-  completed_plans: 53
+  completed_plans: 54
   percent: 52
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 20 (TwinCAT Expression Semantics) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-10-06
 
-Progress: [█████████░] 93%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -108,6 +108,10 @@ Recent decisions affecting current work:
 - [Phase 20]: 20-05: runtime constant-index bit access accepts any integer symbol as index; checker SEMA035 must enforce CONSTANT
 - [Phase 20]: 20-05: bit writes keep the target IECType, mask unsigned kinds and sign-extend signed kinds
 - [Phase 20]: 20-05: an enum's zero value is its first declared value typed by its base type
+- [Phase 20]: 20-06: constant bit index needs a VAR_GLOBAL CONSTANT or a VAR CONSTANT with an integer literal initialiser, on an integer or bit-string object
+- [Phase 20]: 20-06: all-positional calls must supply every parameter; once any argument is named, omitted inputs take defaults; positional args bind by slot index (ruling A1)
+- [Phase 20]: 20-06: REFERENCE TO T inputs bind a value of exactly T without widening
+- [Phase 20]: 20-06: POU-scope methods and actions bind before same-named built-ins; global functions still lose to built-ins
 
 ### Pending Todos
 
@@ -121,8 +125,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T02:34:39.941Z
-Stopped at: v1.2 roadmap created
+Last session: 2026-10-06T02:53:33.978Z
+Stopped at: Completed 20-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
