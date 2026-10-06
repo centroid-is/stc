@@ -83,6 +83,16 @@ func TestAttributeTextRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAttributeStringWithBraceReparses(t *testing.T) {
+	// An attribute built in code (e.g. from a TcPOU import) may hold a
+	// closing brace. Its canonical form must still lex as one pragma.
+	a := &ast.Attribute{Name: "x", Value: "a}b; x := 1;", HasValue: true}
+	f := parseClean(t, a.String()+"\nPROGRAM P\nEND_PROGRAM\n")
+	prog := f.Declarations[0].(*ast.ProgramDecl)
+	require.Len(t, prog.Attributes, 1)
+	require.Equal(t, "a)b; x := 1;", prog.Attributes[0].Value)
+}
+
 func TestCollectPragmas(t *testing.T) {
 	src := "{attribute 'a'} {warning disable C0001}\n{attribute 'b' := 'c'} x"
 	p := newTestParser(src)

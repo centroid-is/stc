@@ -17,8 +17,12 @@ type Attribute struct {
 func (n *Attribute) Children() []Node { return nil }
 
 // String renders the attribute in canonical form. Name and value are always
-// single-quoted and every ' is doubled to ”, so the output can never close
-// the quoted string early and inject text into emitted source.
+// single-quoted and every quote character is doubled (two quote characters),
+// so the output cannot close the quoted string early. The lexer ends a
+// pragma at the first closing brace regardless of quotes, so a closing brace
+// in a programmatically built name or value is replaced by a closing
+// parenthesis; otherwise the output would re-parse as a truncated pragma
+// followed by stray tokens. A parsed attribute never contains one.
 func (n *Attribute) String() string {
 	var b strings.Builder
 	b.WriteString("{attribute ")
@@ -31,8 +35,10 @@ func (n *Attribute) String() string {
 	return b.String()
 }
 
+var attrEscaper = strings.NewReplacer("'", "''", "}", ")")
+
 func quoteAttr(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+	return "'" + attrEscaper.Replace(s) + "'"
 }
 
 // HasAttribute reports whether attrs contains an attribute with the given

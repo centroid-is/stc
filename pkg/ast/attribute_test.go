@@ -19,6 +19,8 @@ func TestAttribute_String(t *testing.T) {
 		{"quote in name", Attribute{Name: "it's"}, "{attribute 'it''s'}"},
 		{"empty value kept", Attribute{Name: "x", Value: "", HasValue: true}, "{attribute 'x' := ''}"},
 		{"round trip escaped", Attribute{Name: "x", Value: "it's", HasValue: true}, "{attribute 'x' := 'it''s'}"},
+		{"closing brace in value", Attribute{Name: "x", Value: "a}b", HasValue: true}, "{attribute 'x' := 'a)b'}"},
+		{"closing brace in name", Attribute{Name: "n}"}, "{attribute 'n)'}"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
