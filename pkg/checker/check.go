@@ -297,7 +297,7 @@ func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
 	}
 
 	// Check type compatibility: value must widen to target
-	if !targetType.Equal(valueType) {
+	if !targetType.Equal(valueType) && !untypedAddress(valueType, targetType) {
 		if !types.CanWiden(valueType.Kind(), targetType.Kind()) {
 			pos := astPosToSource(s.Span().Start)
 			c.diags.Errorf(pos, CodeTypeMismatch,
@@ -576,7 +576,8 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 				if !arg.IsOutput && c.untypedStore(arg.Value, paramType, CodeWrongArgType) {
 					continue
 				}
-				if !paramType.Equal(argType) && !types.CanWiden(argType.Kind(), paramType.Kind()) {
+				if !paramType.Equal(argType) && !(!arg.IsOutput && untypedAddress(argType, paramType)) &&
+					!types.CanWiden(argType.Kind(), paramType.Kind()) {
 					pos := astPosToSource(arg.Value.Span().Start)
 					c.diags.Errorf(pos, CodeWrongArgType,
 						"cannot pass %s as %s parameter %q (expected %s)",
