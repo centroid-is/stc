@@ -144,6 +144,9 @@ func (c *Checker) checkInputArg(p types.Parameter, a *ast.CallArg, index int) {
 		c.checkEnumArg(a.Value, argType, derefRef(p.Type), func() { c.reportInputArg(p, a, index, argType) })
 		return
 	}
+	if c.untypedStore(a.Value, p.Type, CodeWrongArgType) {
+		return
+	}
 	if ref, isRef := p.Type.(*types.ReferenceType); isRef {
 		// A REFERENCE TO T input binds a T variable (or another reference
 		// to T) implicitly; no widening applies.
@@ -151,9 +154,6 @@ func (c *Checker) checkInputArg(p types.Parameter, a *ast.CallArg, index int) {
 			return
 		}
 	} else if p.Type.Equal(argType) || types.CanWiden(argType.Kind(), p.Type.Kind()) {
-		return
-	}
-	if isLiteralExpr(a.Value) && isLiteralCompatible(argType.Kind(), p.Type.Kind()) {
 		return
 	}
 	c.reportInputArg(p, a, index, argType)

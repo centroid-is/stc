@@ -377,6 +377,14 @@ func (interp *Interpreter) evalBinary(env *Env, e *ast.BinaryExpr) (Value, error
 
 	op := strings.ToUpper(e.Op.Text)
 
+	// Bitwise AND/OR/XOR on integer (bit-string) operands; the checker
+	// accepts these for BYTE..LWORD.
+	if left.Kind == ValInt && right.Kind == ValInt {
+		if v, ok := bitwise(op, left.Int, right.Int, resultIntKind(e.Left, e.Right, left, right)); ok {
+			return v, nil
+		}
+	}
+
 	// Boolean operators
 	switch op {
 	case "AND":
@@ -1796,4 +1804,25 @@ func (interp *Interpreter) execPropertySetter(inst *FBInstance, prop *ast.Proper
 		}
 	}
 	return nil
+}
+
+// bitwise applies AND, OR or XOR to two integers; ok is false for any other
+// operator. A known result kind wraps and types the result; otherwise the
+// result is an untyped DINT constant.
+func bitwise(op string, l, r int64, kind types.TypeKind) (Value, bool) {
+	var n int64
+	switch op {
+	case "AND":
+		n = l & r
+	case "OR":
+		n = l | r
+	case "XOR":
+		n = l ^ r
+	default:
+		return Value{}, false
+	}
+	if kind == types.KindInvalid {
+		return IntValue(n), true
+	}
+	return Value{Kind: ValInt, Int: wrapInt(n, kind), IECType: kind}, true
 }

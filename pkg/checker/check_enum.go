@@ -134,10 +134,11 @@ func (c *Checker) checkEnumBinary(e *ast.BinaryExpr, op string, left, right type
 }
 
 // enumAssignable decides whether a value of type from may be stored in a
-// variable or parameter of type to, when either is an enum. literal is true
-// when the value is an integer literal. strictViolation is set when the
+// variable or parameter of type to, when either is an enum. value is the
+// stored expression (nil when unknown); an untyped constant value adopts a
+// non-strict enum's base type. strictViolation is set when the
 // conversion fails only because a strict enum is involved (SEMA036).
-func enumAssignable(from, to types.Type, literal bool) (ok bool, strictViolation bool) {
+func enumAssignable(from, to types.Type, value ast.Expr) (ok bool, strictViolation bool) {
 	fe, te := asEnum(from), asEnum(to)
 	if fe != nil && te != nil {
 		if fe.Equal(te) {
@@ -152,7 +153,7 @@ func enumAssignable(from, to types.Type, literal bool) (ok bool, strictViolation
 	if from.Equal(to) || types.CanWiden(from.Kind(), to.Kind()) {
 		return true, false
 	}
-	if literal && isLiteralCompatible(from.Kind(), to.Kind()) {
+	if ok, _ := untypedAssignable(value, to); ok {
 		return true, false
 	}
 	return false, false
@@ -178,8 +179,9 @@ func isConversionBuiltin(name string) bool {
 }
 
 // caseLabelCompatible checks one CASE label value against the selector
-// type, applying the enum rules. It reports at most one diagnostic.
-func (c *Checker) caseLabelCompatible(at ast.Node, selector, label types.Type) {
+// type, applying the enum rules. An untyped constant label adopts the
+// selector type (range-checked). It reports at most one diagnostic.
+func (c *Checker) caseLabelCompatible(at ast.Node, selector types.Type, value ast.Expr, label types.Type) {
 	if selector == types.Invalid || label == types.Invalid {
 		return
 	}
@@ -195,6 +197,9 @@ func (c *Checker) caseLabelCompatible(at ast.Node, selector, label types.Type) {
 	if et := strictOf(selector, label); et != nil {
 		c.diags.Errorf(pos, CodeEnumRule,
 			"case label type %s incompatible with strict enum selector type %s", label, selector)
+		return
+	}
+	if c.untypedStore(value, asBase(selector), CodeTypeMismatch) {
 		return
 	}
 	if _, ok := types.CommonType(asBase(selector).Kind(), asBase(label).Kind()); !ok {
@@ -215,7 +220,7 @@ func (c *Checker) checkEnumAssign(s *ast.AssignStmt, from, to types.Type) {
 // when either is an enum. A strict-enum violation is SEMA036 at value; any
 // other mismatch is reported by mismatch.
 func (c *Checker) checkEnumArg(value ast.Expr, from, to types.Type, mismatch func()) {
-	ok, strict := enumAssignable(from, to, isLiteralExpr(value))
+	ok, strict := enumAssignable(from, to, value)
 	switch {
 	case ok:
 	case strict:

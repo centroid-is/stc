@@ -2,7 +2,6 @@ package checker
 
 import (
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -140,13 +139,8 @@ func TestStdFB(t *testing.T) {
 		data, err := os.ReadFile("../../tests/twincat_probes/action_inside.st")
 		require.NoError(t, err)
 		ds := errorsOf(runAction(t, string(data)))
-		require.Len(t, ds, 1, "only the Phase 22 literal-typing error remains: %v", ds)
-		assert.Equal(t, 13, ds[0].Pos.Line)
-		for _, d := range ds {
-			for _, word := range []string{"TON", "R_TRIG", "\"IN\"", "\"PT\"", "\"CLK\""} {
-				assert.False(t, strings.Contains(d.Message, word), d.Message)
-			}
-		}
+		// The Phase 22 literal-typing error (line 13) is gone too.
+		assert.Empty(t, ds)
 	})
 }
 

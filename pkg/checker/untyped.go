@@ -160,3 +160,46 @@ func intRange(k types.TypeKind) (lo int64, hi uint64) {
 	}
 	return 0, 0
 }
+
+// untypedStore applies the untyped-constant rule to value stored as target.
+// It returns true when value is an untyped constant that either fits target
+// or was reported out of range with code at value; the caller then skips its
+// ordinary type check. Otherwise the caller's rules apply unchanged.
+func (c *Checker) untypedStore(value ast.Expr, target types.Type, code string) bool {
+	ok, msg := untypedAssignable(value, target)
+	if msg != "" {
+		c.diags.Errorf(astPosToSource(value.Span().Start), code, "%s", msg)
+		return true
+	}
+	return ok
+}
+
+// adoptUntyped gives an untyped constant operand the type of the other,
+// typed operand: an untyped integer adopts ANY_INT, BYTE..LWORD and
+// ANY_REAL; an untyped real adopts ANY_REAL. Otherwise (both untyped, an
+// untyped real with a typed integer, or non-numeric types) the operand
+// types are returned unchanged and the default DINT/LREAL rules apply.
+func adoptUntyped(le, re ast.Expr, left, right types.Type) (types.Type, types.Type) {
+	lk, _, _ := untypedConst(le)
+	rk, _, _ := untypedConst(re)
+	switch {
+	case lk != untypedNone && rk == untypedNone && adopts(lk, right.Kind()):
+		return right, right
+	case rk != untypedNone && lk == untypedNone && adopts(rk, left.Kind()):
+		return left, left
+	}
+	return left, right
+}
+
+// adopts reports whether an untyped constant of kind k may take kind t.
+func adopts(k untypedKind, t types.TypeKind) bool {
+	if types.IsAnyReal(t) {
+		return true
+	}
+	return k == untypedInt && isIntOrBitString(t)
+}
+
+// bitString reports whether k is one of BYTE, WORD, DWORD, LWORD.
+func bitString(k types.TypeKind) bool {
+	return types.IsAnyBit(k) && k != types.KindBOOL
+}
