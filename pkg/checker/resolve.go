@@ -55,6 +55,19 @@ type Resolver struct {
 	// of reporting it. Used by the alias fixpoint sweep.
 	probing bool
 	missed  bool
+
+	// std maps an upper-cased standard FB name to its symbol.
+	std map[string]*symbols.Symbol
+	// fbs maps an upper-cased FUNCTION_BLOCK name to the declaration that
+	// owns it, in registration order (fbOrder), for the EXTENDS pass.
+	fbs     map[string]*fbEntry
+	fbOrder []string
+}
+
+type fbEntry struct {
+	decl  *ast.FunctionBlockDecl
+	scope *symbols.Scope
+	typ   *types.FunctionBlockType
 }
 
 // fileGroup is a set of source files that share an IsLibrary flag.
@@ -91,15 +104,23 @@ func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveO
 		{files: opt.MockFiles},
 	}
 
+	// The IEC standard FBs come before any library file, as library
+	// symbols, so stubs and user code can redeclare them.
+	r.registerStdFBs()
+
 	// Pass 0: allocate a type object for every named type so forward
 	// references resolve to the object that is filled later.
 	r.preRegister(groups)
 
+	r.fbs = make(map[string]*fbEntry)
 	for _, g := range groups {
 		for _, file := range g.files {
 			r.collectFileDeclarations(file, g.isLibrary)
 		}
 	}
+
+	// Inherited scope: every FB now has its own members filled in.
+	r.resolveExtends()
 
 	// Second pass: GVLs, now that every TYPE is in the global scope.
 	for _, pg := range r.pendingGVLs {
@@ -363,12 +384,13 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 
 	// Check for redeclaration
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			// Duplicate library symbol -- silently ignore (first library wins)
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			// User code overrides library symbol -- remove library entry
+		if existing.IsLibrary {
+			// User code (or a library stub over a standard FB) overrides
+			// the library symbol -- remove library entry
 			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
@@ -455,12 +477,13 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			// Duplicate library symbol -- silently ignore (first library wins)
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			// User code overrides library symbol -- remove library entry
+		if existing.IsLibrary {
+			// User code (or a library stub over a standard FB) overrides
+			// the library symbol -- remove library entry
 			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
@@ -507,6 +530,96 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 		sym.Type = fbType
 		sym.IsLibrary = isLibrary
 	}
+
+	key := strings.ToUpper(name)
+	if _, seen := r.fbs[key]; !seen {
+		r.fbOrder = append(r.fbOrder, key)
+	}
+	r.fbs[key] = &fbEntry{decl: d, scope: pouScope, typ: fbType}
+}
+
+// resolveExtends gives every FUNCTION_BLOCK with EXTENDS the members of its
+// base chain. The derived POU scope is re-parented onto the base POU scope,
+// so the body, actions and methods of the derived FB see inherited
+// variables, methods and actions through the ordinary scope walk, and
+// usage marks the base symbol itself. Base inputs, outputs and in-outs are
+// prepended to the derived FunctionBlockType in place. A derived variable
+// that redeclares a base variable is a redeclaration error. Cycles are
+// left unlinked, so lookups always terminate.
+func (r *Resolver) resolveExtends() {
+	done := make(map[string]bool)
+	var visit func(key string)
+	visit = func(key string) {
+		if done[key] {
+			return
+		}
+		done[key] = true
+		e := r.fbs[key]
+		if e == nil || e.decl.Extends == nil {
+			return
+		}
+		baseName := e.decl.Extends.Name
+		baseKey := strings.ToUpper(baseName)
+		visit(baseKey) // the base inherits first (no-op on a cycle)
+
+		baseScope := r.table.LookupPOU(baseName)
+		baseSym := r.table.LookupGlobal(baseName)
+		if baseScope == nil || baseSym == nil {
+			return // undeclared base
+		}
+		baseType, ok := baseSym.Type.(*types.FunctionBlockType)
+		if !ok {
+			return
+		}
+		for s := baseScope; s != nil; s = s.Parent {
+			if s == e.scope {
+				return // EXTENDS cycle
+			}
+		}
+
+		own := make(map[string]bool)
+		for _, vb := range e.decl.VarBlocks {
+			for _, vd := range vb.Declarations {
+				for _, n := range vd.Names {
+					own[strings.ToUpper(n.Name)] = true
+					if prev := lookupInPOUChain(baseScope, n.Name); prev != nil && prev.Kind == symbols.KindVariable {
+						pos := astPosToSource(n.Span().Start)
+						r.diags.Errorf(pos, CodeRedeclared,
+							"redeclaration of %q (inherited from %s, declared at %s)", n.Name, baseType.Name, prev.Pos)
+					}
+				}
+			}
+		}
+		e.scope.Parent = baseScope
+		e.typ.Inputs = append(inheritParams(baseType.Inputs, own), e.typ.Inputs...)
+		e.typ.Outputs = append(inheritParams(baseType.Outputs, own), e.typ.Outputs...)
+		e.typ.InOuts = append(inheritParams(baseType.InOuts, own), e.typ.InOuts...)
+	}
+	for _, key := range r.fbOrder {
+		visit(key)
+	}
+}
+
+// lookupInPOUChain looks name up in scope and its POU-scope ancestors,
+// stopping before the global scope.
+func lookupInPOUChain(scope *symbols.Scope, name string) *symbols.Symbol {
+	for s := scope; s != nil && s.Kind == symbols.ScopePOU; s = s.Parent {
+		if sym := s.LookupLocal(name); sym != nil {
+			return sym
+		}
+	}
+	return nil
+}
+
+// inheritParams copies the base parameters the derived FB does not redeclare.
+func inheritParams(base []types.Parameter, own map[string]bool) []types.Parameter {
+	var out []types.Parameter
+	for _, p := range base {
+		if !own[strings.ToUpper(p.Name)] {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
@@ -517,10 +630,10 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
+		if existing.IsLibrary {
 			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
@@ -583,11 +696,11 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			r.table.GlobalScope().Delete(name)
+		if existing.IsLibrary {
+			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
 				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
@@ -670,11 +783,11 @@ func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			r.table.GlobalScope().Delete(name)
+		if existing.IsLibrary {
+			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
 				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
