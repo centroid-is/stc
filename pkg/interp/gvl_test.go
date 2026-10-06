@@ -447,7 +447,7 @@ END_VAR`)
 	types := parser.Parse("T.st", `
 TYPE ST_EcSlaveInfo : STRUCT p_stat_sName : STRING; nAddr : UINT := 1001; END_STRUCT END_TYPE
 TYPE E_Level : (Low := 0, High := EcDiagParam.HIGH_LEVEL) END_TYPE`)
-	for _, r := range []*parser.ParseResult{diag, param, types} {
+	for _, r := range []parser.ParseResult{diag, param, types} {
 		require.Empty(t, r.Diags)
 	}
 	in := New()
