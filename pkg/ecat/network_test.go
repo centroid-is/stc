@@ -211,7 +211,8 @@ func TestRegistryDeviceGetsOwnRegion(t *testing.T) {
 	if d.steps != 1 || d.dt != 5*time.Millisecond {
 		t.Fatalf("steps=%d dt=%v", d.steps, d.dt)
 	}
-	if len(d.out) != 0 || len(d.in) != 1 {
+	// Each 1-bit PDO is byte-aligned, so eight PDOs span eight bytes.
+	if len(d.out) != 0 || len(d.in) != 8 {
 		t.Fatalf("len(out)=%d len(in)=%d", len(d.out), len(d.in))
 	}
 	for ch := 1; ch <= 8; ch++ {
@@ -280,5 +281,17 @@ func TestNetworkSpansEmptyForCoupler(t *testing.T) {
 	n.Step(0)
 	if d == nil || len(d.in) != 0 || len(d.out) != 0 {
 		t.Fatalf("coupler region not empty: %+v", d)
+	}
+}
+
+func TestSlaveSpansSkipsUnlaidEntries(t *testing.T) {
+	m := &Master{Name: "M", index: map[string]int{}}
+	s := &Slave{Name: "S", Pdos: []Pdo{{Name: "P", Entries: []Entry{{Name: "E", Index: "#x6000", BitLen: 8}}}}}
+	in, out := slaveSpans(m, s)
+	if in != (span{}) || out != (span{}) {
+		t.Fatalf("in=%v out=%v", in, out)
+	}
+	if v := view(make([]byte, 2), span{1, 4}); len(v) != 0 {
+		t.Fatalf("out-of-range view len %d", len(v))
 	}
 }
