@@ -12,6 +12,7 @@ import (
 	"github.com/centroid-is/stc/pkg/incremental"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/symtree"
 	"github.com/centroid-is/stc/pkg/vendor"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,7 @@ and vendor compatibility warnings. Exit code 1 if errors found, 0 otherwise.`,
 
 	cmd.Flags().String("vendor", "", "Vendor target for compatibility checking (beckhoff, schneider, portable)")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+	cmd.Flags().Bool("symbols", false, "Print the symbol tree after diagnostics")
 	addGVLNameFlag(cmd)
 
 	return cmd
@@ -122,10 +124,33 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// --symbols: build the static symbol tree (RUNT-01) for printing.
+	var tree *symtree.Tree
+	if withSymbols, _ := cmd.Flags().GetBool("symbols"); withSymbols {
+		var err error
+		if tree, err = symtree.Build(analysisResult); err != nil {
+			fmt.Fprintf(os.Stderr, "error: building symbol tree: %v\n", err)
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			os.Exit(1)
+		}
+	}
+
 	switch format {
 	case "json":
 		// JSON output to stdout
-		out, err := json.MarshalIndent(allDiags, "", "  ")
+		var payload any = allDiags
+		if tree != nil {
+			symJSON, err := tree.JSON()
+			if err != nil {
+				return fmt.Errorf("JSON marshal error: %w", err)
+			}
+			payload = struct {
+				Diagnostics []diag.Diagnostic `json:"diagnostics"`
+				Symbols     json.RawMessage   `json:"symbols"`
+			}{allDiags, symJSON}
+		}
+		out, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
 			return fmt.Errorf("JSON marshal error: %w", err)
 		}
@@ -139,6 +164,9 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		// Print summary to stderr
 		fmt.Fprintf(os.Stderr, "%d error(s), %d warning(s)\n", errorCount, warningCount)
 		fmt.Fprintf(os.Stderr, "(%d/%d files re-parsed)\n", stats.StaleFiles, stats.TotalFiles)
+		if tree != nil {
+			fmt.Fprint(os.Stdout, tree.Text())
+		}
 	}
 
 	// Exit code: 1 if errors, 0 if warnings-only or clean

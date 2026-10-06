@@ -24,6 +24,8 @@ override:
     threshold: 95
   - path: ^pkg/emit$
     threshold: 95
+  - path: ^pkg/symtree$
+    threshold: 95
 
 # Exclude test helpers and generated code from coverage analysis.
 exclude:
