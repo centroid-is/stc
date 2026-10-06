@@ -17,11 +17,31 @@ import (
 // plus the scenario report.
 
 // simScenarioResult is the JSON result of a scenario run: every project
-// status key, then the scenario report.
+// status key (diagnostics then also hold the network, binder and scenario
+// diagnostics, sorted), then the scenario report, the TcLinkTo outputs
+// and the unhealthy EtherCAT slaves.
 type simScenarioResult struct {
 	projectStatus
 	Scenario *scenario.Report `json:"scenario"`
+	// Outputs maps every TcLinkTo output variable path to its value after
+	// the run (encoding/json sorts the keys).
+	Outputs  map[string]any  `json:"outputs"`
+	EtherCAT []ecatSlaveJSON `json:"ethercat"`
 }
+
+// ecatSlaveJSON is one slave that is not in OP, has a bad link or an
+// invalid working counter at the end of the run.
+type ecatSlaveJSON struct {
+	Master string `json:"master"`
+	Slave  int    `json:"slave"`
+	Name   string `json:"name"`
+	State  uint16 `json:"state"`
+	Link   uint8  `json:"link"`
+	WcBad  bool   `json:"wc_bad"`
+}
+
+// ecatStateOP is the EtherCAT OP state code.
+const ecatStateOP = 8
 
 // errScenarioFailed makes stc sim exit 1 after the report is printed.
 var errScenarioFailed = errors.New("scenario failed")
@@ -55,7 +75,10 @@ func runSimScenario(cmd *cobra.Command, r *projectRunner, path string, cycles in
 	if err != nil {
 		return err
 	}
-	res := simScenarioResult{projectStatus: st, Scenario: rep}
+	res := simScenarioResult{projectStatus: st, Scenario: rep, Outputs: map[string]any{}, EtherCAT: []ecatSlaveJSON{}}
+	if err := r.scenarioExtras(&res); err != nil {
+		return err
+	}
 	if err := writeScenarioResult(out, errOut, format, res, gets); err != nil {
 		return err
 	}
@@ -64,9 +87,54 @@ func runSimScenario(cmd *cobra.Command, r *projectRunner, path string, cycles in
 		return fmt.Errorf("simulation error: %w", runErr)
 	case runErr != nil:
 		return fmt.Errorf("%w: %s", errScenarioFailed, runErr)
-	case !rep.Passed:
-		return fmt.Errorf("%w: %d of %d assertion(s) failed", errScenarioFailed, rep.Failed(), len(rep.Assertions))
+	case !rep.Passed || hasErrorDiag(res.Diagnostics):
+		return fmt.Errorf("%w: %d of %d assertion(s) failed, %d error diagnostic(s)", errScenarioFailed,
+			rep.Failed(), len(rep.Assertions), countErrors(res.Diagnostics))
 	}
+	return nil
+}
+
+// scenarioExtras fills the outputs and ethercat sections and merges the
+// network warnings (ECAT010), binder errors (SIM001) and scenario
+// diagnostics into res.Diagnostics, sorted.
+func (r *projectRunner) scenarioExtras(res *simScenarioResult) error {
+	ds := append([]diag.Diagnostic(nil), res.Diagnostics...)
+	ds = append(ds, res.Scenario.Diagnostics...)
+	if b := r.Plant.IOBinder(); b != nil {
+		rt := r.P.Runtime()
+		for _, bd := range b.OutputBindings() {
+			v, err := rt.Get(bd.Var.Path)
+			if err != nil {
+				continue // dropped at resolution; reported as SIM001 below
+			}
+			res.Outputs[bd.Var.Path] = rt.ToJSON(v)
+		}
+		for _, err := range b.Errors() {
+			ds = append(ds, diag.Diagnostic{Severity: diag.Warning, Code: "SIM001", Message: err.Error()})
+		}
+	}
+	if net := r.Plant.Network(); net != nil {
+		ds = append(ds, net.Diagnostics()...)
+		for _, m := range net.Topo.Masters {
+			for i, sl := range m.Slaves {
+				state, link := net.SlaveState(m.Name, i)
+				wc := net.WcBad(m.Name, i)
+				if state == ecatStateOP && link == 0 && !wc {
+					continue
+				}
+				res.EtherCAT = append(res.EtherCAT, ecatSlaveJSON{Master: m.Name, Slave: i, Name: sl.Name, State: state, Link: link, WcBad: wc})
+			}
+		}
+		sort.SliceStable(res.EtherCAT, func(i, j int) bool {
+			a, b := res.EtherCAT[i], res.EtherCAT[j]
+			if a.Master != b.Master {
+				return a.Master < b.Master
+			}
+			return a.Slave < b.Slave
+		})
+	}
+	sortDiags(ds)
+	res.Diagnostics = ds
 	return nil
 }
 
@@ -81,11 +149,35 @@ func writeScenarioResult(out, errOut io.Writer, format string, res simScenarioRe
 		fmt.Fprintln(out, string(b))
 		return nil
 	}
-	if err := writeProjectStatus(out, errOut, format, res.projectStatus, gets); err != nil {
+	// Diagnostics go to the diagnostics section on out, not to errOut.
+	st := res.projectStatus
+	st.Diagnostics = nil
+	if err := writeProjectStatus(out, errOut, format, st, gets); err != nil {
 		return err
 	}
 	fmt.Fprintln(out)
 	res.Scenario.Text(out)
+	paths := make([]string, 0, len(res.Outputs))
+	for p := range res.Outputs {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	fmt.Fprintf(out, "\noutputs (%d):\n", len(paths))
+	for _, p := range paths {
+		b, err := json.Marshal(res.Outputs[p])
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  %s = %s\n", p, b)
+	}
+	fmt.Fprintf(out, "\nethercat (%d not healthy):\n", len(res.EtherCAT))
+	for _, s := range res.EtherCAT {
+		fmt.Fprintf(out, "  %s #%d %s: state %d link %d wc_bad %t\n", s.Master, s.Slave, s.Name, s.State, s.Link, s.WcBad)
+	}
+	fmt.Fprintf(out, "\ndiagnostics (%d):\n", len(res.Diagnostics))
+	for _, d := range res.Diagnostics {
+		fmt.Fprintf(out, "  %s: %s: %s %s\n", d.Pos, d.Severity, d.Code, d.Message)
+	}
 	return nil
 }
 

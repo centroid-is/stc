@@ -69,6 +69,15 @@ type simScenarioJSON struct {
 			Code string `json:"code"`
 		} `json:"diagnostics"`
 	} `json:"scenario"`
+	Outputs  map[string]any `json:"outputs"`
+	EtherCAT []struct {
+		Master string `json:"master"`
+		Slave  int    `json:"slave"`
+		Name   string `json:"name"`
+		State  int    `json:"state"`
+		Link   int    `json:"link"`
+		WcBad  bool   `json:"wc_bad"`
+	} `json:"ethercat"`
 }
 
 func decodeScenarioJSON(t *testing.T, stdout string) simScenarioJSON {
@@ -192,5 +201,120 @@ expect = { path = "ECT_Diag.rSetpoint", value = 2.5 }
 	}
 	if r := decodeScenarioJSON(t, stdout); !r.Scenario.Passed || r.Cycles != 1 {
 		t.Errorf("result = %+v", r)
+	}
+}
+
+func TestSimScenarioReportDeterministic(t *testing.T) {
+	dir, st, io := scenarioProject(t)
+	args := append([]string{"sim", "--format", "json", "--io", io, "--scenario", filepath.Join(dir, "jam.toml")}, st...)
+	out1, stderr, code := runStc(t, args...)
+	if code != 0 {
+		t.Fatalf("exit %d %s", code, stderr)
+	}
+	out2, _, _ := runStc(t, args...)
+	if out1 != out2 {
+		t.Fatal("two identical scenario runs differ")
+	}
+	r := decodeScenarioJSON(t, out1)
+	if _, ok := r.Outputs["ECT.A1_02.O1"]; !ok {
+		t.Errorf("outputs lack ECT.A1_02.O1: %v", r.Outputs)
+	}
+	found := false
+	for i, s := range r.EtherCAT {
+		if i > 0 && r.EtherCAT[i-1].Master == s.Master && r.EtherCAT[i-1].Slave >= s.Slave {
+			t.Errorf("ethercat not sorted: %+v", r.EtherCAT)
+		}
+		if s.Name == "DEMO.A1.01 (EL1008)" {
+			found = true
+			if s.State != 17 || s.Link != 1 {
+				t.Errorf("EL1008 = %+v", s)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("ethercat lacks the pulled EL1008: %+v", r.EtherCAT)
+	}
+}
+
+func TestSimScenarioFailingExpect(t *testing.T) {
+	dir, st, io := scenarioProject(t)
+	writeTestFile(t, filepath.Join(dir, "bad.toml"), `[scenario]
+name = "bad"
+[[step]]
+cycle = 0
+set = { path = "ECT.A1_01.I1", value = true }
+expect = { path = "ECT.A1_02.O1", value = false, within = 2 }
+`)
+	args := append([]string{"sim", "--format", "json", "--io", io, "--scenario", filepath.Join(dir, "bad.toml")}, st...)
+	stdout, stderr, code := runStc(t, args...)
+	if code != 1 || !strings.Contains(stderr, "assertion(s) failed") {
+		t.Fatalf("exit %d %s", code, stderr)
+	}
+	r := decodeScenarioJSON(t, stdout)
+	if len(r.Scenario.Assertions) != 1 {
+		t.Fatalf("assertions = %+v", r.Scenario.Assertions)
+	}
+	a := r.Scenario.Assertions[0]
+	if a.Pass || a.Expected != false || a.Actual != true {
+		t.Errorf("assertion = %+v", a)
+	}
+	hasSCN009 := false
+	for _, d := range r.Diagnostics {
+		hasSCN009 = hasSCN009 || d.Code == "SCN009"
+	}
+	if !hasSCN009 {
+		t.Errorf("top-level diagnostics lack SCN009: %+v", r.Diagnostics)
+	}
+}
+
+func TestSimScenarioUnknownSlave(t *testing.T) {
+	dir, st, io := scenarioProject(t)
+	writeTestFile(t, filepath.Join(dir, "slave.toml"), `[scenario]
+name = "slave"
+[[step]]
+cycle = 3
+trip = { slave = "NOPE.X1", channel = 1 }
+`)
+	args := append([]string{"sim", "--format", "json", "--io", io, "--scenario", filepath.Join(dir, "slave.toml")}, st...)
+	stdout, stderr, code := runStc(t, args...)
+	if code != 1 || !strings.Contains(stderr, "scenario validation failed") {
+		t.Fatalf("exit %d %s", code, stderr)
+	}
+	r := decodeScenarioJSON(t, stdout)
+	if r.SimTimeNS != 0 || r.Cycles != 0 || len(r.Scenario.Diagnostics) != 1 || r.Scenario.Diagnostics[0].Code != "SCN006" {
+		t.Errorf("result = %+v", r)
+	}
+}
+
+func TestSimScenarioTextSections(t *testing.T) {
+	dir, st, io := scenarioProject(t)
+	args := append([]string{"sim", "--io", io, "--scenario", filepath.Join(dir, "jam.toml")}, st...)
+	stdout, stderr, code := runStc(t, args...)
+	if code != 0 {
+		t.Fatalf("exit %d %s", code, stderr)
+	}
+	for _, want := range []string{"outputs (12):", "  ECT.A1_02.O1 = false", "ethercat (2 not healthy):",
+		"Device 1 (EtherCAT) #1 DEMO.A1.01 (EL1008): state 17 link 1", "diagnostics (", "SEMA024"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stderr, "SEMA024") {
+		t.Errorf("diagnostics printed twice (stderr): %s", stderr)
+	}
+}
+
+func TestSimScenarioTickError(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "main.st"), "PROGRAM MAIN\nVAR a : ARRAY[1..2] OF INT; i : INT := 1; END_VAR\ni := i + 1;\na[i] := 1;\nEND_PROGRAM\n")
+	writeTestFile(t, filepath.Join(dir, "gvl.st"), "VAR_GLOBAL\n\tx : INT;\nEND_VAR\n")
+	writeTestFile(t, filepath.Join(dir, "s.toml"), "[scenario]\nname = \"t\"\ncycles = 5\n[[step]]\ncycle = 0\nset = { path = \"gvl.x\", value = 1 }\n")
+	stdout, stderr, code := runStc(t, "sim", "--format", "json", "--scenario", filepath.Join(dir, "s.toml"),
+		filepath.Join(dir, "gvl.st"), filepath.Join(dir, "main.st"))
+	if code != 1 || !strings.Contains(stderr, "simulation error: tick 1") {
+		t.Fatalf("exit %d %s\n%s", code, stderr, stdout)
+	}
+	if r := decodeScenarioJSON(t, stdout); r.Scenario.Cycles != 1 || r.Scenario.Passed {
+		t.Errorf("scenario = %+v", r.Scenario)
 	}
 }
