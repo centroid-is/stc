@@ -171,3 +171,56 @@ func (r *Runtime) Snapshot() any {
 	}
 	return out
 }
+
+// Set writes v to the variable at path, converted to the variable's current
+// type (see coerce for the accepted Go values). It rejects unknown paths,
+// members of CONSTANT blocks, pointers, standard FB outputs, unbound
+// references and values that do not fit. Programs see the value on the
+// next Tick.
+func (r *Runtime) Set(path string, v any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	loc, err := r.resolve(path)
+	if err != nil {
+		return err
+	}
+	if r.consts[loc.head] {
+		return fmt.Errorf("%s is a constant", path)
+	}
+	if err := deref(loc, path); err != nil {
+		return err
+	}
+	switch {
+	case loc.val.Kind == ValPointer:
+		return fmt.Errorf("%s: pointer not writable by path", path)
+	case loc.std != nil:
+		if loc.stdOut {
+			return fmt.Errorf("%s is a read-only output of %s", path, loc.std.TypeName)
+		}
+		nv, err := r.coerce(loc.val, v)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		loc.std.FB.SetInput(loc.stdName, nv)
+		return nil
+	case loc.isBit:
+		b, err := coerceBool(v)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		mask := uint64(1) << uint(loc.bit)
+		bits := uint64(loc.word.Int) &^ mask
+		if b.Bool {
+			bits |= mask
+		}
+		return writeRef(loc.ref, Value{Kind: ValInt, Int: int64(bits), IECType: loc.word.IECType})
+	}
+	nv, err := r.coerce(loc.val, v)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if loc.val.Kind == ValFBInstance {
+		return nil
+	}
+	return writeRef(loc.ref, nv)
+}

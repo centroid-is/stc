@@ -61,7 +61,7 @@ VAR_GLOBAL
 	fb : FB_Count;
 	w : WORD := 16#9;
 	x : FB_Cmd;
-	i : INT; ui : UINT; li : LINT; ul : ULINT; by : BYTE; b : BOOL;
+	i : INT; ui : UINT; li : LINT; ul : ULINT; bt : BYTE; b : BOOL;
 	re : REAL; lr : LREAL; st : E_State; tm : TIME; str : STRING;
 	ia : ARRAY[1..3] OF INT; da : DATE; tod0 : TOD; dtt : DT;
 END_VAR
@@ -376,8 +376,8 @@ func TestRuntimeSet(t *testing.T) {
 	assert.Equal(t, "18446744073709551615", marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.ul"))))
 	setErr("GVL.ul", "18446744073709551616", "out of range for ULINT")
 	set("GVL.li", json.Number("-9223372036854775808"))
-	set("GVL.by", "BYTE#16#FF")
-	assert.Equal(t, int64(255), mustGet(t, rt, "GVL.by").Int)
+	set("GVL.bt", "BYTE#16#FF")
+	assert.Equal(t, int64(255), mustGet(t, rt, "GVL.bt").Int)
 	set("GVL.li", json.Number("1e3"))
 	assert.Equal(t, int64(1000), mustGet(t, rt, "GVL.li").Int)
 
