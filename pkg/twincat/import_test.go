@@ -3,6 +3,7 @@ package twincat
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,5 +152,24 @@ func TestParseModel(t *testing.T) {
 	}
 	if libs[len(libs)-1].Span().Start.File != "stdlib/vendor/beckhoff/tc2_serialcom.st" {
 		t.Errorf("library display path %q", libs[len(libs)-1].Span().Start.File)
+	}
+}
+
+func TestParseForTest(t *testing.T) {
+	m, _, err := Import(demoTsproj, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, stubs, _ := ParseForTest(m, nil)
+	if len(project) != len(m.Sources)+2 || len(stubs) != len(m.LibrarySources)-2 {
+		t.Fatalf("project %d stubs %d", len(project), len(stubs))
+	}
+	if !strings.HasSuffix(project[0].Declarations[0].Span().Start.File, "FB_LibThing.TcPOU") &&
+		!strings.HasSuffix(project[0].Declarations[0].Span().Start.File, "E_LibState.TcDUT") {
+		t.Errorf("first project file is not a sibling library source")
+	}
+	if IsSiblingSource(Source{Library: "X", Path: "/a/m.st"}) || IsSiblingSource(Source{Path: "/a/b.TcPOU"}) ||
+		!IsSiblingSource(Source{Library: "X", Path: "/a/b.TcPOU"}) {
+		t.Error("IsSiblingSource")
 	}
 }

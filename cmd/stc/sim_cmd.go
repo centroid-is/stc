@@ -11,16 +11,22 @@ import (
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/sim"
+	"github.com/centroid-is/stc/pkg/twincat"
 	"github.com/spf13/cobra"
 )
 
 func newSimCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sim [file]",
+		Use:   "sim <file.st|x.tsproj|x.plcproj>",
 		Short: "Run closed-loop simulation of an ST program",
 		Long: `Run a deterministic simulation of a Structured Text program with waveform
 injection and optional plant model feedback. The simulation runs the program's
-scan cycle for a specified number of iterations at a fixed time step.`,
+scan cycle for a specified number of iterations at a fixed time step.
+
+Given a TwinCAT project, the program called by the first task runs (or the
+first PROGRAM when the task calls none) with all project GVLs, and --dt
+defaults to the task cycle time. Programs that instantiate user FBs from other
+files are not supported yet.`,
 		Args: cobra.ExactArgs(1),
 		RunE: runSim,
 	}
@@ -47,26 +53,23 @@ func runSim(cmd *cobra.Command, args []string) error {
 	}
 	defines["STC_SIM"] = true
 
-	// Read and parse the ST file (with preprocessing)
-	content, err := os.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("cannot read file: %w", err)
-	}
-
-	result := pipeline.Parse(filename, string(content), defines)
-
-	// Find the first ProgramDecl and collect the file's GVLs
 	var prog *ast.ProgramDecl
 	var gvls []*ast.GVLDecl
-	for _, d := range result.File.Declarations {
-		switch d := d.(type) {
-		case *ast.ProgramDecl:
-			if prog == nil {
-				prog = d
-			}
-		case *ast.GVLDecl:
-			gvls = append(gvls, d)
+	var taskDt time.Duration
+	if isProjectPath(filename) {
+		p, g, dt, err := loadSimProject(filename, defines)
+		if err != nil {
+			return err
 		}
+		prog, gvls, taskDt = p, g, dt
+	} else {
+		// Read and parse the ST file (with preprocessing)
+		content, err := os.ReadFile(filename)
+		if err != nil {
+			return fmt.Errorf("cannot read file: %w", err)
+		}
+		result := pipeline.Parse(filename, string(content), defines)
+		prog, gvls = selectProgram([]*ast.SourceFile{result.File}, nil)
 	}
 	if prog == nil {
 		return fmt.Errorf("no PROGRAM declaration found in %s", filename)
@@ -78,6 +81,9 @@ func runSim(cmd *cobra.Command, args []string) error {
 	dt, err := time.ParseDuration(dtStr)
 	if err != nil {
 		return fmt.Errorf("invalid --dt value %q: %w", dtStr, err)
+	}
+	if taskDt > 0 && !cmd.Flags().Changed("dt") {
+		dt = taskDt
 	}
 
 	waveStrs, _ := cmd.Flags().GetStringSlice("wave")
@@ -108,6 +114,57 @@ func runSim(cmd *cobra.Command, args []string) error {
 	default:
 		return outputText(simResult)
 	}
+}
+
+// selectProgram returns the PROGRAM named by want (case-insensitive) or,
+// when want names none, the first PROGRAM; and every GVL in files.
+func selectProgram(files []*ast.SourceFile, want []string) (*ast.ProgramDecl, []*ast.GVLDecl) {
+	var first, named *ast.ProgramDecl
+	var gvls []*ast.GVLDecl
+	for _, f := range files {
+		for _, d := range f.Declarations {
+			switch d := d.(type) {
+			case *ast.ProgramDecl:
+				if first == nil {
+					first = d
+				}
+				if named == nil && d.Name != nil && len(want) > 0 && strings.EqualFold(d.Name.Name, want[0]) {
+					named = d
+				}
+			case *ast.GVLDecl:
+				gvls = append(gvls, d)
+			}
+		}
+	}
+	if named != nil {
+		return named, gvls
+	}
+	return first, gvls
+}
+
+// loadSimProject imports a TwinCAT project for simulation and returns the
+// first task's program, all user GVLs and the task cycle time. Error
+// diagnostics abort.
+func loadSimProject(path string, defines map[string]bool) (*ast.ProgramDecl, []*ast.GVLDecl, time.Duration, error) {
+	m, ds, err := twincat.Import(path, twincat.Options{Defines: defines})
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("importing %s: %w", path, err)
+	}
+	user, _, pds := twincat.ParseModel(m, defines)
+	ds = append(ds, pds...)
+	if hasErrors(ds) {
+		for _, d := range ds {
+			fmt.Fprintln(os.Stderr, d.String())
+		}
+		return nil, nil, 0, fmt.Errorf("project %s has errors", path)
+	}
+	var want []string
+	var dt time.Duration
+	if len(m.Tasks) > 0 {
+		want, dt = m.Tasks[0].Programs, m.Tasks[0].CycleTime
+	}
+	prog, gvls := selectProgram(user, want)
+	return prog, gvls, dt, nil
 }
 
 // parseWaveFlags parses --wave flag values into WaveformBinding objects.

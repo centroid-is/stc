@@ -131,3 +131,28 @@ func ParseModel(m *Model, defines map[string]bool) (user, libs []*ast.SourceFile
 	}
 	return user, libs, diags
 }
+
+// IsSiblingSource reports whether a library source came from a sibling
+// TwinCAT project, that is real converted code rather than an embedded
+// Beckhoff stub or a .st file from [build.library_paths].
+func IsSiblingSource(s Source) bool {
+	return s.Library != "" && !strings.HasPrefix(s.Path, stubDisplayDir+"/") &&
+		!strings.EqualFold(filepath.Ext(s.Path), ".st")
+}
+
+// ParseForTest parses the model for `stc test --project`: sibling library
+// sources (real implementations) come first in project, followed by the user
+// sources; embedded stubs and library_paths files go to stubs.
+func ParseForTest(m *Model, defines map[string]bool) (project, stubs []*ast.SourceFile, diags []diag.Diagnostic) {
+	split := &Model{}
+	for _, s := range m.LibrarySources {
+		if IsSiblingSource(s) {
+			split.Sources = append(split.Sources, s)
+		} else {
+			split.LibrarySources = append(split.LibrarySources, s)
+		}
+	}
+	split.Sources = append(split.Sources, m.Sources...)
+	project, stubs, diags = ParseModel(split, defines)
+	return project, stubs, diags
+}

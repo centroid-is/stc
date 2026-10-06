@@ -14,15 +14,15 @@ import (
 const demoTsproj = "../twincat/testdata/sln/Demo/Demo solution.tsproj"
 
 // demoOpts imports the Demo project and returns RunOpts with its user files
-// as ProjectFiles and its library sources as LibraryFiles.
+// and sibling library sources as ProjectFiles and its stubs as LibraryFiles.
 func demoOpts(t *testing.T) RunOpts {
 	t.Helper()
 	m, _, err := twincat.Import(demoTsproj, twincat.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, libs, _ := twincat.ParseModel(m, nil)
-	return RunOpts{ProjectFiles: user, LibraryFiles: libs}
+	project, stubs, _ := twincat.ParseForTest(m, nil)
+	return RunOpts{ProjectFiles: project, LibraryFiles: stubs}
 }
 
 func TestProjectFilesDemo(t *testing.T) {

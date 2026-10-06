@@ -18,6 +18,13 @@ import (
 type RunOpts struct {
 	LibraryFiles []*ast.SourceFile
 	MockFiles    []*ast.SourceFile
+	// ProjectFiles are the user sources of an imported project (stc test
+	// --project). Their FUNCTION_BLOCKs (with bodies, methods and
+	// properties), FUNCTIONs, TYPEs, INTERFACEs and GVLs are merged into
+	// every test file through the same path as the test file's own
+	// declarations, before them, so a test file declaration with the same
+	// name wins. Project FBs are real implementations, never auto-stubs.
+	ProjectFiles []*ast.SourceFile
 	Defines      map[string]bool // Preprocessor defines (e.g., STC_TEST)
 }
 
@@ -105,6 +112,8 @@ type externalContext struct {
 	libraryFBs map[string]*ast.FunctionBlockDecl
 	// mockFBs maps uppercase FB names to declarations with bodies (mocks)
 	mockFBs map[string]*ast.FunctionBlockDecl
+	// projectFiles are merged like test-file declarations (RunOpts.ProjectFiles)
+	projectFiles []*ast.SourceFile
 	// typeDecls maps uppercase TYPE names to their specs, so that structs
 	// and enums declared next to mock/library FBs resolve in tests too
 	typeDecls map[string]ast.TypeSpec
@@ -122,6 +131,8 @@ func buildExternalContext(opts RunOpts) *externalContext {
 		typeDecls:  make(map[string]ast.TypeSpec),
 		typeAttrs:  make(map[string][]*ast.Attribute),
 		funcDecls:  make(map[string]*ast.FunctionDecl),
+
+		projectFiles: opts.ProjectFiles,
 	}
 
 	for _, f := range opts.LibraryFiles {
@@ -174,6 +185,56 @@ type fileContext struct {
 	gvlDecls []*ast.GVLDecl
 }
 
+// collect records TYPE, FUNCTION_BLOCK, FUNCTION, INTERFACE and GVL
+// declarations, replacing same-named earlier entries, and returns the
+// TEST_CASEs in source order.
+func (ctx *fileContext) collect(decls []ast.Declaration) []*ast.TestCaseDecl {
+	var testCases []*ast.TestCaseDecl
+	for _, decl := range decls {
+		switch d := decl.(type) {
+		case *ast.TestCaseDecl:
+			testCases = append(testCases, d)
+		case *ast.TypeDecl:
+			if d.Name != nil {
+				ctx.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
+				ctx.typeAttrs[strings.ToUpper(d.Name.Name)] = d.Attributes
+			}
+		case *ast.FunctionBlockDecl:
+			if d.Name != nil {
+				ctx.fbDecls[strings.ToUpper(d.Name.Name)] = d
+			}
+		case *ast.FunctionDecl:
+			if d.Name != nil {
+				ctx.funcDecls[strings.ToUpper(d.Name.Name)] = d
+			}
+		case *ast.InterfaceDecl:
+			if d.Name != nil {
+				ctx.ifaceDecls[strings.ToUpper(d.Name.Name)] = d
+			}
+		case *ast.GVLDecl:
+			ctx.gvlDecls = append(ctx.gvlDecls, d)
+		}
+	}
+	return testCases
+}
+
+// withoutGVLs returns the GVLs in base whose names do not appear in override.
+func withoutGVLs(base, override []*ast.GVLDecl) []*ast.GVLDecl {
+	names := map[string]bool{}
+	for _, g := range override {
+		if g.Name != nil {
+			names[strings.ToUpper(g.Name.Name)] = true
+		}
+	}
+	var out []*ast.GVLDecl
+	for _, g := range base {
+		if g.Name == nil || !names[strings.ToUpper(g.Name.Name)] {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
 // runFile parses a single .st file and executes all TEST_CASE blocks.
 // Kept for backward compatibility -- delegates to runFileWithOpts with no external context.
 func runFile(filePath, baseDir string) (*SuiteResult, error) {
@@ -203,32 +264,18 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 		ifaceDecls: make(map[string]*ast.InterfaceDecl),
 	}
 
-	var testCases []*ast.TestCaseDecl
-	for _, decl := range parseResult.File.Declarations {
-		switch d := decl.(type) {
-		case *ast.TestCaseDecl:
-			testCases = append(testCases, d)
-		case *ast.TypeDecl:
-			if d.Name != nil {
-				ctx.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
-				ctx.typeAttrs[strings.ToUpper(d.Name.Name)] = d.Attributes
-			}
-		case *ast.FunctionBlockDecl:
-			if d.Name != nil {
-				ctx.fbDecls[strings.ToUpper(d.Name.Name)] = d
-			}
-		case *ast.FunctionDecl:
-			if d.Name != nil {
-				ctx.funcDecls[strings.ToUpper(d.Name.Name)] = d
-			}
-		case *ast.InterfaceDecl:
-			if d.Name != nil {
-				ctx.ifaceDecls[strings.ToUpper(d.Name.Name)] = d
-			}
-		case *ast.GVLDecl:
-			ctx.gvlDecls = append(ctx.gvlDecls, d)
+	// Project declarations first, then the test file's own, so the test
+	// file overrides by name (GVLs: a test-file GVL replaces a project GVL
+	// of the same name).
+	if extCtx != nil {
+		for _, f := range extCtx.projectFiles {
+			ctx.collect(f.Declarations)
 		}
 	}
+	projectGVLs := ctx.gvlDecls
+	ctx.gvlDecls = nil
+	testCases := ctx.collect(parseResult.File.Declarations)
+	ctx.gvlDecls = append(withoutGVLs(projectGVLs, ctx.gvlDecls), ctx.gvlDecls...)
 
 	// Merge external context: mock FBs override library stubs, which fill gaps
 	autoStubbed := make(map[string]bool)

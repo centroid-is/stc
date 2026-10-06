@@ -127,7 +127,7 @@ func TestSimProjectTaskProgram(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d %s", code, stderr)
 	}
-	if !strings.Contains(stdout, "whichSecond") || strings.Contains(stdout, "whichFirst") {
+	if !strings.Contains(stdout, "WHICHSECOND") || strings.Contains(stdout, "WHICHFIRST") {
 		t.Errorf("task program not selected:\n%s", stdout)
 	}
 	var r simJSON
@@ -139,7 +139,7 @@ func TestSimProjectTaskProgram(t *testing.T) {
 	// A PouCall naming no PROGRAM falls back to the first PROGRAM.
 	p = writeTwoProgramProject(t, "Missing")
 	stdout, _, code = runStc(t, "sim", p, "--cycles", "1", "--format", "json")
-	if code != 0 || !strings.Contains(stdout, "whichFirst") {
+	if code != 0 || !strings.Contains(stdout, "WHICHFIRST") {
 		t.Errorf("fallback: exit %d %s", code, stdout)
 	}
 }
