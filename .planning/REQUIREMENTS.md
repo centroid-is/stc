@@ -32,11 +32,11 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 - [x] **RUNT-01**: After analysis a symbol tree exists for every GVL, PROGRAM, FB instance, struct member and array element with IEC type, layout, enum strings and attributes, addressable by dotted path (`GVL.fb[2].HMI.p_stat_State`)
 - [x] **RUNT-02**: The live interpreter supports `Get(path)` / `Set(path, value)` by dotted path with type coercion, usable from Go, tests, MCP and servers
-- [ ] **RUNT-03**: All GVLs are instantiated once and PROGRAMs run per task with the configured cycle time; `Tick()` stepping stays deterministic and a free-running mode paces the scan against wall-clock for interactive use
+- [x] **RUNT-03**: All GVLs are instantiated once and PROGRAMs run per task with the configured cycle time; `Tick()` stepping stays deterministic and a free-running mode paces the scan against wall-clock for interactive use
 - [ ] **RUNT-04**: `PERSISTENT`/`RETAIN` variables load from and save to a state file so `p_cfg_*` values survive restarts
 - [x] **RUNT-05**: Integer arithmetic wraps per declared type (INT 32767+1 = -32768, UINT 0-1 = 65535) and untyped literals adopt the context type so `a := a + 1` checks for INT
 - [x] **RUNT-06**: Array, struct and struct-array initialisers (`:= [(a := 1, s := 'x'), ...]`) with constant-expression bounds are applied at instantiation
-- [ ] **RUNT-07**: AT-bound variables read and write by declared type (sign-extended INT, REAL, enums, structs with `AT %I*` members) rather than by address width
+- [x] **RUNT-07**: AT-bound variables read and write by declared type (sign-extended INT, REAL, enums, structs with `AT %I*` members) rather than by address width
 - [x] **RUNT-08**: `stc check` knows the standard FBs (TON, TOF, TP, CTU, CTD, CTUD, R_TRIG, F_TRIG, SR, RS) and rejects unknown type names instead of treating them as empty FBs
 - [ ] **RUNT-09**: `stc sim` and `stc serve` can run PROGRAMs that use user-defined FBs, functions, methods and actions from the imported project
 
@@ -127,11 +127,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IMPT-05 | Phase 21 | Complete |
 | RUNT-01 | Phase 22 | Complete |
 | RUNT-02 | Phase 22 | Complete |
-| RUNT-03 | Phase 23 | Pending |
+| RUNT-03 | Phase 23 | Complete |
 | RUNT-04 | Phase 23 | Pending |
 | RUNT-05 | Phase 22 | Complete |
 | RUNT-06 | Phase 22 | Complete |
-| RUNT-07 | Phase 23 | Pending |
+| RUNT-07 | Phase 23 | Complete |
 | RUNT-08 | Phase 20 | Complete |
 | RUNT-09 | Phase 23 | Pending |
 | ECAT-01 | Phase 24 | Complete |

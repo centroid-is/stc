@@ -446,7 +446,7 @@ Plans:
 
 Plans:
 - [x] 23-01-PLAN.md -- LoadProject (ProjectSpec, per-task engines over Phase 22 Runtime), deterministic priority Tick, shared CLI project loader
-- [ ] 23-02-PLAN.md -- shared declared-type AT codec (IOBinder + scan.go), wildcard slots, free-running Run with monotonic pacing
+- [x] 23-02-PLAN.md -- shared declared-type AT codec (IOBinder + scan.go), wildcard slots, free-running Run with monotonic pacing
 - [ ] 23-03-PLAN.md -- PERSISTENT/RETAIN JSON state file, `stc sim` project mode (--project/--io/--realtime/--persist), `stc serve` skeleton
 - [ ] 23-04-PLAN.md -- fixture SC1-4 gate + env-gated ST301 1000-cycle run, VALIDATION, docs, coverage gate
 
@@ -558,7 +558,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 20. TwinCAT Expression Semantics | v1.2 | 9/9 | Complete    | 2026-10-06 |
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 6/6 | Complete    | 2026-10-06 |
 | 22. Symbol Tree & Value Semantics | v1.2 | 5/5 | Complete    | 2026-10-06 |
-| 23. Project Execution Runtime | v1.2 | 1/4 | In Progress|  |
+| 23. Project Execution Runtime | v1.2 | 2/4 | In Progress|  |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
