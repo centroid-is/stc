@@ -27,6 +27,7 @@ const bitECT = "VAR_GLOBAL\n\tdev : ST_Dev;\nEND_VAR\n"
 const bitGVL = `VAR_GLOBAL CONSTANT
 	cG : INT := 4;
 	wc : WORD := 16#FF;
+	cR : REAL := 1.5;
 END_VAR
 VAR_GLOBAL
 	gw : WORD;
@@ -176,6 +177,16 @@ gw.0 := TRUE;`)
 		errs := runBits(t, "b := w.nonConst;")
 		got := requireCodes(t, errs, CodeNoMember, 1)
 		assert.Contains(t, got[0].Message, "does not support member access")
+		// A REAL constant is not a bit index.
+		errs = runBits(t, "b := w.cR;")
+		requireCodes(t, errs, CodeNoMember, 1)
+	})
+
+	t.Run("constant index lookup without a member or scope", func(t *testing.T) {
+		c := NewChecker(symbols.NewTable(), diag.NewCollector())
+		assert.Nil(t, c.constIndexSymbol(&ast.Ident{Name: "x"}))
+		c.currentScope = c.table.GlobalScope()
+		assert.Nil(t, c.constIndexSymbol(nil))
 	})
 
 	t.Run("struct member with a constant's name keeps its meaning", func(t *testing.T) {

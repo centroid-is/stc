@@ -120,3 +120,14 @@ func TestEnumOrdinals_EdgeInputs(t *testing.T) {
 	got := EnumOrdinals(&EnumType{Values: []*EnumValue{{}, nil}})
 	assert.Equal(t, []EnumOrdinal{{"", 0, true}}, got)
 }
+
+func TestIntLiteralValue(t *testing.T) {
+	v, ok := IntLiteralValue(&Literal{LitKind: LitInt, Value: "16#FF"})
+	assert.True(t, ok)
+	assert.Equal(t, int64(255), v)
+	v, ok = IntLiteralValue(ordNeg(&Literal{LitKind: LitInt, Value: "3"}))
+	assert.True(t, ok)
+	assert.Equal(t, int64(-3), v)
+	_, ok = IntLiteralValue(&Literal{LitKind: LitReal, Value: "1.5"})
+	assert.False(t, ok)
+}

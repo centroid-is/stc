@@ -192,4 +192,18 @@ END_FUNCTION
 		assert.Empty(t, diagsWithCode(ds, CodeUndeclared))
 		assert.Empty(t, errorsOf(ds))
 	})
+
+	t.Run("inline enum skips nil and unnamed values", func(t *testing.T) {
+		// Error recovery may leave holes in a value list; build them here.
+		files := parseGVLFiles(t, []gvlFile{{"main.st", "PROGRAM P\nVAR\n\te : (A, B);\nEND_VAR\nEND_PROGRAM\n"}})
+		spec := files[0].Declarations[0].(*ast.ProgramDecl).VarBlocks[0].Declarations[0].Type.(*ast.EnumType)
+		spec.Values = append(spec.Values, nil, &ast.EnumValue{})
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations(files)
+		assert.Empty(t, diags.All())
+		et := table.LookupPOU("P").LookupLocal("e").Type.(*types.EnumType)
+		assert.Equal(t, []string{"A", "B", ""}, et.Values)
+		assert.Equal(t, []int64{0, 1, 2}, et.Ordinals)
+	})
 }

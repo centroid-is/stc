@@ -415,7 +415,7 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 	if fnType, ok := calleeType.(*types.FunctionType); ok {
 		// A FUNCTION, METHOD or ACTION called as a statement with formal
 		// arguments: M(a := x);
-		c.checkFuncCallStmtArgs(fnType, s.Args)
+		c.checkFuncCallStmtArgs(s, fnType)
 		return
 	}
 
@@ -446,7 +446,8 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 				}
 			}
 		} else {
-			for _, in := range fbType.Inputs {
+			// name := value binds a VAR_INPUT or a VAR_IN_OUT.
+			for _, in := range append(fbType.Inputs[:len(fbType.Inputs):len(fbType.Inputs)], fbType.InOuts...) {
 				if strings.ToUpper(in.Name) == argName {
 					paramType = in.Type
 					found = true
@@ -484,28 +485,9 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 }
 
 // checkFuncCallStmtArgs checks the formal arguments of a function-like call
-// statement. Input names must be parameters of fnType; output bindings (=>)
-// are not validated because a FunctionType does not list outputs. Every
-// argument value is checked so its variables count as used.
-func (c *Checker) checkFuncCallStmtArgs(fnType *types.FunctionType, args []*ast.CallArg) {
-	for _, arg := range args {
-		if arg.Name != nil && !arg.IsOutput && !hasParam(fnType.Params, arg.Name.Name) {
-			c.diags.Errorf(astPosToSource(arg.Name.Span().Start), CodeNoMember,
-				"%s has no input parameter %q", fnType.Name, arg.Name.Name)
-		}
-		if arg.Value != nil {
-			c.checkExpr(arg.Value)
-		}
-	}
-}
-
-func hasParam(params []types.Parameter, name string) bool {
-	for _, p := range params {
-		if strings.EqualFold(p.Name, name) {
-			return true
-		}
-	}
-	return false
+// statement (F(a := 1);) with the same binding rules as a call expression.
+func (c *Checker) checkFuncCallStmtArgs(s *ast.CallStmt, fnType *types.FunctionType) {
+	c.bindCallArgs(s, fnType, s.Args)
 }
 
 // checkExpr type-checks an expression and returns its resolved type.
@@ -725,10 +707,23 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 	// Resolve callee
 	calleeName := exprName(e.Callee)
 	if calleeName == "" {
-		// Member callees (inst.A1(), GVL.fb()) are accepted unchecked;
-		// the instance they are called on still counts as used.
+		// Member callees (inst.M(), THIS^.M(), GVL.fb()) are accepted
+		// unchecked, arguments included (research Pitfall 11): the callee
+		// type of a member call is not resolved yet. The instance they are
+		// called on still counts as used.
 		c.markRootUsed(e.Callee)
 		return types.Invalid
+	}
+
+	// A METHOD or ACTION of the current POU (own or inherited) binds
+	// before a built-in function of the same name.
+	if c.currentScope != nil {
+		if sym := lookupInPOUChain(c.currentScope, calleeName); sym != nil {
+			if fnType, ok := sym.Type.(*types.FunctionType); ok {
+				sym.MarkUsed()
+				return c.checkUserFuncCall(e, fnType)
+			}
+		}
 	}
 
 	// Check built-in functions first
@@ -786,33 +781,12 @@ func (c *Checker) checkBuiltinCall(e *ast.CallExpr, fnType *types.FunctionType) 
 	return retType
 }
 
+// checkUserFuncCall checks a call of a user FUNCTION, METHOD or ACTION and
+// returns its return type.
 func (c *Checker) checkUserFuncCall(e *ast.CallExpr, fnType *types.FunctionType) types.Type {
-	// Validate argument count
-	if len(e.Args) != len(fnType.Params) {
-		pos := astPosToSource(e.Span().Start)
-		c.diags.Errorf(pos, CodeWrongArgCount,
-			"%s expects %d argument(s), got %d",
-			fnType.Name, len(fnType.Params), len(e.Args))
+	if !c.checkCallArgs(e, fnType) {
 		return types.Invalid
 	}
-
-	// Type-check arguments
-	for i, arg := range e.Args {
-		argType := c.checkExpr(arg)
-		if argType == types.Invalid || i >= len(fnType.Params) {
-			continue
-		}
-		paramType := fnType.Params[i].Type
-		if paramType != nil && !paramType.Equal(argType) {
-			if !types.CanWiden(argType.Kind(), paramType.Kind()) {
-				pos := astPosToSource(arg.Span().Start)
-				c.diags.Errorf(pos, CodeWrongArgType,
-					"argument %d: cannot pass %s as %s",
-					i+1, argType, paramType)
-			}
-		}
-	}
-
 	return fnType.ReturnType
 }
 

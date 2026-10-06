@@ -286,7 +286,7 @@ END_PROGRAM
 VAR_IN_OUT
 	parameter : INT;
 END_VAR
-parameter := parameter + 1;
+parameter := -parameter;
 END_FUNCTION_BLOCK
 
 PROGRAM P
@@ -303,5 +303,56 @@ END_PROGRAM
 		errs := errorsOf(ds)
 		got := requireCodes(t, errs, CodeWrongArgType, 1)
 		assert.Contains(t, got[0].Message, `"parameter"`)
+	})
+
+	t.Run("empty named input and invalid values add no type errors", func(t *testing.T) {
+		assert.Empty(t, runNamed(t, "n := F_X(a := , b := 1);"))
+		errs := runNamed(t, "n := F_X(a := nope);")
+		requireCodes(t, errs, CodeUndeclared, 1)
+		src := "FUNCTION F_U : INT\nVAR_INPUT\n\tu : T_Missing;\nEND_VAR\nF_U := 0;\nEND_FUNCTION\n"
+		ds, _ := runGVL(t, []gvlFile{{"f.st", src}, {"main.st", "PROGRAM P\nVAR\n\tn : INT;\nEND_VAR\nn := F_U(u := 1);\nEND_PROGRAM\n"}})
+		requireCodes(t, errorsOf(ds), CodeUndeclaredType, 1)
+	})
+
+	t.Run("REFERENCE TO input binds a value of the referenced type", func(t *testing.T) {
+		src := `FUNCTION_BLOCK FB
+VAR
+	fetches : ARRAY[1..10] OF UINT;
+	short : ARRAY[1..5] OF UINT;
+	rr : REFERENCE TO ARRAY[1..10] OF UINT;
+	u : UINT;
+	small : USINT;
+	ru : REFERENCE TO UINT;
+	n : UINT;
+END_VAR
+n := find_order(prio := fetches);
+n := find_order(prio := rr);
+n := find_order(fetches);
+n := take(r := u);
+n := take(r := ru);
+n := find_order(prio := short);
+n := take(r := small);
+
+METHOD find_order : UINT
+VAR_INPUT
+	prio : REFERENCE TO ARRAY[1..10] OF UINT;
+END_VAR
+find_order := prio[1];
+END_METHOD
+
+METHOD take : UINT
+VAR_INPUT
+	r : REFERENCE TO UINT;
+END_VAR
+take := r;
+END_METHOD
+END_FUNCTION_BLOCK
+`
+		ds, _ := runGVL(t, []gvlFile{{"main.st", src}})
+		errs := errorsOf(ds)
+		got := diagsWithCode(errs, CodeWrongArgType)
+		require.Len(t, got, 2, "%v", errs)
+		assert.Contains(t, got[0].Message, "expected REFERENCE TO ARRAY")
+		assert.Contains(t, got[1].Message, "expected REFERENCE TO UINT")
 	})
 }
