@@ -144,6 +144,14 @@ func TestNamedArgsExpr(t *testing.T) {
 		require.Len(t, call.NamedArgs, 1)
 	})
 
+	t.Run("named call inside multi-index at statement head", func(t *testing.T) {
+		as := bodyOf(t, "a[f(x := 1), 2] := 3;")[0].(*ast.AssignStmt)
+		idx := as.Target.(*ast.IndexExpr)
+		require.Len(t, idx.Indices, 2)
+		_, ok := idx.Indices[0].(*ast.CallExpr)
+		require.True(t, ok)
+	})
+
 	t.Run("named call inside call args at statement head", func(t *testing.T) {
 		as := bodyOf(t, "g(f(x := 1));")[0].(*ast.AssignStmt)
 		outer := as.Target.(*ast.CallExpr)

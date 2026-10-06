@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/lexer"
 	"github.com/stretchr/testify/require"
 )
 
@@ -131,4 +132,31 @@ func TestBitAccess(t *testing.T) {
 		r := Parse("prog.st", readProbe(t, "prog.st"))
 		require.Empty(t, r.Diags, "unexpected diagnostics: %v", r.Diags)
 	})
+}
+
+func TestSplitBitPair(t *testing.T) {
+	for _, tc := range []struct {
+		in     string
+		lo, hi string
+		ok     bool
+	}{
+		{"3.1", "3", "1", true},
+		{"12.07", "12", "07", true},
+		{"3.", "", "", false},
+		{".5", "", "", false},
+		{"35", "", "", false},
+		{"3.1e5", "", "", false},
+		{"3_0.1", "", "", false},
+	} {
+		lo, hi, ok := splitBitPair(tc.in)
+		require.Equal(t, tc.ok, ok, tc.in)
+		require.Equal(t, tc.lo, lo, tc.in)
+		require.Equal(t, tc.hi, hi, tc.in)
+	}
+}
+
+func TestKindAtPastEnd(t *testing.T) {
+	p := &Parser{}
+	require.Equal(t, lexer.EOF, p.kindAt(0))
+	require.Equal(t, lexer.EOF, p.kindAt(3))
 }
