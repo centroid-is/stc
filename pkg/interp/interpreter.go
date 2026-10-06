@@ -140,6 +140,8 @@ func (interp *Interpreter) evalExpr(env *Env, expr ast.Expr) (Value, error) {
 		return interp.evalMemberAccess(env, e)
 	case *ast.DerefExpr:
 		return interp.evalDeref(env, e)
+	case *ast.BitAccessExpr:
+		return interp.evalBitAccess(env, e)
 	case *ast.ErrorNode:
 		return Value{}, &RuntimeError{Msg: "cannot evaluate error node"}
 	default:
@@ -670,6 +672,8 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 		return interp.execAssignMember(env, target, val)
 	case *ast.DerefExpr:
 		return interp.execAssignDeref(env, target, val)
+	case *ast.BitAccessExpr:
+		return interp.assignBit(env, target, val)
 	default:
 		return &RuntimeError{Msg: fmt.Sprintf("unsupported assignment target: %T", targetExpr)}
 	}
@@ -680,7 +684,7 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 // to: a literal or a computed expression has not, and is skipped silently.
 func isAssignable(e ast.Expr) bool {
 	switch e.(type) {
-	case *ast.Ident, *ast.IndexExpr, *ast.MemberAccessExpr, *ast.DerefExpr:
+	case *ast.Ident, *ast.IndexExpr, *ast.MemberAccessExpr, *ast.DerefExpr, *ast.BitAccessExpr:
 		return true
 	default:
 		return false
@@ -1111,6 +1115,12 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 			}
 		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("struct has no member '%s'", memberName)}
+	case ValInt:
+		// w.cBit with a constant integer cBit is a bit read (ruling A3).
+		if n, ok := constBitIndex(env, e); ok {
+			return readBit(obj, n, e.Span().Start)
+		}
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot access member '%s' on %s", memberName, obj.Kind)}
 	default:
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot access member '%s' on %s", memberName, obj.Kind)}
 	}
@@ -1151,6 +1161,14 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 			return nil
 		}
 		return &RuntimeError{Msg: fmt.Sprintf("struct has no member '%s'", memberName)}
+	case ValInt:
+		// w.cBit := v with a constant integer cBit is a bit write (ruling
+		// A3). obj is the current value of target.Object, so the object
+		// expression is evaluated only once.
+		if n, ok := constBitIndex(env, target); ok {
+			return interp.assignBitAt(env, target.Object, obj, n, val)
+		}
+		return &RuntimeError{Msg: fmt.Sprintf("cannot assign member '%s' on %s", memberName, obj.Kind)}
 	default:
 		return &RuntimeError{Msg: fmt.Sprintf("cannot assign member '%s' on %s", memberName, obj.Kind)}
 	}
