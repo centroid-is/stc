@@ -17,6 +17,7 @@ import (
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
 	"github.com/centroid-is/stc/pkg/twincat"
+	"github.com/centroid-is/stc/pkg/vendor"
 )
 
 // loadProjectSpec turns the inputs of `stc sim` and `stc serve` into an
@@ -130,15 +131,22 @@ func loadSTSpec(paths []string, defines map[string]bool) (interp.ProjectSpec, an
 		files = append(files, res.File)
 	}
 	var cfg *project.Config
+	var libs []*ast.SourceFile
 	if cp, err := project.FindConfig(filepath.Dir(paths[0])); err == nil {
 		cfg, _ = project.LoadConfig(cp)
+		if cfg != nil {
+			// stc.toml [build.library_paths] stubs, as stc test loads them.
+			if libs, err = vendor.LoadLibraries(cfg, filepath.Dir(cp)); err != nil {
+				return interp.ProjectSpec{}, analyzer.AnalysisResult{}, ds, fmt.Errorf("loading libraries: %w", err)
+			}
+		}
 	}
-	res := analyzer.Analyze(files, cfg)
+	res := analyzer.Analyze(files, cfg, analyzer.AnalyzeOpts{LibraryFiles: libs})
 	ds = append(ds, runTolerant(res.Diags)...)
 	if err := firstError(ds); err != nil {
 		return interp.ProjectSpec{}, res, ds, err
 	}
-	return interp.ProjectSpec{Files: files}, res, ds, nil
+	return interp.ProjectSpec{Files: files, LibraryFiles: libs}, res, ds, nil
 }
 
 // runTolerant downgrades the analysis errors the runtime tolerates to

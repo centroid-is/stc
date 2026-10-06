@@ -119,8 +119,14 @@ func TestFaultAPI(t *testing.T) {
 	if err := n.SetSlaveState(dev1, 1, 0x0002); err != nil {
 		t.Fatal(err)
 	}
+	if n.WcBad(dev1, 1) {
+		t.Error("WcBad before SetWcState")
+	}
 	if err := n.SetWcState(dev1, 1, true); err != nil {
 		t.Fatal(err)
+	}
+	if !n.WcBad(dev1, 1) || n.WcBad("nope", 0) {
+		t.Error("WcBad after SetWcState")
 	}
 	if err := n.SetDevState(dev1, 0x0001); err != nil {
 		t.Fatal(err)

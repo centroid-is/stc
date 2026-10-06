@@ -310,6 +310,12 @@ func (n *Network) SetWcState(master string, slave int, bad bool) error {
 	return nil
 }
 
+// WcBad reports whether a slave's working counter is marked invalid
+// (false for unknown slaves).
+func (n *Network) WcBad(master string, slave int) bool {
+	return n.wcBad[slaveRef{master, slave}]
+}
+
 // SetDevState overrides the master's DevState flags until ClearFaults.
 func (n *Network) SetDevState(master string, bits uint16) error {
 	if _, err := n.master(master); err != nil {
