@@ -297,3 +297,117 @@ func TestEcCrcMocks(t *testing.T) {
 	assert.Zero(t, envVal(t, r.e, "wkc").Int)
 	r.done("gc", adsErrPortNotFound)
 }
+
+// sdoSrc follows FB_Parameter: read a parameter into a UINT, write one back.
+const sdoSrc = `
+PROGRAM P
+VAR_INPUT
+	gor, gow, gos, gon : BOOL;
+	net  : STRING;
+	addr : UINT;
+	idx  : WORD;
+	sub  : BYTE;
+	cb   : UDINT;
+	tmo  : TIME;
+	wval : UINT;
+END_VAR
+VAR
+	rd   : FB_EcCoESDoRead;
+	wr   : FB_EcCoESDoWrite;
+	sv   : FB_EcCoESdoWrite;
+	rdn  : FB_EcCoESdoRead;
+	wrn  : FB_EcCoESdoWrite;
+	cur  : UINT := 16#BEEF;
+	par  : UINT;
+	save : UDINT := 16#65766173;
+	rbusy, rerr : BOOL;
+	rid, nread : UDINT;
+END_VAR
+par := wval;
+rd(sNetId := net, nSlaveAddr := addr, nIndex := idx, nSubIndex := sub,
+	pDstBuf := ADR(cur), cbBufLen := cb, bExecute := gor);
+rbusy := rd.bBusy; rerr := rd.bError; rid := rd.nErrId; nread := rd.cbRead;
+wr(sNetId := net, nSlaveAddr := addr, nIndex := idx, nSubIndex := sub,
+	pSrcBuf := ADR(par), cbBufLen := cb, bExecute := gow);
+sv(sNetId := net, nSlaveAddr := addr, nIndex := 16#2032, nSubIndex := 1,
+	pSrcBuf := ADR(save), cbBufLen := 4, bExecute := gos);
+rdn(sNetId := net, nSlaveAddr := addr, nIndex := idx, nSubIndex := sub, cbBufLen := cb, bExecute := gon);
+wrn(sNetId := net, nSlaveAddr := addr, nIndex := idx, nSubIndex := sub, cbBufLen := cb, bExecute := gon);
+END_PROGRAM
+`
+
+func newSdoRig(t *testing.T) *ecRig {
+	r := newEcRig(t, sdoSrc)
+	r.set("net", StringValue(ecNet3))
+	r.set("addr", ecUint(1001))
+	r.set("idx", ecWord(0x2001))
+	r.set("sub", ecByte(5))
+	r.set("cb", ecUdint(2))
+	return r
+}
+
+func TestCoESDoWriteReadBack(t *testing.T) {
+	r := newSdoRig(t)
+	r.set("wval", ecUint(600))
+	r.pulseOn("gow", 1)
+	assert.True(t, r.out("wr", "bBusy").Bool, "scan 1")
+	tick(t, r.e, 1)
+	assert.True(t, r.out("wr", "bBusy").Bool, "scan 2")
+	tick(t, r.e, 1)
+	r.done("wr", 0)
+
+	r.pulseOn("gor", 1)
+	assert.True(t, envVal(t, r.e, "rbusy").Bool)
+	assert.Equal(t, int64(0xBEEF), envVal(t, r.e, "cur").Int)
+	tick(t, r.e, 2)
+	assert.False(t, envVal(t, r.e, "rbusy").Bool)
+	assert.False(t, envVal(t, r.e, "rerr").Bool)
+	assert.Equal(t, int64(600), envVal(t, r.e, "cur").Int)
+	assert.Equal(t, int64(2), envVal(t, r.e, "nread").Int)
+
+	// cbBufLen larger than the target only fills the target.
+	r.set("cb", ecUdint(100))
+	r.set("wval", ecUint(450))
+	r.pulseOn("gow", 3)
+	r.done("wr", 0)
+	r.pulseOn("gor", 3)
+	assert.Equal(t, int64(450), envVal(t, r.e, "cur").Int)
+
+	// EEPROM save object 0x2032:01 takes a UDINT.
+	r.pulseOn("gos", 3)
+	r.done("sv", 0)
+}
+
+func TestCoESDoErrors(t *testing.T) {
+	r := newSdoRig(t)
+	// Unknown object: abort 0x06020000, buffer untouched.
+	r.set("idx", ecWord(0x5FFF))
+	r.set("sub", ecByte(0))
+	r.pulseOn("gor", 3)
+	assert.True(t, envVal(t, r.e, "rerr").Bool)
+	assert.Equal(t, int64(ecat.AbortNoObject), envVal(t, r.e, "rid").Int)
+	assert.Equal(t, int64(0xBEEF), envVal(t, r.e, "cur").Int)
+	r.pulseOn("gow", 3)
+	r.done("wr", ecat.AbortNoObject)
+
+	// Missing buffers are ADS errors, not panics.
+	r.set("idx", ecWord(0x2001))
+	r.set("sub", ecByte(5))
+	r.pulseOn("gon", 3)
+	r.done("rdn", adsErrInvalidParm)
+	r.done("wrn", adsErrInvalidParm)
+
+	// A slave without an object dictionary aborts with 0x06020000.
+	r.set("net", StringValue(ecNet1))
+	r.set("addr", ecUint(1002))
+	r.pulseOn("gor", 3)
+	r.done("rd", ecat.AbortNoObject)
+	r.pulseOn("gow", 3)
+	r.done("wr", ecat.AbortNoObject)
+
+	// Unknown slave address.
+	r.set("addr", ecUint(77))
+	r.pulseOn("gor", 3)
+	r.done("rd", adsErrPortNotFound)
+	assert.Equal(t, Value{}, r.out("wr", "cbRead"))
+}

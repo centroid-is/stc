@@ -21,6 +21,8 @@ func init() {
 	ecatMockCtors["FB_ECGETSLAVECRCERROR"] = func(s *ecatServices) StandardFB { return newEcGetSlaveCrcError(s, false) }
 	ecatMockCtors["FB_ECGETSLAVECRCERROREX"] = func(s *ecatServices) StandardFB { return newEcGetSlaveCrcError(s, true) }
 	ecatMockCtors["FB_ECPHYSICALWRITECMD"] = func(s *ecatServices) StandardFB { return newEcPhysicalWriteCmd(s) }
+	ecatMockCtors["FB_ECCOESDOREAD"] = func(s *ecatServices) StandardFB { return newEcCoESdoRead(s) }
+	ecatMockCtors["FB_ECCOESDOWRITE"] = func(s *ecatServices) StandardFB { return newEcCoESdoWrite(s) }
 }
 
 func ecByte(n uint64) Value {
@@ -316,5 +318,72 @@ func (f *ecPhysicalWriteCmd) Execute(dt time.Duration) {
 		}
 		f.out["WKC"] = ecUint(1)
 		return 0, true
+	})
+}
+
+// ----- FB_EcCoESdoRead / FB_EcCoESdoWrite -----
+
+func sdoInputs(buf string) map[string]Value {
+	return map[string]Value{
+		"NSLAVEADDR": ecUint(0), "NSUBINDEX": ecByte(0), "NINDEX": ecWord(0),
+		buf: {Kind: ValPointer}, "CBBUFLEN": ecUdint(0),
+	}
+}
+
+// coe returns the slave's object dictionary or the no-object abort code.
+func (f *slaveFB) coe() (ecat.CoEDevice, uint32) {
+	d, ok := f.dev.(ecat.CoEDevice)
+	if !ok {
+		return nil, ecat.AbortNoObject
+	}
+	return d, 0
+}
+
+type ecCoESdoRead struct{ slaveFB }
+
+func newEcCoESdoRead(s *ecatServices) *ecCoESdoRead {
+	return &ecCoESdoRead{slaveFB{ecatFB: newEcatFB(s, defaultEcTimeout,
+		sdoInputs("PDSTBUF"), map[string]Value{"CBREAD": ecUdint(0)})}}
+}
+
+// Execute reads the object into pDstBuf, at most cbBufLen bytes. A CoE
+// abort leaves the buffer untouched and reports the abort code.
+func (f *ecCoESdoRead) Execute(dt time.Duration) {
+	f.run(dt, f.begin, func() (uint32, bool) {
+		d, abort := f.coe()
+		if abort != 0 {
+			return abort, true
+		}
+		data, abort := d.SDORead(uint16(f.num("NINDEX")), uint8(f.num("NSUBINDEX")))
+		if abort != 0 {
+			return abort, true
+		}
+		data = data[:min(len(data), int(f.num("CBBUFLEN")))]
+		if err := f.s.writePtrBytes(f.in["PDSTBUF"], data); err != nil {
+			return adsErrInvalidParm, true
+		}
+		f.out["CBREAD"] = ecUdint(uint64(len(data)))
+		return 0, true
+	})
+}
+
+type ecCoESdoWrite struct{ slaveFB }
+
+func newEcCoESdoWrite(s *ecatServices) *ecCoESdoWrite {
+	return &ecCoESdoWrite{slaveFB{ecatFB: newEcatFB(s, defaultEcTimeout, sdoInputs("PSRCBUF"), nil)}}
+}
+
+// Execute writes cbBufLen bytes of pSrcBuf (at most the variable size).
+func (f *ecCoESdoWrite) Execute(dt time.Duration) {
+	f.run(dt, f.begin, func() (uint32, bool) {
+		d, abort := f.coe()
+		if abort != 0 {
+			return abort, true
+		}
+		data, err := f.s.readPtrBytes(f.in["PSRCBUF"], int(f.num("CBBUFLEN")))
+		if err != nil {
+			return adsErrInvalidParm, true
+		}
+		return d.SDOWrite(uint16(f.num("NINDEX")), uint8(f.num("NSUBINDEX")), data), true
 	})
 }

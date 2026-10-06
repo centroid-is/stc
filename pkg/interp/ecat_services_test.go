@@ -119,13 +119,14 @@ END_PROGRAM
 
 func TestEcatLocalArgsErrors(t *testing.T) {
 	for name, call := range map[string]string{
-		"unknown param":  "F_CreateAmsNetId(nFoo := ids)",
-		"too many pos":   "F_CreateAmsNetId(ids, ids)",
-		"too many named": "F_CreateAmsNetId(nIds := ids, ids)",
-		"duplicate":      "F_CreateAmsNetId(ids, nIds := ids)",
-		"bad pos expr":   "F_CreateAmsNetId(nope, nIds := ids)",
-		"bad named expr": "F_CreateAmsNetId(nIds := nope)",
-		"missing":        "F_CreateAmsNetId(, nIds := ids)",
+		"unknown param":         "F_CreateAmsNetId(nFoo := ids)",
+		"too many pos":          "F_CreateAmsNetId(ids, ids)",
+		"too many named":        "F_CreateAmsNetId(nIds := ids, ids)",
+		"too many before named": "F_CreateAmsNetId(ids, ids, nIds := ids)",
+		"duplicate":             "F_CreateAmsNetId(ids, nIds := ids)",
+		"bad pos expr":          "F_CreateAmsNetId(nope, nIds := ids)",
+		"bad named expr":        "F_CreateAmsNetId(nIds := nope)",
+		"missing":               "F_CreateAmsNetId(, nIds := ids)",
 	} {
 		t.Run(name, func(t *testing.T) {
 			res := pipeline.Parse("x.st", "PROGRAM P\nVAR ids : ARRAY[0..5] OF BYTE; s : STRING; END_VAR\ns := "+call+";\nEND_PROGRAM\n", nil)
@@ -146,6 +147,16 @@ func TestEcatLocalArgsErrors(t *testing.T) {
 			assert.Error(t, e.Tick(time.Millisecond))
 		})
 	}
+	// A multi-parameter local function reports a missing argument and
+	// accepts named arguments in any order.
+	two := ecatEngine(t, "PROGRAM P\nVAR x, y : DINT; END_VAR\ny := TWO(b := 2, a := 1);\nx := TWO(b := 1);\nEND_PROGRAM\n", nil)
+	two.interp.RegisterFunction("TWO", func(a []Value, _ ast.Pos) (Value, error) { return IntValue(a[0].Int*10 + a[1].Int), nil })
+	two.interp.localParams = map[string][]string{"TWO": {"A", "B"}}
+	err := two.Tick(time.Millisecond)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing argument A")
+	assert.Equal(t, int64(12), envVal(t, two, "y").Int)
+
 	// Named arguments to a function without localParams are rejected.
 	e := ecatEngine(t, "PROGRAM P\nVAR x : BOOL; END_VAR\nx := MYFN(a := 1);\nEND_PROGRAM\n", nil)
 	e.interp.RegisterFunction("MYFN", func([]Value, ast.Pos) (Value, error) { return BoolValue(true), nil })
