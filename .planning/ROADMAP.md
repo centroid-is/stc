@@ -427,7 +427,7 @@ Plans:
 
 Plans:
 - [x] 22-01-PLAN.md -- Interp value semantics: storeAs/wrapInt store choke point, typed binary results, ULINT/LWORD uint64 paths
-- [ ] 22-02-PLAN.md -- Checker untyped literals: adoption in binary/compare/assign/args/CASE/initialisers, range errors, dialect allow-list removed
+- [x] 22-02-PLAN.md -- Checker untyped literals: adoption in binary/compare/assign/args/CASE/initialisers, range errors, dialect allow-list removed
 - [ ] 22-03-PLAN.md -- pkg/symtree (Build/Lookup/Walk/JSON) with AnalysisResult.Files and `stc check --symbols`
 - [ ] 22-04-PLAN.md -- Initialisers and constant-expression bounds at instantiation, shared instantiateVar, two-pass GVL registration
 - [ ] 22-05-PLAN.md -- interp.Runtime Get/Set/ToJSON, `stc sim --set/--get`, ST301-shaped fixture, oracle zero assertion, coverage gate
@@ -538,7 +538,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 19. TwinCAT Declaration Syntax | v1.2 | 10/10 | Complete    | 2026-10-06 |
 | 20. TwinCAT Expression Semantics | v1.2 | 9/9 | Complete    | 2026-10-06 |
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 0/TBD | Not started | - |
-| 22. Symbol Tree & Value Semantics | v1.2 | 1/5 | In Progress|  |
+| 22. Symbol Tree & Value Semantics | v1.2 | 2/5 | In Progress|  |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 0/TBD | Not started | - |
 | 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
