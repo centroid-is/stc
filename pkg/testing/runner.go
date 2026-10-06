@@ -364,90 +364,13 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	return tr
 }
 
-// registerUserFunctions registers user-defined FUNCTION declarations as
-// callable functions in the interpreter.
+// registerUserFunctions registers the file's FUNCTION declarations with the
+// interpreter, which binds named, positional and mixed arguments and applies
+// declared defaults (see interp.CallFunction).
 func registerUserFunctions(interpreter *interp.Interpreter, ctx *fileContext) {
-	for name, decl := range ctx.funcDecls {
-		funcDecl := decl // capture for closure
-		funcName := name
-		interpreter.RegisterFunction(funcName, func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
-			// A recursive FUNCTION fails at MaxCallDepth instead of
-			// overflowing the Go stack.
-			if err := interpreter.EnterCall(funcName, pos); err != nil {
-				return interp.Value{}, err
-			}
-			defer interpreter.ExitCall()
-			return callUserFunction(interpreter, funcDecl, args)
-		})
+	for _, decl := range ctx.funcDecls {
+		interpreter.RegisterFunctionDecl(decl)
 	}
-}
-
-// callUserFunction executes a user-defined FUNCTION with the given arguments.
-func callUserFunction(parentInterp *interp.Interpreter, decl *ast.FunctionDecl, args []interp.Value) (interp.Value, error) {
-	// Create a new environment for the function call. Its parent is the
-	// chain of non qualified_only GVLs, so bare GVL names resolve.
-	env := interp.NewEnv(parentInterp.GlobalParent())
-
-	// Initialize return variable (function name holds the return value)
-	retTypeName := ""
-	if decl.ReturnType != nil {
-		retTypeName = typeNameFromSpec(decl.ReturnType)
-	}
-	retVal := interp.ZeroFromTypeSpec(decl.ReturnType)
-	if decl.Name != nil {
-		env.Define(decl.Name.Name, retVal)
-	}
-
-	// Map arguments to VAR_INPUT parameters
-	argIdx := 0
-	for _, vb := range decl.VarBlocks {
-		if vb.Section == ast.VarInput {
-			for _, vd := range vb.Declarations {
-				for _, n := range vd.Names {
-					if argIdx < len(args) {
-						env.Define(n.Name, args[argIdx])
-						argIdx++
-					} else {
-						env.Define(n.Name, interp.ZeroFromTypeSpec(vd.Type))
-					}
-				}
-			}
-		} else {
-			// Initialize other var blocks
-			for _, vd := range vb.Declarations {
-				val := interp.ZeroFromTypeSpec(vd.Type)
-				if vd.InitValue != nil {
-					if iv, err := parentInterp.EvalExpr(env, vd.InitValue); err == nil {
-						val = iv
-					}
-				}
-				for _, n := range vd.Names {
-					env.Define(n.Name, val)
-				}
-			}
-		}
-	}
-
-	// Execute function body
-	err := parentInterp.ExecStatements(env, decl.Body)
-	if err != nil {
-		// ErrReturn is normal function termination
-		if err.Error() == "RETURN" {
-			// Normal return
-		} else {
-			return interp.Value{}, err
-		}
-	}
-
-	// Read return value from the function name variable
-	if decl.Name != nil {
-		if v, ok := env.Get(decl.Name.Name); ok {
-			return v, nil
-		}
-	}
-
-	_ = retTypeName
-	return retVal, nil
 }
 
 // initializeTestEnv populates the environment from VarBlocks, following the

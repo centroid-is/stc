@@ -53,6 +53,10 @@ type Interpreter struct {
 	// inside another FB is created as a live nested instance.
 	FBDecls map[string]*ast.FunctionBlockDecl
 
+	// FuncDecls maps uppercase user-defined FUNCTION names to their
+	// declarations; see RegisterFunctionDecl and CallFunction.
+	FuncDecls map[string]*ast.FunctionDecl
+
 	// gvls holds the registered global variable lists; see RegisterGVL.
 	gvls gvlState
 
@@ -977,28 +981,34 @@ func valuesInRange(v, low, high Value) bool {
 func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 	// Resolve callee: a plain instance name, or a member path such as
 	// GVL.timer or s.fb that evaluates to an FB instance.
+	//
+	// Anything else -- a FUNCTION, METHOD or ACTION called with named
+	// arguments, THIS^.M(x := 1), SUPER^.M(x := 1) -- is the same call as the
+	// expression form and goes through evalCall.
 	var v Value
-	var calleeName string
+	asExpr := func() error {
+		_, err := interp.evalCall(env, &ast.CallExpr{NodeBase: s.NodeBase, Callee: s.Callee, NamedArgs: s.Args})
+		return err
+	}
 	switch c := s.Callee.(type) {
 	case *ast.Ident:
-		calleeName = c.Name
-		var found bool
-		v, found = env.Get(c.Name)
-		if !found {
-			return &RuntimeError{Msg: fmt.Sprintf("undefined: %s", c.Name)}
-		}
+		v, _ = env.Get(c.Name)
 	case *ast.MemberAccessExpr:
-		calleeName = c.Member.Name
+		// inst.M(x := 1): a method, not a member holding an FB instance.
+		if obj, err := interp.evalExpr(env, c.Object); err == nil && obj.Kind == ValFBInstance && obj.FBRef != nil && findMethod(obj.FBRef, c.Member.Name, interp) != nil {
+			return asExpr()
+		}
 		var err error
 		v, err = interp.evalMemberAccess(env, c)
 		if err != nil {
 			return err
 		}
-	default:
-		return &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", s.Callee)}
+		if v.Kind != ValFBInstance || v.FBRef == nil {
+			return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", c.Member.Name)}
+		}
 	}
 	if v.Kind != ValFBInstance || v.FBRef == nil {
-		return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", calleeName)}
+		return asExpr()
 	}
 
 	fbInst := v.FBRef
@@ -1063,17 +1073,12 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 			continue
 		}
 		outVal := fbInst.GetOutput(arg.Name.Name)
-		// The value expression should be an identifier to assign to
-		switch target := arg.Value.(type) {
-		case *ast.Ident:
-			if !env.Set(target.Name, outVal) {
-				env.Define(target.Name, outVal)
-			}
-		case *ast.MemberAccessExpr:
-			// q => GVL.flag or q => s.member
-			if err := interp.execAssignMember(env, target, outVal); err != nil {
-				return err
-			}
+		if outVal.IsAggregate() {
+			outVal = outVal.Clone()
+		}
+		// q => x, q => G.s.m, q => arr[1].w.0: any assignable target.
+		if err := interp.assignToTarget(env, arg.Value, outVal); err != nil {
+			return err
 		}
 	}
 
@@ -1231,7 +1236,7 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 
 	// ACTION of the enclosing POU: A1(); runs against the owner's variables.
 	if act, owner := env.LookupAction(calleeName); act != nil {
-		if len(e.Args) > 0 {
+		if len(e.Args) > 0 || len(e.NamedArgs) > 0 {
 			return Value{}, &RuntimeError{
 				Msg: fmt.Sprintf("action %s takes no arguments", act.Name.Name),
 				Pos: e.Span().Start,
@@ -1284,27 +1289,24 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 	// Check LocalFunctions first (per-instance overrides for test assertions, etc.)
 	if interp.LocalFunctions != nil {
 		if fn, ok := interp.LocalFunctions[calleeName]; ok {
-			args := make([]Value, 0, len(e.Args))
-			for _, argExpr := range e.Args {
-				v, err := interp.evalExpr(env, argExpr)
-				if err != nil {
-					return Value{}, err
-				}
-				args = append(args, v)
+			args, err := interp.positionalArgs(env, e, calleeName)
+			if err != nil {
+				return Value{}, err
 			}
 			return fn(args, e.Span().Start)
 		}
 	}
 
+	// User-defined FUNCTION: named, positional and mixed arguments.
+	if decl, ok := interp.FuncDecls[calleeName]; ok {
+		return interp.CallFunction(env, decl, e.Args, e.NamedArgs, e.Span().Start)
+	}
+
 	// Check StdlibFunctions (math, string, conversion)
 	if fn, ok := StdlibFunctions[calleeName]; ok {
-		args := make([]Value, 0, len(e.Args))
-		for _, argExpr := range e.Args {
-			v, err := interp.evalExpr(env, argExpr)
-			if err != nil {
-				return Value{}, err
-			}
-			args = append(args, v)
+		args, err := interp.positionalArgs(env, e, calleeName)
+		if err != nil {
+			return Value{}, err
 		}
 		// TO_STRING of a to_string enum value gives the value name; the
 		// stdlib function, which has no access to enum definitions,
@@ -1319,7 +1321,7 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 
 	// Zero-argument FB instance call written as an expression statement:
 	// fb(); runs the instance with its current inputs.
-	if len(e.Args) == 0 {
+	if len(e.Args) == 0 && len(e.NamedArgs) == 0 {
 		if v, ok := env.Get(calleeName); ok && v.Kind == ValFBInstance && v.FBRef != nil {
 			return Value{}, interp.runFBInstance(v.FBRef)
 		}

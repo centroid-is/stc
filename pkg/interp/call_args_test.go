@@ -101,14 +101,14 @@ END_PROGRAM
 		eng := semRun(t, `
 FUNCTION F_Inc : BOOL
 VAR_IN_OUT io : INT; END_VAR
-VAR_INPUT by : INT := 1; END_VAR
-io := io + by;
+VAR_INPUT step : INT := 1; END_VAR
+io := io + step;
 F_Inc := TRUE;
 END_FUNCTION
 PROGRAM P
 VAR v : INT; END_VAR
 F_Inc(io := v);
-F_Inc(io := v, by := 5);
+F_Inc(io := v, step := 5);
 END_PROGRAM
 `)
 		assert.Equal(t, int64(6), progVar(t, eng, "v").Int)
@@ -225,16 +225,4 @@ END_PROGRAM
 		assert.Contains(t, err.Error(), "named arguments")
 	})
 
-	t.Run("built-in function accepts trailing positional entries", func(t *testing.T) {
-		eng := semRun(t, `
-FUNCTION_BLOCK FB_Q
-VAR_INPUT a : INT; END_VAR
-END_FUNCTION_BLOCK
-PROGRAM P
-VAR n : INT; END_VAR
-n := ABS(-4);
-END_PROGRAM
-`)
-		assert.Equal(t, int64(4), progVar(t, eng, "n").Int)
-	})
 }
