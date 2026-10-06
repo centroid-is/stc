@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"regexp"
@@ -198,18 +199,32 @@ func (interp *Interpreter) parseLitInt(s string) (Value, error) {
 		if err != nil {
 			return Value{}, &RuntimeError{Msg: fmt.Sprintf("invalid integer base: %s", baseStr)}
 		}
-		n, err := strconv.ParseInt(digits, base, 64)
+		n, err := parseInt64Bits(digits, base)
 		if err != nil {
 			return Value{}, &RuntimeError{Msg: fmt.Sprintf("invalid integer literal: %s", s)}
 		}
 		return Value{Kind: ValInt, Int: n, IECType: types.KindDINT}, nil
 	}
 
-	n, err := strconv.ParseInt(s, 10, 64)
+	n, err := parseInt64Bits(s, 10)
 	if err != nil {
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("invalid integer literal: %s", s)}
 	}
 	return Value{Kind: ValInt, Int: n, IECType: types.KindDINT}, nil
+}
+
+// parseInt64Bits parses digits in base as an int64, accepting values up to
+// 2^64-1 (ULINT/LWORD range) as their int64 bit pattern.
+func parseInt64Bits(digits string, base int) (int64, error) {
+	n, err := strconv.ParseInt(digits, base, 64)
+	if err == nil {
+		return n, nil
+	}
+	u, uerr := strconv.ParseUint(digits, base, 64)
+	if uerr != nil {
+		return 0, err
+	}
+	return int64(u), nil
 }
 
 func (interp *Interpreter) parseLitReal(s string) (Value, error) {
@@ -438,9 +453,9 @@ func (interp *Interpreter) evalBinary(env *Env, e *ast.BinaryExpr) (Value, error
 		return interp.evalBinaryReal(lf, op, rf)
 	}
 
-	// Both are int
+	// Both are int: the result takes the operands' IEC kind and wraps to it
 	if left.Kind == ValInt && right.Kind == ValInt {
-		return interp.evalBinaryInt(left.Int, op, right.Int)
+		return interp.evalBinaryInt(left.Int, op, right.Int, resultIntKind(e.Left, e.Right, left, right))
 	}
 
 	return Value{}, &RuntimeError{
@@ -448,39 +463,67 @@ func (interp *Interpreter) evalBinary(env *Env, e *ast.BinaryExpr) (Value, error
 	}
 }
 
-func (interp *Interpreter) evalBinaryInt(l int64, op string, r int64) (Value, error) {
+// evalBinaryInt applies op to the integers l and r. Arithmetic results wrap
+// to kind and carry it as their IECType; KindInvalid marks an untyped
+// constant expression, which is neither wrapped nor retyped from DINT.
+// ULINT and LWORD divide, take the modulus and compare as uint64.
+func (interp *Interpreter) evalBinaryInt(l int64, op string, r int64, kind types.TypeKind) (Value, error) {
+	unsigned := isUnsigned64(kind)
+	arith := func(n int64) (Value, error) {
+		if kind == types.KindInvalid {
+			return IntValue(n), nil
+		}
+		return Value{Kind: ValInt, Int: wrapInt(n, kind), IECType: kind}, nil
+	}
 	switch op {
 	case "+":
-		return IntValue(l + r), nil
+		return arith(l + r)
 	case "-":
-		return IntValue(l - r), nil
+		return arith(l - r)
 	case "*":
-		return IntValue(l * r), nil
+		return arith(l * r)
 	case "/":
 		if r == 0 {
 			return Value{}, &RuntimeError{Msg: "division by zero"}
 		}
-		return IntValue(l / r), nil
+		if unsigned {
+			return arith(int64(uint64(l) / uint64(r)))
+		}
+		return arith(l / r)
 	case "MOD":
 		if r == 0 {
 			return Value{}, &RuntimeError{Msg: "division by zero"}
 		}
-		return IntValue(l % r), nil
+		if unsigned {
+			return arith(int64(uint64(l) % uint64(r)))
+		}
+		return arith(l % r)
 	case "=":
 		return BoolValue(l == r), nil
 	case "<>":
 		return BoolValue(l != r), nil
+	}
+	cmp := compareInt(l, r, unsigned)
+	switch op {
 	case "<":
-		return BoolValue(l < r), nil
+		return BoolValue(cmp < 0), nil
 	case ">":
-		return BoolValue(l > r), nil
+		return BoolValue(cmp > 0), nil
 	case "<=":
-		return BoolValue(l <= r), nil
+		return BoolValue(cmp <= 0), nil
 	case ">=":
-		return BoolValue(l >= r), nil
+		return BoolValue(cmp >= 0), nil
 	default:
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported int operator: %s", op)}
 	}
+}
+
+// compareInt returns -1, 0 or 1 comparing l and r, as uint64 when unsigned.
+func compareInt(l, r int64, unsigned bool) int {
+	if unsigned {
+		return cmp.Compare(uint64(l), uint64(r))
+	}
+	return cmp.Compare(l, r)
 }
 
 func (interp *Interpreter) evalBinaryReal(l float64, op string, r float64) (Value, error) {
@@ -527,7 +570,12 @@ func (interp *Interpreter) evalUnary(env *Env, e *ast.UnaryExpr) (Value, error) 
 	case "-":
 		switch operand.Kind {
 		case ValInt:
-			return IntValue(-operand.Int), nil
+			// A typed operand keeps its kind and wraps (-(-32768) is -32768
+			// for INT); an untyped one stays DINT.
+			if bitWidth(operand.IECType) == 0 || isUntypedIntLiteral(e.Operand) {
+				return IntValue(-operand.Int), nil
+			}
+			return Value{Kind: ValInt, Int: wrapInt(-operand.Int, operand.IECType), IECType: operand.IECType}, nil
 		case ValReal:
 			return RealValue(-operand.Real), nil
 		default:

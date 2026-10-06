@@ -277,7 +277,7 @@ func formatReal(f float64) string {
 func anyToString(v Value) string {
 	switch v.Kind {
 	case ValInt:
-		return strconv.FormatInt(v.Int, 10)
+		return formatInt(v)
 	case ValBool:
 		if v.Bool {
 			return "TRUE"

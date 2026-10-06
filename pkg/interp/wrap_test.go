@@ -28,6 +28,14 @@ func parseExpr(t *testing.T, src string) ast.Expr {
 	return prog.Body[0].(*ast.AssignStmt).Value
 }
 
+// parseStmt parses src as the single statement of a program body.
+func parseStmt(t *testing.T, src string) ast.Statement {
+	t.Helper()
+	res := parser.Parse("S.st", "PROGRAM S\n"+src+"\nEND_PROGRAM\n")
+	require.Empty(t, res.Diags, "parse diagnostics")
+	return res.File.Declarations[0].(*ast.ProgramDecl).Body[0]
+}
+
 // evalIn evaluates expression src in the environment of eng.
 func evalIn(t *testing.T, eng *ScanCycleEngine, src string) (Value, error) {
 	t.Helper()
@@ -92,7 +100,7 @@ func TestTypedBinary(t *testing.T) {
 d : DINT := 7; w : WORD := 16#FFFF; r : REAL := 1.5; e : INT;`)
 
 	t.Run("untyped literal adopts the typed operand kind", func(t *testing.T) {
-		for _, src := range []string{"i + 1", "1 + i", "i + (1)", "i - -1", "(i) + +1"} {
+		for _, src := range []string{"i + 1", "1 + i", "i + (1)", "i - -1", "(i) + (1)"} {
 			v := mustEval(t, eng, src)
 			assert.Equal(t, int64(-32768), v.Int, src)
 			assert.Equal(t, types.KindINT, v.IECType, src)

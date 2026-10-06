@@ -90,7 +90,7 @@ func (v Value) String() string {
 		}
 		return "FALSE"
 	case ValInt:
-		return fmt.Sprintf("%d", v.Int)
+		return formatInt(v)
 	case ValReal:
 		return fmt.Sprintf("%g", v.Real)
 	case ValString:
@@ -238,7 +238,7 @@ func (v Value) MarshalJSON() ([]byte, error) {
 		}
 		return []byte("false"), nil
 	case ValInt:
-		return []byte(fmt.Sprintf("%d", v.Int)), nil
+		return []byte(formatInt(v)), nil
 	case ValReal:
 		return []byte(fmt.Sprintf("%g", v.Real)), nil
 	case ValString:

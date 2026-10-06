@@ -3,6 +3,7 @@ package interp
 import (
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,6 +73,12 @@ func TestStoreAs(t *testing.T) {
 		assert.Equal(t, ValReal, got.Kind)
 		assert.Equal(t, 3.0, got.Real)
 		assert.Equal(t, types.KindREAL, got.IECType)
+	})
+	t.Run("int into untyped real slot becomes LREAL", func(t *testing.T) {
+		got := storeAs(Value{Kind: ValReal}, IntValue(2))
+		assert.Equal(t, ValReal, got.Kind)
+		assert.Equal(t, types.KindLREAL, got.IECType)
+		assert.Equal(t, 2.0, got.Real)
 	})
 	t.Run("lreal into real slot takes slot type", func(t *testing.T) {
 		got := storeAs(Zero(types.KindREAL), RealValue(1.5))
@@ -198,6 +205,19 @@ END_PROGRAM
 		// 130 stored into SINT is -126: one pass, then -125 > -126 ends it.
 		assert.Equal(t, types.KindSINT, progVar(t, eng, "i").IECType)
 		assert.Equal(t, int64(1), progVar(t, eng, "n").Int)
+	})
+
+	t.Run("undeclared FOR counter is defined", func(t *testing.T) {
+		interp := New()
+		env := NewEnv(nil)
+		env.Define("N", Zero(types.KindDINT))
+		stmt := parseStmt(t, "FOR k := 1 TO 3 DO n := n + 1; END_FOR")
+		require.NoError(t, interp.execStatements(env, []ast.Statement{stmt}))
+		k, ok := env.Get("K")
+		require.True(t, ok)
+		assert.Equal(t, int64(4), k.Int)
+		n, _ := env.Get("N")
+		assert.Equal(t, int64(3), n.Int)
 	})
 
 	t.Run("bit write keeps BYTE type", func(t *testing.T) {
