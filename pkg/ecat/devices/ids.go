@@ -20,6 +20,11 @@ const (
 	ProductEL6070 uint32 = 0x17b63052
 	ProductEL9011 uint32 = 0x23333050
 	ProductCU2508 uint32 = 0x09cc5432
+	ProductEL1008 uint32 = 0x03f03052
+	ProductEL1018 uint32 = 0x03fa3052 // Beckhoff numbering; not in the reference exports
+	ProductEL2008 uint32 = 0x07d83052
+	ProductEP2338 uint32 = 0x09224052 // EP2338-0002 and EP2338-1002 share it
+	ProductCTEU   uint32 = 0x0008bc8c // Festo CTEU-EtherCAT bus node (572556)
 )
 
 type deviceID struct {
@@ -28,7 +33,8 @@ type deviceID struct {
 	factory         func() ecat.Device
 }
 
-func passive() ecat.Device { return &Passive{} }
+func passive() ecat.Device   { return &Passive{} }
+func digitalIO() ecat.Device { return &DigitalIO{} }
 
 // knownIDs lists every exact (vendor, product) registration.
 var knownIDs = []deviceID{
@@ -38,6 +44,11 @@ var knownIDs = []deviceID{
 	{"EL6070", VendorBeckhoff, ProductEL6070, passive},
 	{"EL9011", VendorBeckhoff, ProductEL9011, passive},
 	{"CU2508", VendorBeckhoff, ProductCU2508, passive},
+	{"EL1008", VendorBeckhoff, ProductEL1008, digitalIO},
+	{"EL1018", VendorBeckhoff, ProductEL1018, digitalIO},
+	{"EL2008", VendorBeckhoff, ProductEL2008, digitalIO},
+	{"EP2338", VendorBeckhoff, ProductEP2338, digitalIO},
+	{"CTEU", VendorFesto, ProductCTEU, digitalIO},
 }
 
 type modelFallback struct {
@@ -50,6 +61,10 @@ type modelFallback struct {
 var beckhoffFallbacks = []modelFallback{
 	{regexp.MustCompile(`^EK1[0-2]\d\d$`), passive},
 	{regexp.MustCompile(`^EL9011$`), passive},
+	{regexp.MustCompile(`^EL100[48]$`), digitalIO},
+	{regexp.MustCompile(`^EL101[48]$`), digitalIO},
+	{regexp.MustCompile(`^EL200[48]$`), digitalIO},
+	{regexp.MustCompile(`^EP2338`), digitalIO},
 }
 
 // Register installs every device model into r.
