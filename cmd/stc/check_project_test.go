@@ -106,7 +106,7 @@ func TestCheckProjectUpperCaseExtAndVendor(t *testing.T) {
 	// --vendor applies in project mode: Demo uses OOP and pointers that the
 	// schneider target flags.
 	_, stderr, _ = runStc(t, "check", demoTsproj, "--vendor", "schneider")
-	if !strings.Contains(stderr, "VEND") || !strings.Contains(strings.ToLower(stderr), "schneider") {
+	if !strings.Contains(stderr, "not supported by schneider") {
 		t.Errorf("--vendor schneider: %s", stderr)
 	}
 }
