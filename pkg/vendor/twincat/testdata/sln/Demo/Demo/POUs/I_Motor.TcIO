@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <Itf Name="I_Motor" Id="{00000000-0000-0000-0000-000000000060}">
+    <Declaration><![CDATA[INTERFACE I_Motor
+]]></Declaration>
+    <Method Name="Start" Id="{00000000-0000-0000-0000-000000000061}">
+      <Declaration><![CDATA[METHOD Start : BOOL
+VAR_INPUT
+	force : BOOL;
+END_VAR
+]]></Declaration>
+    </Method>
+    <Property Name="Speed" Id="{00000000-0000-0000-0000-000000000062}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Speed : INT]]></Declaration>
+      <Get Name="Get" Id="{00000000-0000-0000-0000-000000000063}">
+        <Declaration><![CDATA[]]></Declaration>
+      </Get>
+    </Property>
+  </Itf>
+</TcPlcObject>

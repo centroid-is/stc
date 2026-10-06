@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_LibThing" Id="{00000000-0000-0000-0000-000000000080}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LibThing
+VAR_INPUT
+	execute : BOOL;
+END_VAR
+VAR_OUTPUT
+	done : BOOL;
+	state : E_LibState;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[done := execute;
+IF done THEN
+	state := E_LibState.Done;
+END_IF]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

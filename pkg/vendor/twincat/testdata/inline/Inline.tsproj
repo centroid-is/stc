@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<TcSmProject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" TcSmVersion="1.0" TcVersion="3.1.4026.22">
+	<DataTypes>
+		<DataType>
+			<Name>AMSNETID</Name>
+		</DataType>
+	</DataTypes>
+	<Project ProjectGUID="{00000000-0000-0000-0000-000000000090}" Target64Bit="true">
+		<System>
+			<Tasks>
+				<Task Id="3" Priority="20" CycleTime="200000" AmsPort="350" AdtTasks="true">
+					<Name>PlcTask</Name>
+				</Task>
+			</Tasks>
+		</System>
+		<Plc>
+			<Project GUID="{00000000-0000-0000-0000-000000000091}" Name="Inline" PrjFilePath="Inline\Inline.plcproj" TmcFilePath="Inline\Inline.tmc" AmsPort="851">
+				<Instance Id="#x08502000">
+					<Name>Inline Instance</Name>
+				</Instance>
+			</Project>
+		</Plc>
+	</Project>
+</TcSmProject>

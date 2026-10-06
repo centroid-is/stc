@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_LibState" Id="{00000000-0000-0000-0000-000000000081}">
+    <Declaration><![CDATA[TYPE E_LibState :
+(
+	Idle := 0,
+	Done := 1
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
