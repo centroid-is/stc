@@ -62,6 +62,10 @@ func (l *Live) Done() bool { return l.results == nil || l.k >= l.n }
 // Cycle is the number of Ticks completed since Start.
 func (l *Live) Cycle() int { return l.k }
 
+// Assertions returns the expect results recorded so far, in evaluation
+// order (Finish sorts them by step).
+func (l *Live) Assertions() []AssertionResult { return l.rep.Assertions }
+
 // BeforeTick fires the steps due on the next Tick, in due-Tick then file
 // order, and advances the running ramps.
 func (l *Live) BeforeTick() {

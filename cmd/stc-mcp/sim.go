@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,12 +14,12 @@ import (
 	"github.com/awcullen/opcua/ua"
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/diag"
-	"github.com/centroid-is/stc/pkg/ecat"
 	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/opcua"
 	"github.com/centroid-is/stc/pkg/opcua/bind"
 	"github.com/centroid-is/stc/pkg/opcua/opcuatest"
 	"github.com/centroid-is/stc/pkg/projectload"
+	"github.com/centroid-is/stc/pkg/scenario"
 	"github.com/centroid-is/stc/pkg/symtree"
 )
 
@@ -29,30 +28,21 @@ import (
 // process, stepped (never free-running) so agent runs stay deterministic.
 
 const (
-	maxStepCycles   = 1_000_000
-	defaultDepth    = 2
-	maxBrowseDepth  = 10
-	remoteTimeout   = 10 * time.Second
-	plc1NodeID      = "ns=4;s=PLC1"
-	errNoSession    = "no simulation: start stc-mcp with --project <path> [--io ...]"
-	errScenarioStub = "--scenario needs the Phase 27 scenario package, which this build does not include yet"
+	maxStepCycles  = 1_000_000
+	defaultDepth   = 2
+	maxBrowseDepth = 10
+	remoteTimeout  = 10 * time.Second
+	plc1NodeID     = "ns=4;s=PLC1"
+	errNoSession   = "no simulation: start stc-mcp with --project <path> [--io ...]"
 )
 
 // simConfig is the session configuration from the stc-mcp flags.
 type simConfig struct {
 	Project  string   // .tsproj/.plcproj, a .st file or a directory of .st files
 	IO       []string // EtherCATConfig exports (Device N.xml), globs already expanded
-	Scenario string   // reserved for the Phase 27 scenario package (not wired yet)
+	Scenario string   // scenario TOML file fired as stc_sim_step advances ("" = none)
 	OPCUA    string   // host:port of the optional OPC UA server ("" = none)
 	PKIDir   string   // OPC UA certificate directory ("" = user cache dir)
-}
-
-// force is a TcLinkTo-bound input held at a value: its raw bits are written
-// into the master's input image before every Tick, so the IOBinder copies
-// them into the variable like a real terminal would.
-type force struct {
-	slot ecat.Slot
-	bits uint64
 }
 
 // simSession is the loaded project with its optional EtherCAT network and
@@ -60,52 +50,52 @@ type force struct {
 type simSession struct {
 	mu       sync.Mutex
 	p        *interp.Project
+	plant    *scenario.Plant // p with its EtherCAT network; owns input forces
 	rt       *interp.Runtime
 	analysis analyzer.AnalysisResult
-	ecat     *projectload.ECat
 	src      *bind.RuntimeSource
 	space    *opcua.Space
 	srv      *opcua.Server
 	diags    []diag.Diagnostic
-	forces   map[string]force // upper-cased variable path -> force
+	live     *scenario.Live // --scenario run; nil without one
+	report   *scenario.Report
 	cycles   int
 }
 
-// newSimSession loads cfg.Project (with STC_SIM defined, like stc serve),
-// attaches cfg.IO and starts the OPC UA server when cfg.OPCUA is set.
+// newSimSession loads cfg.Project (with STC_SIM defined, like stc serve) as
+// a scenario.Plant with cfg.IO attached, validates cfg.Scenario against it
+// and starts the OPC UA server when cfg.OPCUA is set.
 func newSimSession(cfg simConfig) (*simSession, error) {
 	if cfg.Project == "" {
 		return nil, errors.New(errNoSession)
-	}
-	if cfg.Scenario != "" {
-		return nil, errors.New(errScenarioStub)
 	}
 	spec, res, ds, err := projectload.Load([]string{cfg.Project}, map[string]bool{"STC_SIM": true})
 	if err != nil {
 		return nil, err
 	}
-	p, err := interp.LoadProject(spec)
+	ps, err := scenario.BuildPlantSpec(spec, cfg.IO)
+	if err != nil {
+		if ps.Topology == nil {
+			return nil, fmt.Errorf("--io: %w", err)
+		}
+		err = fmt.Errorf("EtherCAT links do not resolve: %d error(s)", projectload.CountErrors(ps.Diagnostics))
+		return nil, withErrors(err, ps.Diagnostics)
+	}
+	plant, err := ps.New()
 	if err != nil {
 		return nil, fmt.Errorf("initialisation error: %w", err)
 	}
-	s := &simSession{p: p, rt: p.Runtime(), analysis: res, forces: map[string]force{}}
-	for _, d := range ds {
+	p := plant.Project()
+	s := &simSession{p: p, plant: plant, rt: p.Runtime(), analysis: res}
+	for _, d := range append(ds, ps.Diagnostics...) {
 		if d.Severity != diag.Error {
 			s.diags = append(s.diags, d)
 		}
 	}
-	if len(cfg.IO) > 0 {
-		e, eds, err := projectload.AttachECat(p, spec, cfg.IO)
-		if err != nil {
-			for _, d := range eds {
-				if d.Severity == diag.Error {
-					err = fmt.Errorf("%w\n%s", err, d.String())
-				}
-			}
+	if cfg.Scenario != "" {
+		if err := s.loadScenario(cfg.Scenario); err != nil {
 			return nil, err
 		}
-		s.ecat = e
-		s.diags = append(s.diags, eds...)
 	}
 	s.src = bind.NewRuntimeSource(s.rt)
 	if cfg.OPCUA != "" {
@@ -197,36 +187,34 @@ func (s *simSession) Step(n int) (stepResult, error) {
 		if werr := s.src.ApplyPending(); werr != nil {
 			res.WriteErrors = append(res.WriteErrors, werr.Error())
 		}
-		s.applyForces()
+		if s.live != nil {
+			s.live.BeforeTick()
+		}
 		if err = s.p.Tick(); err != nil {
 			err = fmt.Errorf("cycle %d: %w", s.cycles+1, err)
 			break
 		}
+		if s.live != nil {
+			n0 := len(s.live.Assertions())
+			s.live.AfterTick()
+			res.ScenarioFailures = append(res.ScenarioFailures, failures(s.live.Assertions()[n0:])...)
+		}
 		s.cycles++
 		res.Stepped++
+	}
+	if s.live != nil && s.report == nil && (s.live.Done() || err != nil) {
+		s.report = s.live.Finish(err)
+		var ended []scenario.AssertionResult
+		for _, a := range s.report.Assertions {
+			if strings.HasPrefix(a.Message, "run ended") {
+				ended = append(ended, a)
+			}
+		}
+		res.ScenarioFailures = append(res.ScenarioFailures, failures(ended)...)
 	}
 	res.Cycles = s.cycles
 	res.SimTimeMS = s.p.Clock().Milliseconds()
 	return res, err
-}
-
-// applyForces writes every forced input into its input image, in path order.
-func (s *simSession) applyForces() {
-	if s.ecat == nil || len(s.forces) == 0 {
-		return
-	}
-	keys := make([]string, 0, len(s.forces))
-	for k := range s.forces {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	imgs := s.ecat.Network.Images()
-	for _, k := range keys {
-		f := s.forces[k]
-		if img := imgs.Get(f.slot.Master); img != nil {
-			ecat.WriteBits(img.In, f.slot.Byte, f.slot.Bit, f.slot.BitLen, f.bits)
-		}
-	}
 }
 
 // readEntry is one stc_sim_read result; exactly one of Value and Error is set.
@@ -262,13 +250,13 @@ type writeResult struct {
 
 // Write sets path to value (a JSON-decoded bool, number, string, array or
 // object, coerced like the Phase 22 Runtime.Set). A TcLinkTo-bound input
-// is also forced in its input image, so the next scans keep the value
-// instead of the zero the terminal would deliver; everything else goes
-// through Runtime.Set only. Both are visible to the next Read.
+// is also forced on its process-image slot through the Plant, so the next
+// scans keep the value instead of the one the terminal model delivers;
+// everything else goes through Runtime.Set only. Both are visible to the
+// next Read.
 func (s *simSession) Write(path string, value any) (writeResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	slot, bound := s.inputSlot(path)
 	if err := s.rt.Set(path, value); err != nil {
 		return writeResult{}, fmt.Errorf("%s: %w", path, err)
 	}
@@ -277,47 +265,15 @@ func (s *simSession) Write(path string, value any) (writeResult, error) {
 		return writeResult{}, fmt.Errorf("%s: %w", path, err)
 	}
 	res := writeResult{Path: path, Route: "runtime_set", Value: s.rt.ToJSON(v)}
-	if bound {
-		bits, err := rawBits(v, slot.BitLen)
-		if err != nil {
-			return writeResult{}, fmt.Errorf("%s: %w", path, err)
+	if b := s.plant.IOBinder(); b != nil {
+		if _, bound := b.InputBinding(path); bound {
+			if err := s.plant.Apply(scenario.Action{Kind: scenario.ActSet, Path: path, Value: res.Value}); err != nil {
+				return writeResult{}, fmt.Errorf("%s: %w", path, err)
+			}
+			res.Route = "input_force"
 		}
-		s.forces[strings.ToUpper(path)] = force{slot: slot, bits: bits}
-		res.Route = "input_force"
 	}
 	return res, nil
-}
-
-// inputSlot returns the input slot path is linked to, if any.
-func (s *simSession) inputSlot(path string) (ecat.Slot, bool) {
-	if s.ecat == nil {
-		return ecat.Slot{}, false
-	}
-	for _, b := range s.ecat.Bindings {
-		if b.Slot.Dir == ecat.DirIn && strings.EqualFold(b.Var.Path, path) {
-			return b.Slot, true
-		}
-	}
-	return ecat.Slot{}, false
-}
-
-// rawBits encodes an elementary value as the bits of a bitLen-wide slot.
-func rawBits(v interp.Value, bitLen int) (uint64, error) {
-	switch v.Kind {
-	case interp.ValBool:
-		if v.Bool {
-			return 1, nil
-		}
-		return 0, nil
-	case interp.ValInt:
-		return uint64(v.Int), nil
-	case interp.ValReal:
-		if bitLen == 32 {
-			return uint64(math.Float32bits(float32(v.Real))), nil
-		}
-		return math.Float64bits(v.Real), nil
-	}
-	return 0, fmt.Errorf("cannot force a linked input of this type (only BOOL, integers and reals)")
 }
 
 // browseNode is one stc_opcua_browse result node.

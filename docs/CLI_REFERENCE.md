@@ -637,7 +637,7 @@ stc-mcp --project cmd/stc-mcp/testdata/live --io "tests/ecat_fixtures/Demo Devic
 | `--project` | Project to simulate: `.tsproj`, `.plcproj`, a `.st` file or a directory of `.st` files |
 | `--io` | EtherCATConfig export attached to the TcLinkTo links; repeatable, globs allowed |
 | `--opcua` | Also serve the session over OPC UA on host:port; it shares the session runtime |
-| `--scenario` | Reserved; returns an error until Phase 27 lands |
+| `--scenario` | Scenario TOML file (see [EtherCAT Simulation, Scenarios](ETHERCAT_SIMULATION.md#scenarios)); its steps fire as `stc_sim_step` advances the scan, and each step result lists the expects that failed in `scenario_failures` |
 
 The project loads on the first sim tool call. Without `--project` the sim
 tools return an error result that names the missing flag.
@@ -646,7 +646,7 @@ tools return an error result that names the missing flag.
 |------|-----------|--------|
 | `stc_sim_step` | `cycles` (1 to 1 000 000) | Runs that many ticks after applying pending OPC UA writes; returns total cycles and sim time |
 | `stc_sim_read` | `paths` | Values as JSON; an unknown path gets its own error entry |
-| `stc_sim_write` | `path`, `value` | Sets a variable; a TcLinkTo-bound input is forced in the input image; CONSTANT and unknown paths are rejected |
+| `stc_sim_write` | `path`, `value` | Sets a variable; a TcLinkTo-bound input is forced on its process-image slot, as a scenario `set` is; CONSTANT and unknown paths are rejected |
 | `stc_opcua_browse` | `node`, `depth` (default 2, max 10), `endpoint` | Browses the session's address space, or a remote server read-only |
 
 The analysis tools (`stc_parse`, `stc_check`, `stc_test`, `stc_emit`,

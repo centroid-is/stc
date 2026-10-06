@@ -40,7 +40,7 @@ func parseFlags(args []string, errOut io.Writer) (simConfig, error) {
 	var io stringList
 	fs.StringVar(&cfg.Project, "project", "", "Project to simulate: .tsproj/.plcproj, a .st file or a directory of .st files")
 	fs.Var(&io, "io", "EtherCATConfig export (Device N.xml) attached to the project's TcLinkTo links (repeatable, globs allowed)")
-	fs.StringVar(&cfg.Scenario, "scenario", "", "Scenario file (reserved; needs the Phase 27 scenario package)")
+	fs.StringVar(&cfg.Scenario, "scenario", "", "Scenario TOML file whose steps fire as stc_sim_step advances the scan")
 	fs.StringVar(&cfg.OPCUA, "opcua", "", "Serve the simulation over OPC UA on host:port (empty = no server)")
 	if err := fs.Parse(args); err != nil {
 		return simConfig{}, err

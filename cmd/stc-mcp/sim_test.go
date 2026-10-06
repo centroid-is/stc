@@ -2,13 +2,12 @@ package main
 
 import (
 	"bytes"
-	"math"
 	"net"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 
-	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -227,26 +226,6 @@ func TestSimSessionHost(t *testing.T) {
 	require.NoError(t, h.close())
 }
 
-func TestSimSessionRawBits(t *testing.T) {
-	for _, tc := range []struct {
-		v      interp.Value
-		bitLen int
-		want   uint64
-	}{
-		{interp.Value{Kind: interp.ValBool, Bool: true}, 1, 1},
-		{interp.Value{Kind: interp.ValBool}, 1, 0},
-		{interp.Value{Kind: interp.ValInt, Int: -1}, 16, math.MaxUint64},
-		{interp.Value{Kind: interp.ValReal, Real: 1.5}, 32, uint64(math.Float32bits(1.5))},
-		{interp.Value{Kind: interp.ValReal, Real: 1.5}, 64, math.Float64bits(1.5)},
-	} {
-		got, err := rawBits(tc.v, tc.bitLen)
-		require.NoError(t, err)
-		assert.Equal(t, tc.want, got)
-	}
-	_, err := rawBits(interp.Value{Kind: interp.ValString}, 8)
-	assert.Error(t, err)
-}
-
 func TestParseFlags(t *testing.T) {
 	var errb bytes.Buffer
 	cfg, err := parseFlags([]string{"--project", liveFixture, "--io", filepath.Join("..", "..", "tests", "ecat_fixtures", "Demo Device *.xml"), "--opcua", ":4841"}, &errb)
@@ -272,4 +251,67 @@ func TestParseFlags(t *testing.T) {
 	var l stringList
 	require.NoError(t, l.Set("x, ,y"))
 	assert.Equal(t, "x,y", l.String())
+}
+
+func writeScenario(t *testing.T, src string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "s.toml")
+	require.NoError(t, os.WriteFile(p, []byte(src), 0o644))
+	return p
+}
+
+// TestSimSessionScenario drives a --scenario through stc_sim_step: a step
+// forces a linked input through the Plant, a failed expect is reported by
+// the step that evaluated it, and an expect still pending when the
+// scenario's length is reached is reported once, when the run ends.
+func TestSimSessionScenario(t *testing.T) {
+	cfg := liveConfig()
+	cfg.Scenario = writeScenario(t, `
+[scenario]
+cycles = 20
+[[step]]
+cycle = 2
+set = { path = "GVL_Live.xSensor", value = true }
+expect = { path = "GVL_Live.conveyor.HMI.p_stat_Sensor", value = true, within = 2 }
+[[step]]
+cycle = 5
+expect = { path = "GVL_Live.xSensor", value = false }
+[[step]]
+cycle = 8
+expect = { path = "GVL_Live.nRunCycles", value = -1, within = 1000 }
+`)
+	s := newLive(t, cfg)
+	r, err := s.Step(4)
+	require.NoError(t, err)
+	assert.Empty(t, r.ScenarioFailures)
+	assert.Equal(t, []any{true, true}, values(s.Read([]string{pSensor, pSensorH})))
+
+	r, err = s.Step(2)
+	require.NoError(t, err)
+	require.Len(t, r.ScenarioFailures, 1)
+	assert.Contains(t, r.ScenarioFailures[0], "step 2: GVL_Live.xSensor: expected false, got true")
+
+	r, err = s.Step(14)
+	require.NoError(t, err)
+	require.Len(t, r.ScenarioFailures, 1)
+	assert.Contains(t, r.ScenarioFailures[0], "step 3: GVL_Live.nRunCycles: run ended at cycle 20")
+
+	// After its length the scenario no longer fires or reports.
+	r, err = s.Step(5)
+	require.NoError(t, err)
+	assert.Empty(t, r.ScenarioFailures)
+	assert.Equal(t, []any{true}, values(s.Read([]string{pSensor})), "the Plant force stays")
+}
+
+func TestSimSessionScenarioInvalid(t *testing.T) {
+	cfg := liveConfig()
+	cfg.Scenario = writeScenario(t, "[[step]]\ncycle = 0\nset = { path = \"GVL_Live.nope\", value = 1 }\n")
+	_, err := newSimSession(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "scenario validation failed")
+	assert.Contains(t, err.Error(), "unknown path")
+
+	cfg.Scenario = writeScenario(t, "[[step]]\nbogus = 1\n")
+	_, err = newSimSession(cfg)
+	assert.ErrorContains(t, err, `unknown key "bogus"`)
 }
