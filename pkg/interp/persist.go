@@ -160,8 +160,9 @@ func (r *Runtime) fbChain(inst *FBInstance) []*ast.FunctionBlockDecl {
 }
 
 // SaveState writes every PersistPaths value to path as a version 1 state
-// file. It writes path+".tmp" in the same directory and renames it over
-// path, so a crash never leaves a truncated state file. TIME values are
+// file. It writes a temp file unique to the call in the same directory and
+// renames it over path, so a crash never leaves a truncated state file; an
+// existing file's permission bits are kept (a new file gets 0644). TIME values are
 // stored as decimal milliseconds with nanosecond precision; everything else
 // uses the ToJSON form, which Runtime.Set reads back.
 func (p *Project) SaveState(path string) error {
@@ -190,9 +191,14 @@ func (p *Project) SaveState(path string) error {
 // writeAtomic replaces path with data: it writes and syncs a temp file
 // unique to this call in the same directory (so concurrent savers never
 // share one), renames it over path, then syncs the directory so the rename
-// survives a power loss. The temp file is removed on failure.
+// survives a power loss. The temp file is removed on failure. path keeps
+// its permission bits; a new file gets 0644.
 func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
 	f, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
@@ -206,7 +212,7 @@ func writeAtomic(path string, data []byte) error {
 		err = cerr
 	}
 	if err == nil {
-		err = os.Chmod(tmp, 0o644)
+		err = os.Chmod(tmp, mode)
 	}
 	if err == nil {
 		err = os.Rename(tmp, path)

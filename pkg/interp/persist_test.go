@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -283,4 +284,27 @@ func TestPersistWalkerEdges(t *testing.T) {
 	assert.Empty(t, w.out)
 
 	assert.Equal(t, []any{}, p.rt.stateJSON(Value{Kind: ValArray, ArrayLow: 5, Array: []Value{{}}}, 0))
+}
+
+// SaveState keeps the mode of an existing state file, so a file the user
+// restricted to 0600 stays private; a new file gets 0644 (review 2 LO-08).
+func TestPersistSaveKeepsMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits")
+	}
+	p := persistProject(t)
+	dir := t.TempDir()
+	priv := filepath.Join(dir, "priv.json")
+	require.NoError(t, os.WriteFile(priv, []byte("{}"), 0o600))
+	require.NoError(t, os.Chmod(priv, 0o600))
+	require.NoError(t, p.SaveState(priv))
+	fi, err := os.Stat(priv)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+
+	fresh := filepath.Join(dir, "fresh.json")
+	require.NoError(t, p.SaveState(fresh))
+	fi, err = os.Stat(fresh)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm())
 }
