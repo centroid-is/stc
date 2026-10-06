@@ -450,13 +450,17 @@ func TestServeTwinCATProject(t *testing.T) {
 	require.NoError(t, s.wait(t))
 }
 
-// TestServeJSONScanStopped reports a runtime error as a JSON event and
-// keeps serving until --run-for expires.
+// TestServeJSONScanStopped reports a runtime error as a JSON event, keeps
+// serving until --run-for expires and then exits non-zero (review 2 ME-01).
 func TestServeJSONScanStopped(t *testing.T) {
 	div := filepath.Join(t.TempDir(), "div.st")
 	require.NoError(t, os.WriteFile(div, []byte("PROGRAM MAIN\nVAR\n\tz : INT;\n\tq : INT;\nEND_VAR\nq := 1 / z;\nEND_PROGRAM\n"), 0o644))
+	start := time.Now()
 	s := startServe(t, true, div, "--opcua", freeServeAddr(t), "--run-for", "500ms")
-	require.NoError(t, s.wait(t))
+	err := s.wait(t)
+	require.Error(t, err, "a dead scan must exit non-zero")
+	assert.GreaterOrEqual(t, time.Since(start), 500*time.Millisecond, "served until --run-for")
+	assert.Contains(t, s.stderr.String(), "serve: ")
 	var ev map[string]string
 	line, _, _ := strings.Cut(s.stderr.String(), "\n")
 	require.NoError(t, json.Unmarshal([]byte(line), &ev), s.stderr.String())

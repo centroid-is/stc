@@ -158,17 +158,18 @@ func runServe(cmd *cobra.Command, args []string) error {
 		ctx, cancel = context.WithTimeout(ctx, duration)
 		defer cancel()
 	}
-	runErr := runProjectServe(ctx, r, duration, realtime)
+	scanErr, saveErr := runProjectServe(ctx, r, duration, realtime)
+	runErr := errors.Join(scanErr, saveErr)
 	if sc != nil {
 		sc.report(errOut, format, runErr)
 	}
-	if runErr != nil {
-		if srv == nil {
-			return fmt.Errorf("serve: %w", runErr)
-		}
+	if runErr != nil && srv == nil {
+		return fmt.Errorf("serve: %w", runErr)
+	}
+	if scanErr != nil {
 		// Writes would never be applied: refuse them from now on.
-		src.Stop(runErr)
-		reportServe(errOut, format, "scan_stopped", runErr)
+		src.Stop(scanErr)
+		reportServe(errOut, format, "scan_stopped", scanErr)
 		<-ctx.Done() // keep serving the last image
 	}
 	st, err := r.status(nil)
@@ -182,7 +183,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintf(errOut, "scan: %d cycles, %d overruns\n", cycles, overruns)
 	}
-	return writeProjectStatus(out, errOut, format, st, nil)
+	if err := writeProjectStatus(out, errOut, format, st, nil); err != nil {
+		return err
+	}
+	if runErr != nil {
+		// The scan died or the final save failed: served the last values
+		// until shutdown, but the exit status reports the failure.
+		return fmt.Errorf("serve: %w", runErr)
+	}
+	return nil
 }
 
 // startOPCUA builds the TF6100 address space of r's analysed project over
@@ -307,10 +316,10 @@ func reportServe(errOut io.Writer, format, event string, err error) {
 // wall time (0: until ctx is done), with --persist saved periodically and on
 // stop. realtime pins the loop to one OS thread. A stop by ctx is not an
 // error; a Tick or state file error is.
-func runProjectServe(ctx context.Context, r *projectRunner, duration time.Duration, realtime bool) error {
+func runProjectServe(ctx context.Context, r *projectRunner, duration time.Duration, realtime bool) (scanErr, saveErr error) {
 	if realtime {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}
-	return r.runFree(ctx, duration, nil)
+	return r.runFreeSplit(ctx, duration, nil)
 }

@@ -194,6 +194,13 @@ func (r *projectRunner) ticks(n int) error {
 // cancelled ctx is a normal stop. Save errors are added to Warnings while
 // running and returned at the end.
 func (r *projectRunner) runFree(ctx context.Context, duration time.Duration, clock interp.WallClock) error {
+	scanErr, saveErr := r.runFreeSplit(ctx, duration, clock)
+	return errors.Join(scanErr, saveErr)
+}
+
+// runFreeSplit is runFree with the scan error and the final --persist save
+// error returned apart, so a failed save is not mistaken for a dead scan.
+func (r *projectRunner) runFreeSplit(ctx context.Context, duration time.Duration, clock interp.WallClock) (scanErr, saveErr error) {
 	if clock == nil {
 		clock = interp.NewWallClock()
 	}
@@ -219,7 +226,7 @@ func (r *projectRunner) runFree(ctx context.Context, duration time.Duration, clo
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		err = nil
 	}
-	return errors.Join(err, r.save())
+	return err, r.save()
 }
 
 // save writes --persist when it is set.

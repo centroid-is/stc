@@ -60,7 +60,8 @@ Analysis errors stop serve before the server starts; undeclared library
 types and members are tolerated as warnings and run as zero-output
 auto-stubs. A runtime error stops the scan; the address space keeps
 serving the last values until SIGINT/SIGTERM or `--duration`, and the
-error is printed (`error: scan stopped: ...`).
+error is printed (`error: scan stopped: ...`). serve then exits with a
+non-zero status, so CI jobs and supervisors see the dead scan.
 
 ## Live writes and subscriptions
 
