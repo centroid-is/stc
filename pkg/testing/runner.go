@@ -110,6 +110,8 @@ type externalContext struct {
 	typeDecls map[string]ast.TypeSpec
 	// typeAttrs maps uppercase TYPE names to their declaration attributes
 	typeAttrs map[string][]*ast.Attribute
+	// typeInits maps uppercase TYPE names to the TYPE's own default
+	typeInits map[string]ast.Expr
 	// funcDecls maps uppercase FUNCTION names to their declarations
 	funcDecls map[string]*ast.FunctionDecl
 }
@@ -121,6 +123,7 @@ func buildExternalContext(opts RunOpts) *externalContext {
 		mockFBs:    make(map[string]*ast.FunctionBlockDecl),
 		typeDecls:  make(map[string]ast.TypeSpec),
 		typeAttrs:  make(map[string][]*ast.Attribute),
+		typeInits:  make(map[string]ast.Expr),
 		funcDecls:  make(map[string]*ast.FunctionDecl),
 	}
 
@@ -143,6 +146,9 @@ func buildExternalContext(opts RunOpts) *externalContext {
 				if d.Name != nil {
 					ext.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
 					ext.typeAttrs[strings.ToUpper(d.Name.Name)] = d.Attributes
+					if d.InitValue != nil {
+						ext.typeInits[strings.ToUpper(d.Name.Name)] = d.InitValue
+					}
 				}
 			case *ast.FunctionDecl:
 				if d.Name != nil {
@@ -163,6 +169,9 @@ type fileContext struct {
 	// typeAttrs maps upper-case type names to the attributes on their TYPE
 	// declaration ({attribute 'to_string'} and friends).
 	typeAttrs map[string][]*ast.Attribute
+	// typeInits maps upper-case type names to the TYPE's own default
+	// (TYPE T : INT := 5; END_TYPE).
+	typeInits map[string]ast.Expr
 	// fbDecls maps upper-case FB names to their FunctionBlockDecl.
 	fbDecls map[string]*ast.FunctionBlockDecl
 	// funcDecls maps upper-case function names to their FunctionDecl.
@@ -198,6 +207,7 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 	ctx := &fileContext{
 		typeDecls:  make(map[string]ast.TypeSpec),
 		typeAttrs:  make(map[string][]*ast.Attribute),
+		typeInits:  make(map[string]ast.Expr),
 		fbDecls:    make(map[string]*ast.FunctionBlockDecl),
 		funcDecls:  make(map[string]*ast.FunctionDecl),
 		ifaceDecls: make(map[string]*ast.InterfaceDecl),
@@ -212,6 +222,9 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 			if d.Name != nil {
 				ctx.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
 				ctx.typeAttrs[strings.ToUpper(d.Name.Name)] = d.Attributes
+				if d.InitValue != nil {
+					ctx.typeInits[strings.ToUpper(d.Name.Name)] = d.InitValue
+				}
 			}
 		case *ast.FunctionBlockDecl:
 			if d.Name != nil {
@@ -238,6 +251,9 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 			if _, exists := ctx.typeDecls[name]; !exists {
 				ctx.typeDecls[name] = spec
 				ctx.typeAttrs[name] = extCtx.typeAttrs[name]
+				if init, ok := extCtx.typeInits[name]; ok {
+					ctx.typeInits[name] = init
+				}
 			}
 		}
 		// FUNCTION declarations likewise
@@ -315,9 +331,7 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	// FB declarations are registered above, so GVL members of user types and
 	// FB types are built correctly.
 	if ctx != nil {
-		for _, g := range ctx.gvlDecls {
-			interpreter.RegisterGVL(g)
-		}
+		interpreter.RegisterGVLs(ctx.gvlDecls)
 	}
 
 	// Create isolated environment; non qualified_only GVLs are its ancestors
@@ -327,7 +341,7 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	// Initialize variables from VarBlocks; inline VAR enums first so their
 	// values resolve in initialisers and the body.
 	interpreter.RegisterInlineEnums(tc.Name, tc.VarBlocks)
-	initializeTestEnv(interpreter, env, tc.VarBlocks, ctx)
+	initializeTestEnv(interpreter, env, tc.VarBlocks)
 
 	// Execute test body
 	var runtimeErr string
@@ -373,96 +387,19 @@ func registerUserFunctions(interpreter *interp.Interpreter, ctx *fileContext) {
 	}
 }
 
-// initializeTestEnv populates the environment from VarBlocks, following the
-// same pattern as ScanCycleEngine.initializeEnv for FB and variable creation.
-func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBlocks []*ast.VarBlock, ctx *fileContext) {
+// initializeTestEnv populates the environment from VarBlocks through the
+// interpreter's shared instantiation path, exactly like program variables:
+// stdlib and user FBs (with their EXTENDS chain) become live instances, other
+// variables get their TYPE default and initialiser. Subrange variables also
+// register their bounds.
+func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBlocks []*ast.VarBlock) {
 	for _, vb := range varBlocks {
 		for _, vd := range vb.Declarations {
-			typeName := typeNameFromSpec(vd.Type)
-			upperTypeName := strings.ToUpper(typeName)
-
-			// Check if the type is a stdlib FB
-			if factory, ok := interp.StdlibFBFactory[upperTypeName]; ok {
+			interpreter.InstantiateVar(env, vd)
+			if srt, ok := vd.Type.(*ast.SubrangeType); ok {
+				low := evalConstInt(srt.Low)
+				high := evalConstInt(srt.High)
 				for _, n := range vd.Names {
-					fb := factory()
-					val := interp.MakeFBInstanceValue(typeName, fb)
-					env.Define(n.Name, val)
-				}
-				continue
-			}
-
-			// Check if the type is a user-defined FB from the file context
-			if ctx != nil {
-				if fbDecl, ok := ctx.fbDecls[upperTypeName]; ok {
-					for _, n := range vd.Names {
-						inst := interp.NewUserFBInstance(typeName, fbDecl, interpreter, env)
-						// Wire up parent FB declaration for EXTENDS chain
-						if fbDecl.Extends != nil {
-							parentName := strings.ToUpper(fbDecl.Extends.Name)
-							if parentDecl, ok2 := ctx.fbDecls[parentName]; ok2 {
-								inst.ParentDecl = parentDecl
-								// Initialize parent variables in the instance env
-								for _, pvb := range parentDecl.VarBlocks {
-									for _, pvd := range pvb.Declarations {
-										pval := interp.ZeroFromTypeSpec(pvd.Type)
-										if pvd.InitValue != nil {
-											if iv, err := interpreter.EvalExpr(inst.Env, pvd.InitValue); err == nil {
-												pval = iv
-											}
-										}
-										for _, pn := range pvd.Names {
-											if _, exists := inst.Env.Get(pn.Name); !exists {
-												inst.Env.Define(pn.Name, pval)
-											}
-										}
-									}
-								}
-							}
-						}
-						val := interp.Value{Kind: interp.ValFBInstance, FBRef: inst}
-						env.Define(n.Name, val)
-					}
-					continue
-				}
-			}
-
-			// Check if the type is a user-defined TYPE (struct, enum, etc.)
-			if ctx != nil {
-				if typeSpec, ok := ctx.typeDecls[upperTypeName]; ok {
-					val := interp.ZeroFromTypeSpecWith(typeSpec, interpreter.TypeResolverFunc())
-					if vd.InitValue != nil {
-						if iv, err := interpreter.EvalExpr(env, vd.InitValue); err == nil {
-							val = iv
-						}
-					}
-					// An enum variable's value carries the enum tag, so
-					// later stores into it keep the tag (TO_STRING).
-					if _, isEnum := typeSpec.(*ast.EnumType); isEnum && val.Kind == interp.ValInt {
-						val.Enum = upperTypeName
-					}
-					for _, n := range vd.Names {
-						env.Define(n.Name, val)
-					}
-					continue
-				}
-			}
-
-			// Resolve zero value from the type spec
-			val := interp.ZeroFromTypeSpecWith(vd.Type, interpreter.TypeResolverFunc())
-
-			// Evaluate init value if present
-			if vd.InitValue != nil {
-				if iv, err := interpreter.EvalExpr(env, vd.InitValue); err == nil {
-					val = iv
-				}
-			}
-
-			for _, n := range vd.Names {
-				env.Define(n.Name, val)
-				// Register subrange constraints if applicable
-				if srt, ok := vd.Type.(*ast.SubrangeType); ok {
-					low := evalConstInt(srt.Low)
-					high := evalConstInt(srt.High)
 					env.DefineSubrange(n.Name, int64(low), int64(high))
 				}
 			}
@@ -535,6 +472,13 @@ func registerTypeDecls(interpreter *interp.Interpreter, ctx *fileContext) {
 			decls[name] = ts
 		}
 		interpreter.TypeDecls = decls
+	}
+	if len(ctx.typeInits) > 0 {
+		inits := make(map[string]ast.Expr, len(ctx.typeInits))
+		for name, init := range ctx.typeInits {
+			inits[name] = init
+		}
+		interpreter.TypeInits = inits
 	}
 	if len(ctx.fbDecls) > 0 {
 		fbs := make(map[string]*ast.FunctionBlockDecl, len(ctx.fbDecls))
@@ -611,10 +555,3 @@ func registerIOFunctions(interpreter *interp.Interpreter, ioTable *iomap.IOTable
 	})
 }
 
-// typeNameFromSpec extracts the type name string from an AST TypeSpec.
-func typeNameFromSpec(ts ast.TypeSpec) string {
-	if nt, ok := ts.(*ast.NamedType); ok && nt.Name != nil {
-		return nt.Name.Name
-	}
-	return ""
-}

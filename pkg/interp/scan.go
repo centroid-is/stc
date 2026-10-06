@@ -187,14 +187,12 @@ func (e *ScanCycleEngine) Initialize() {
 	}
 }
 
-// SetGlobals registers gvls on the engine's interpreter, in declaration
-// order, so the program can use GVL.x and, for GVLs without qualified_only,
-// bare x. Call it before the first Tick or Initialize: the program env picks
+// SetGlobals registers gvls on the engine's interpreter with RegisterGVLs,
+// in declaration order, so the program can use GVL.x and, for GVLs without
+// qualified_only, bare x. Call it before the first Tick or Initialize: the program env picks
 // up the GVL chain as its parent when it is created.
 func (e *ScanCycleEngine) SetGlobals(gvls []*ast.GVLDecl) {
-	for _, g := range gvls {
-		e.interp.RegisterGVL(g)
-	}
+	e.interp.RegisterGVLs(gvls)
 }
 
 // initVarDecl defines every name of vd in env through instantiateVar.

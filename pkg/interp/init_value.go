@@ -303,6 +303,13 @@ func fbVarDecl(decl *ast.FunctionBlockDecl, interp *Interpreter, name string) *a
 	return found
 }
 
+// InstantiateVar defines every name of vd in env through the shared
+// instantiation path; user FB instances get env as parent. The test runner
+// uses it for TEST_CASE variables.
+func (interp *Interpreter) InstantiateVar(env *Env, vd *ast.VarDecl) {
+	interp.instantiateVar(env, env, vd, 0)
+}
+
 // instantiateVar defines every name of vd in env. It is the one
 // instantiation path for program, GVL and FB variables (and so for the
 // variables inherited through EXTENDS):
