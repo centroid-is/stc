@@ -1,12 +1,15 @@
 package interp
 
 import (
+	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/parser"
+	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,6 +80,7 @@ VAR
 	d : TIME := T#5s;
 END_VAR
 seen := GVL.shared;
+r REF= seen;
 t(IN := TRUE, PT := T#20ms);
 END_PROGRAM
 `
@@ -182,5 +186,131 @@ func TestRuntimeTick(t *testing.T) {
 		err = rt.Tick(time.Millisecond)
 		require.Error(t, err)
 		assert.True(t, strings.Contains(err.Error(), "P"))
+	})
+}
+
+func mustGet(t *testing.T, rt *Runtime, path string) Value {
+	t.Helper()
+	v, err := rt.Get(path)
+	require.NoError(t, err, path)
+	return v
+}
+
+func TestRuntimeGet(t *testing.T) {
+	rt := newRT(t)
+	// Cycle 0: initial values are visible before any Tick.
+	assert.Equal(t, int64(10), mustGet(t, rt, "pa.LIMIT").Int)
+	assert.Equal(t, int64(2), mustGet(t, rt, "GVL.arr[2].x").Int)
+	assert.Equal(t, int64(3), mustGet(t, rt, "gvl.ARR[3].X").Int)
+	assert.Equal(t, "hi", mustGet(t, rt, "PB.s").Str)
+	_, err := rt.Get("PB.r")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unbound reference")
+
+	require.NoError(t, rt.Tick(10*time.Millisecond))
+	assert.Equal(t, int64(4), mustGet(t, rt, "GVL.shared").Int)
+	assert.Equal(t, int64(1), mustGet(t, rt, "GVL.fb.n").Int, "FB hop")
+	assert.Equal(t, int64(7), mustGet(t, rt, "GVL.fb.pt.x").Int, "struct inside FB")
+	assert.Equal(t, int64(4), mustGet(t, rt, "PB.r").Int, "reference reads through")
+	assert.Equal(t, 20*time.Millisecond, mustGet(t, rt, "PB.t.PT").Time, "stdlib input")
+	assert.Equal(t, 10*time.Millisecond, mustGet(t, rt, "PB.t.ET").Time, "stdlib output")
+	assert.False(t, mustGet(t, rt, "PB.t.Q").Bool)
+	// w = 16#9: bits 0 and 3 set.
+	assert.True(t, mustGet(t, rt, "GVL.w.3").Bool)
+	assert.False(t, mustGet(t, rt, "GVL.w.1").Bool)
+	assert.Equal(t, types.KindBOOL, mustGet(t, rt, "GVL.w.0").IECType)
+
+	errCases := map[string]string{
+		"":                        "empty path",
+		"Nope.x":                  "unknown root",
+		"GVL":                     "names a root",
+		"GVL.missing":             "unknown variable",
+		"GVL.arr[0]":              "out of range",
+		"GVL.arr[4]":              "out of range",
+		"GVL.arr[1,2]":            "multi-dimensional",
+		"GVL.arr[1].nope":         "no member",
+		"GVL.shared[1]":           "not an array",
+		"GVL.shared.x":            "no member",
+		"GVL.w.16":                "bit 16 out of range",
+		"GVL.w.1.2":               "bit access must be last",
+		"PB.s.0":                  "bit access",
+		"PB.t.Nope":               "no member",
+		"PB.t.Q.x":                "no member",
+		"PB.p.x":                  "pointer",
+		"GVL.fb.zz":               "no member",
+		"3abc":                    "identifier",
+		"GVL..x":                  "expected identifier",
+		"GVL.arr[x]":              "invalid array index",
+		"GVL.arr[1":               "expected ']'",
+		"GVL.arr$":                "unexpected character",
+		"GVL.w.99999999999999999": "invalid bit",
+		"GVL." + strings.Repeat("a", 1100): "longer than",
+	}
+	for path, want := range errCases {
+		_, err := rt.Get(path)
+		if assert.Error(t, err, path) {
+			assert.Contains(t, err.Error(), want, path)
+		}
+	}
+}
+
+func marshal(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return string(b)
+}
+
+func TestToJSON(t *testing.T) {
+	rt := newRT(t)
+	require.NoError(t, rt.Tick(10*time.Millisecond))
+	j := func(path string) string { return marshal(t, rt.ToJSON(mustGet(t, rt, path))) }
+	assert.Equal(t, `{"x":2,"y":0,"State":"Idle"}`, j("GVL.arr[2]"))
+	assert.Equal(t, `[{"x":1,"y":0,"State":"Idle"},{"x":2,"y":0,"State":"Idle"},{"x":3,"y":0,"State":"Idle"}]`, j("GVL.arr"))
+	assert.Equal(t, `{"enable":true,"n":1,"pt":{"x":7,"y":0,"State":"Idle"}}`, j("GVL.fb"))
+	assert.Equal(t, `{"IN":true,"PT":{"ms":20,"iso":"PT0.02S"},"Q":false,"ET":{"ms":10,"iso":"PT0.01S"}}`, j("PB.t"))
+	assert.Equal(t, `{"ms":5000,"iso":"PT5S"}`, j("PB.d"))
+	assert.Equal(t, `"hi"`, j("PB.s"))
+	assert.Equal(t, `true`, j("GVL.w.3"))
+	assert.Equal(t, `9`, j("GVL.w"))
+
+	cases := []struct {
+		v    Value
+		want string
+	}{
+		{Value{Kind: ValInt, Int: -1, IECType: types.KindULINT}, `18446744073709551615`},
+		{Value{Kind: ValInt, Int: 99, IECType: types.KindINT, Enum: "E_STATE"}, `99`},
+		{Value{Kind: ValInt, Int: 5, IECType: types.KindINT, Enum: "E_STATE"}, `"Run"`},
+		{RealValue(math.NaN()), `"NaN"`},
+		{RealValue(math.Inf(1)), `"+Inf"`},
+		{RealValue(math.Inf(-1)), `"-Inf"`},
+		{RealValue(1.5), `1.5`},
+		{TimeValue(0), `{"ms":0,"iso":"PT0S"}`},
+		{TimeValue(-(90*time.Minute + 1500*time.Millisecond)), `{"ms":-5401500,"iso":"-PT1H30M1.5S"}`},
+		{TimeValue(26 * time.Hour), `{"ms":93600000,"iso":"PT26H"}`},
+		{Value{Kind: ValDate, Time: 24 * time.Hour}, `"D#1970-01-02"`},
+		{Value{Kind: ValDateTime, Time: 24*time.Hour + 3*time.Second}, `"DT#1970-01-02-00:00:03"`},
+		{Value{Kind: ValTod, Time: 12*time.Hour + 5*time.Millisecond}, `"TOD#12:00:00.005"`},
+		{Value{Kind: ValStruct, Struct: map[string]Value{"B": IntValue(2), "A": IntValue(1)}}, `{"A":1,"B":2}`},
+		{Value{Kind: ValArray}, `[]`},
+		{Value{Kind: ValPointer, PtrVar: "X"}, `"PTR(X)"`},
+		{Value{Kind: ValFBInstance}, `null`},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, marshal(t, rt.ToJSON(c.v)), c.v.String())
+	}
+
+	t.Run("deterministic", func(t *testing.T) {
+		v := mustGet(t, rt, "GVL.arr")
+		first := marshal(t, rt.ToJSON(v))
+		for i := 0; i < 20; i++ {
+			assert.Equal(t, first, marshal(t, rt.ToJSON(v)))
+		}
+	})
+	t.Run("snapshot", func(t *testing.T) {
+		s := marshal(t, rt.Snapshot())
+		assert.True(t, strings.HasPrefix(s, `{"Lib":{"N":3},"GVL":{"shared":4,`), s)
+		assert.Contains(t, s, `"PA":{"k":2,"limit":10,"C":4}`)
+		assert.Equal(t, s, marshal(t, rt.Snapshot()))
 	})
 }
