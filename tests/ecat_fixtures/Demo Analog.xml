@@ -1,0 +1,838 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic stc test fixture: EtherCAT master with one EL3054 slave copied from a
+     TwinCAT EtherCATConfig export (Info, ProcessData and PreviousPort only) and a
+     second copy carrying the EL3064 product code (0x0bf83052) to stand in for EL3064. -->
+<EtherCATConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="EtherCATConfig.xsd" Version="1.3">
+	<Config>
+		<Master>
+			<Info>
+				<Name><![CDATA[Device 1 (EtherCAT)]]></Name>
+				<Destination>010105010000</Destination>
+			</Info>
+		</Master>
+		<Slave>
+			<Info>
+				<Name><![CDATA[DEMO.A2.00 (EK1100)]]></Name>
+				<PhysAddr>1001</PhysAddr>
+				<Physics>YK</Physics>
+				<VendorId>2</VendorId>
+				<ProductCode>72100946</ProductCode>
+				<RevisionNo>#x00100000</RevisionNo>
+			</Info>
+			<PreviousPort Selected="true">
+				<Port>B</Port>
+				<PhysAddr>0</PhysAddr>
+			</PreviousPort>
+		</Slave>
+		<Slave>
+			<Info>
+				<Name><![CDATA[DEMO.A2.01 (EL3054)]]></Name>
+				<PhysAddr>1002</PhysAddr>
+				<Physics>KK</Physics>
+				<VendorId>2</VendorId>
+				<ProductCode>200159314</ProductCode>
+				<RevisionNo>1441792</RevisionNo>
+			</Info>
+			<ProcessData>
+				<Recv Sm3="true">
+					<BitStart>3592</BitStart>
+					<BitLength>128</BitLength>
+				</Recv>
+				<Sm2>
+					<Type>Outputs</Type>
+					<StartAddress>4352</StartAddress>
+					<ControlByte>4</ControlByte>
+					<Enable>0</Enable>
+				</Sm2>
+				<Sm3>
+					<Type>Inputs</Type>
+					<DefaultSize>16</DefaultSize>
+					<StartAddress>4480</StartAddress>
+					<ControlByte>32</ControlByte>
+					<Enable>1</Enable>
+					<Pdo>6656</Pdo>
+					<Pdo>6658</Pdo>
+					<Pdo>6660</Pdo>
+					<Pdo>6662</Pdo>
+				</Sm3>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a00</Index>
+					<Name>AI Standard Channel 1</Name>
+					<Exclude>#x1a01</Exclude>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a01</Index>
+					<Name>AI Compact Channel 1</Name>
+					<Exclude>#x1a00</Exclude>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a02</Index>
+					<Name>AI Standard Channel 2</Name>
+					<Exclude>#x1a03</Exclude>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a03</Index>
+					<Name>AI Compact Channel 2</Name>
+					<Exclude>#x1a02</Exclude>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a04</Index>
+					<Name>AI Standard Channel 3</Name>
+					<Exclude>#x1a05</Exclude>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a05</Index>
+					<Name>AI Compact Channel 3</Name>
+					<Exclude>#x1a04</Exclude>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a06</Index>
+					<Name>AI Standard Channel 4</Name>
+					<Exclude>#x1a07</Exclude>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a07</Index>
+					<Name>AI Compact Channel 4</Name>
+					<Exclude>#x1a06</Exclude>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+			</ProcessData>
+			<PreviousPort Selected="true">
+				<Port>B</Port>
+				<PhysAddr>1001</PhysAddr>
+			</PreviousPort>
+		</Slave>
+		<Slave>
+			<Info>
+				<Name><![CDATA[DEMO.A2.02 (EL3064)]]></Name>
+				<PhysAddr>1003</PhysAddr>
+				<Physics>KK</Physics>
+				<VendorId>2</VendorId>
+				<ProductCode>200814674</ProductCode>
+				<RevisionNo>1441792</RevisionNo>
+			</Info>
+			<ProcessData>
+				<Recv Sm3="true">
+					<BitStart>3592</BitStart>
+					<BitLength>128</BitLength>
+				</Recv>
+				<Sm2>
+					<Type>Outputs</Type>
+					<StartAddress>4352</StartAddress>
+					<ControlByte>4</ControlByte>
+					<Enable>0</Enable>
+				</Sm2>
+				<Sm3>
+					<Type>Inputs</Type>
+					<DefaultSize>16</DefaultSize>
+					<StartAddress>4480</StartAddress>
+					<ControlByte>32</ControlByte>
+					<Enable>1</Enable>
+					<Pdo>6656</Pdo>
+					<Pdo>6658</Pdo>
+					<Pdo>6660</Pdo>
+					<Pdo>6662</Pdo>
+				</Sm3>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a00</Index>
+					<Name>AI Standard Channel 1</Name>
+					<Exclude>#x1a01</Exclude>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a01</Index>
+					<Name>AI Compact Channel 1</Name>
+					<Exclude>#x1a00</Exclude>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a02</Index>
+					<Name>AI Standard Channel 2</Name>
+					<Exclude>#x1a03</Exclude>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a03</Index>
+					<Name>AI Compact Channel 2</Name>
+					<Exclude>#x1a02</Exclude>
+					<Entry>
+						<Index>#x6010</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a04</Index>
+					<Name>AI Standard Channel 3</Name>
+					<Exclude>#x1a05</Exclude>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a05</Index>
+					<Name>AI Compact Channel 3</Name>
+					<Exclude>#x1a04</Exclude>
+					<Entry>
+						<Index>#x6020</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a06</Index>
+					<Name>AI Standard Channel 4</Name>
+					<Exclude>#x1a07</Exclude>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Underrange</Name>
+						<Comment>Underrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrange</Name>
+						<Comment>Overrange event active</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 1</Name>
+						<Comment>Bit0: Value smaller/equal Limit1
+Bit1: Value bigger/equal Limit1</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>2</BitLen>
+						<Name>Status__Limit 2</Name>
+						<Comment>Bit0: Value smaller/equal Limit2
+Bit1: Value bigger/equal Limit2</Comment>
+						<DataType>BIT2</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Error</Name>
+						<Comment>Bit set when Over- or Underrange</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>6</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO State</Name>
+						<Comment>TRUE when this TxPDO is not valid</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__TxPDO Toggle</Name>
+						<Comment>Bit toggles everytime when new value available</Comment>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a07</Index>
+					<Name>AI Compact Channel 4</Name>
+					<Exclude>#x1a06</Exclude>
+					<Entry>
+						<Index>#x6030</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Value</Name>
+						<DataType DScale="4-20">INT</DataType>
+					</Entry>
+				</TxPdo>
+			</ProcessData>
+			<PreviousPort Selected="true">
+				<Port>B</Port>
+				<PhysAddr>1002</PhysAddr>
+			</PreviousPort>
+		</Slave>
+	</Config>
+</EtherCATConfig>
