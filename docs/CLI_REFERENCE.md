@@ -450,6 +450,7 @@ Reads the tsproj (and `_Config/PLC/*.xti`), the plcproj and every TcPOU, TcGVL a
 | VEND025 | warning | tsproj and TcTTO cycle times disagree |
 | VEND026 | warning | More than one sibling library candidate |
 | VEND027 | error | A project or object file is not valid XML |
+| VEND028 | warning | A plcproj item path matches a file on disk only when case is ignored; the on-disk spelling is used |
 
 **Exit codes**: 0 on success, 1 on error.
 
@@ -570,11 +571,18 @@ OPC UA with the TwinCAT TF6100 address space. See [OPCUA.md](OPCUA.md).
 ```bash
 stc serve <project.tsproj|project.plcproj|file.st|dir ...> [--io Device1.xml ...] [--persist state.json]
           [--persist-interval 10s] [--cycle 10ms] [--realtime] [--duration 0 | --run-for 0]
-          [--opcua :4840] [--security none|basic256sha256] [--cert FILE --key FILE] [--pki-dir DIR] [-D SYM]
+          [--opcua :4840] [--security none|basic256sha256] [--allow-anonymous-write=true|false]
+          [--allow-anonymous] [--cert FILE --key FILE] [--pki-dir DIR] [-D SYM]
           [--scenario x.toml]
 ```
 
-Without `--opcua` no server is started. Overruns are counted per task. On
+Without `--opcua` no server is started. The listener binds only the host
+given in `--opcua`. An empty host, as in `:4840`, or `0.0.0.0` binds all
+interfaces, and stc then warns when anonymous clients can write.
+`--allow-anonymous-write=false` limits anonymous clients to browse, read
+and subscribe. `--security basic256sha256` requires a client certificate
+identity and accepts anonymous clients only with `--allow-anonymous`.
+See [OPCUA.md](OPCUA.md#security) for the limits of this model. Overruns are counted per task. On
 stop the final status (tasks, runs, overruns, `sim_time_ns`, diagnostics,
 warnings) is printed; `--format json` prints it as one object, preceded by
 the OPC UA start-up object when `--opcua` is given.
@@ -613,7 +621,7 @@ stc opcua snapshot opc.tcp://<plc>:4840 --out tests/opcua_golden/st301_real.json
 |------|---------|-------------|
 | `--out`, `-o` | stdout | Write the snapshot to this file |
 | `--root` | `ns=4;s=PLC1` | NodeId to browse from |
-| `--security` | `none` | `none` (SecurityPolicy None + Anonymous) or `basic256sha256` (SignAndEncrypt) |
+| `--security` | `none` | `none` (SecurityPolicy None + Anonymous) or `basic256sha256` (SignAndEncrypt; Anonymous, or the client certificate as user identity when the server refuses Anonymous) |
 | `--cert`, `--key` | generated | Client key pair for `basic256sha256` |
 | `--pki-dir` | user cache dir | Where a generated client certificate lives |
 | `--timeout` | `10s` | Deadline for connecting and browsing |

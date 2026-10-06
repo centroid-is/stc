@@ -228,6 +228,24 @@ type leafWrite struct {
 	val  any
 }
 
+// writeLeaves writes a decomposed struct value: as one atomic batch when
+// src is a BatchWriter, else leaf by leaf.
+func writeLeaves(src NodeSource, writes []leafWrite) error {
+	if bw, ok := src.(BatchWriter); ok {
+		ws := make([]PathWrite, len(writes))
+		for i, lw := range writes {
+			ws[i] = PathWrite{Path: lw.path, Value: lw.val}
+		}
+		return bw.WriteBatch(ws)
+	}
+	for _, lw := range writes {
+		if err := src.Write(lw.path, lw.val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // installStructHandlers serves a Variable of a structured DataType,
 // composed from (and decomposed into) its leaf member paths.
 func (s *Server) installStructHandlers(v *server.VariableNode, sp *Space, spec NodeSpec, d *structDT, src NodeSource) {
@@ -259,10 +277,8 @@ func (s *Server) installStructHandlers(v *server.VariableNode, sp *Space, spec N
 		if err := decomposeStruct(sp, path, d, rv, true, &writes); err != nil {
 			return ua.DataValue{}, statusFor(err)
 		}
-		for _, lw := range writes {
-			if err := src.Write(lw.path, lw.val); err != nil {
-				return ua.DataValue{}, statusFor(err)
-			}
+		if err := writeLeaves(src, writes); err != nil {
+			return ua.DataValue{}, statusFor(err)
 		}
 		return goodValue(w.Value.Value), ua.Good
 	})

@@ -211,7 +211,8 @@ func TestNewRejects(t *testing.T) {
 		want   string
 	}{
 		{"no policy", func(c *Config) { c.AllowNone = false; c.EnableBasic256Sha256 = false }, "no security policy enabled"},
-		{"no anonymous", func(c *Config) { c.AllowAnonymous = false }, "anonymous is the only identity this server supports"},
+		{"no anonymous with None", func(c *Config) { c.AllowAnonymous = false }, "anonymous can only be disabled"},
+		{"no anonymous, None and Basic256Sha256", func(c *Config) { c.AllowAnonymous = false; c.EnableBasic256Sha256 = true }, "anonymous can only be disabled"},
 		{"no port", func(c *Config) { c.Endpoint = "127.0.0.1" }, "endpoint"},
 		{"port zero", func(c *Config) { c.Endpoint = "127.0.0.1:0" }, "endpoint"},
 		{"bad port", func(c *Config) { c.Endpoint = "127.0.0.1:http" }, "endpoint"},
@@ -274,8 +275,8 @@ func TestStartStop(t *testing.T) {
 
 func TestStartPortInUse(t *testing.T) {
 	t.Parallel()
-	// Hold the port on all interfaces, as awcullen does.
-	ln, err := net.Listen("tcp", ":0")
+	// Hold the exact address the server binds.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,17 +13,21 @@ import (
 	"github.com/centroid-is/stc/pkg/types"
 )
 
-// MaxPending bounds the write queue between two scans. Writes beyond it
-// fail, so a flooding client cannot grow memory without limit.
+// MaxPending bounds the write queue between two scans: the number of
+// queued write requests, where a struct write counts once however many
+// leaves it has. Requests beyond it fail, so a flooding client cannot grow
+// memory without limit.
 const MaxPending = 4096
 
-// errQueueFull is returned by Write when MaxPending writes are queued.
+// errQueueFull is returned by Write when MaxPending requests are queued.
 var errQueueFull = errors.New("opcua: write queue full")
 
-// pendingWrite is one validated write waiting for the cycle boundary.
-type pendingWrite struct {
-	path string
-	val  any // already converted to a form Runtime.Set accepts
+// pendingBatch is one validated write request waiting for the cycle
+// boundary: a single variable, or every leaf of a struct write. It is
+// applied as one unit through Runtime.SetMany.
+type pendingBatch struct {
+	paths []string
+	vals  []any // already converted to forms Runtime.Set accepts
 }
 
 // RuntimeSource serves an interp.Runtime as an opcua.NodeSource. Reads take
@@ -33,10 +37,14 @@ type pendingWrite struct {
 type RuntimeSource struct {
 	rt      *interp.Runtime
 	mu      sync.Mutex
-	pending []pendingWrite
+	pending []pendingBatch
+	stopped error // set by Stop: later writes fail
 }
 
-var _ opcua.NodeSource = (*RuntimeSource)(nil)
+var (
+	_ opcua.NodeSource  = (*RuntimeSource)(nil)
+	_ opcua.BatchWriter = (*RuntimeSource)(nil)
+)
 
 // NewRuntimeSource wraps rt.
 func NewRuntimeSource(rt *interp.Runtime) *RuntimeSource {
@@ -72,41 +80,94 @@ func (s *RuntimeSource) Snapshot(paths []string) (map[string]any, error) {
 // Write validates v against the variable at path and queues it for the
 // next cycle boundary.
 func (s *RuntimeSource) Write(path string, v any) error {
-	cur, err := s.rt.GetMany([]string{path})
+	return s.WriteBatch([]opcua.PathWrite{{Path: path, Value: v}})
+}
+
+// WriteBatch validates every write against its variable and, only if all
+// pass, queues them as one request. ApplyPending applies the request
+// within one Runtime critical section before a Tick, so a scan never sees
+// part of it, and a rejected request queues nothing.
+func (s *RuntimeSource) WriteBatch(ws []opcua.PathWrite) error {
+	if err := s.stoppedErr(); err != nil {
+		return err
+	}
+	if len(ws) == 0 {
+		return nil
+	}
+	b := pendingBatch{paths: make([]string, len(ws)), vals: make([]any, len(ws))}
+	for i, w := range ws {
+		b.paths[i] = w.Path
+	}
+	cur, err := s.rt.GetMany(b.paths)
 	if err != nil {
 		return fmt.Errorf("%w: %v", opcua.ErrUnknownSymbol, err)
 	}
-	in := toSet(cur[0], v)
-	if err := s.rt.CheckSet(path, in); err != nil {
-		return classify(err)
+	for i, w := range ws {
+		b.vals[i] = toSet(cur[i], w.Value)
+		if err := s.rt.CheckSet(w.Path, b.vals[i]); err != nil {
+			return classify(err)
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopped != nil {
+		return s.notWritable()
+	}
 	if len(s.pending) >= MaxPending {
 		return errQueueFull
 	}
-	s.pending = append(s.pending, pendingWrite{path: path, val: in})
+	s.pending = append(s.pending, b)
 	return nil
 }
 
-// Pending returns the number of queued writes.
+// Stop marks the scan that drains the queue as stopped, for the reason
+// given: queued writes are dropped and every later write fails with
+// ErrNotWritable (BadNotWritable), so clients are not told Good for a
+// write that will never be applied. Reads keep serving the last image.
+func (s *RuntimeSource) Stop(reason error) {
+	if reason == nil {
+		reason = errors.New("stopped")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopped = reason
+	s.pending = nil
+}
+
+// stoppedErr is the error a write gets after Stop, else nil.
+func (s *RuntimeSource) stoppedErr() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped == nil {
+		return nil
+	}
+	return s.notWritable()
+}
+
+// notWritable wraps the stop reason; the caller holds s.mu.
+func (s *RuntimeSource) notWritable() error {
+	return fmt.Errorf("%w: the scan has stopped: %v", opcua.ErrNotWritable, s.stopped)
+}
+
+// Pending returns the number of queued write requests.
 func (s *RuntimeSource) Pending() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.pending)
 }
 
-// ApplyPending drains the queue through Runtime.Set in submission order.
-// Call it between Ticks. A write that became invalid since it was queued is
-// skipped and its error returned (joined) without stopping the others.
+// ApplyPending drains the queue in submission order, each request through
+// Runtime.SetMany. Call it between Ticks. A request that became invalid
+// since it was queued is skipped whole and its error returned (joined)
+// without stopping the others.
 func (s *RuntimeSource) ApplyPending() error {
 	s.mu.Lock()
 	q := s.pending
 	s.pending = nil
 	s.mu.Unlock()
 	var errs []error
-	for _, w := range q {
-		if err := s.rt.Set(w.path, w.val); err != nil {
+	for _, b := range q {
+		if err := s.rt.SetMany(b.paths, b.vals); err != nil {
 			errs = append(errs, err)
 		}
 	}

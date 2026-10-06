@@ -49,6 +49,12 @@ VAR_GLOBAL
 	vM  : ST_Mix;
 	vA  : AMSADDR;
 	vB  : BOOL;
+	a1  : ARRAY[1..8] OF BOOL;
+	a0  : ARRAY[0..7] OF BOOL;
+	w1  : ARRAY[1..2] OF INT;
+	wd1 : ARRAY[1..2] OF WORD;
+	wd0 : ARRAY[0..1] OF WORD;
+	s1  : ARRAY[1..2] OF ST_Inner;
 END_VAR
 `
 

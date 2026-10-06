@@ -181,7 +181,9 @@ func TestRuntimeSourceApplyErrorsAndQueueBound(t *testing.T) {
 	_, src := newSource(t)
 	// A write that turns invalid after queueing fails at apply time
 	// without stopping the others.
-	src.pending = append(src.pending, pendingWrite{path: "V.nope", val: 1}, pendingWrite{path: "V.i", val: 5})
+	src.pending = append(src.pending,
+		pendingBatch{paths: []string{"V.nope"}, vals: []any{1}},
+		pendingBatch{paths: []string{"V.i"}, vals: []any{5}})
 	err := src.ApplyPending()
 	require.Error(t, err)
 	got, rerr := src.Read("V.i")
@@ -231,4 +233,66 @@ func TestRuntimeSourceClassify(t *testing.T) {
 	} {
 		assert.True(t, errors.Is(classify(fmt.Errorf("%s", msg)), want), msg)
 	}
+}
+
+// TestRuntimeSourceWriteBatch is the HI-03 regression: a struct write is
+// validated whole, queued as one request and applied as one unit.
+func TestRuntimeSourceWriteBatch(t *testing.T) {
+	rt, src := newSource(t)
+	require.NoError(t, src.WriteBatch(nil))
+	assert.Zero(t, src.Pending())
+
+	// One bad leaf rejects the whole batch: nothing is queued.
+	err := src.WriteBatch([]opcua.PathWrite{{Path: "V.i", Value: int64(7)}, {Path: "V.b", Value: int64(3)}})
+	assert.ErrorIs(t, err, opcua.ErrTypeMismatch)
+	err = src.WriteBatch([]opcua.PathWrite{{Path: "V.i", Value: int64(7)}, {Path: "V.nope", Value: 1}})
+	assert.ErrorIs(t, err, opcua.ErrUnknownSymbol)
+	assert.Zero(t, src.Pending())
+
+	// A good batch is one request, applied before the next Tick.
+	require.NoError(t, src.WriteBatch([]opcua.PathWrite{{Path: "V.i", Value: int64(7)}, {Path: "V.u", Value: uint64(9)}, {Path: "V.st.a", Value: int64(4)}}))
+	assert.Equal(t, 1, src.Pending())
+	require.NoError(t, src.ApplyPending())
+	require.NoError(t, rt.Tick(10*time.Millisecond))
+	for p, want := range map[string]any{"V.i": int64(7), "V.u": uint64(9), "V.st.a": int64(4)} {
+		got, err := src.Read(p)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, p)
+	}
+
+	// A batch that turns invalid after queueing is skipped whole.
+	src.pending = append(src.pending, pendingBatch{paths: []string{"V.i", "V.nope"}, vals: []any{int64(1), 1}})
+	require.Error(t, src.ApplyPending())
+	got, err := src.Read("V.i")
+	require.NoError(t, err)
+	assert.Equal(t, int64(7), got, "no leaf of a rejected batch is applied")
+
+	// A struct with more leaves than MaxPending is still one request.
+	big := make([]opcua.PathWrite, MaxPending+10)
+	for i := range big {
+		big[i] = opcua.PathWrite{Path: "V.i", Value: int64(i % 100)}
+	}
+	require.NoError(t, src.WriteBatch(big))
+	assert.Equal(t, 1, src.Pending())
+	require.NoError(t, src.ApplyPending())
+}
+
+// TestRuntimeSourceStop is the ME-02 regression: once the scan has
+// stopped, writes fail with ErrNotWritable instead of queueing forever.
+func TestRuntimeSourceStop(t *testing.T) {
+	_, src := newSource(t)
+	require.NoError(t, src.Write("V.i", int64(5)))
+	src.Stop(errors.New("division by zero"))
+	assert.Zero(t, src.Pending(), "queued writes are dropped")
+	err := src.Write("V.i", int64(6))
+	assert.ErrorIs(t, err, opcua.ErrNotWritable)
+	assert.ErrorContains(t, err, "division by zero")
+	assert.ErrorIs(t, src.WriteBatch(nil), opcua.ErrNotWritable)
+	got, err := src.Read("V.i")
+	require.NoError(t, err)
+	assert.Equal(t, int64(-3), got, "reads keep serving")
+
+	_, src2 := newSource(t)
+	src2.Stop(nil)
+	assert.ErrorContains(t, src2.Write("V.i", int64(1)), "stopped")
 }

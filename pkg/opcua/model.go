@@ -68,6 +68,20 @@ type NodeSource interface {
 	Snapshot(paths []string) (map[string]any, error) // consistent multi-path read from one scan image
 }
 
+// PathWrite is one member of a multi-path write.
+type PathWrite struct {
+	Path  string
+	Value any
+}
+
+// BatchWriter is implemented by NodeSources that can write several paths
+// as one unit: all writes are validated first, and either all of them take
+// effect at the same cycle boundary or none does. The server uses it for
+// whole-struct writes; sources without it get one Write per leaf.
+type BatchWriter interface {
+	WriteBatch(ws []PathWrite) error
+}
+
 // Sentinel errors a NodeSource returns (wrapped) so the server can map them
 // to OPC UA status codes.
 var (

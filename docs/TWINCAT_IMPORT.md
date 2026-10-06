@@ -70,6 +70,7 @@ An attribute name in double quotes is ignored by TwinCAT, so stc warns about it.
 | VEND025 | warning | The `.tsproj` and `.TcTTO` cycle times disagree |
 | VEND026 | warning | More than one sibling library candidate; the first sorted path is used |
 | VEND027 | error | A project or object file is not valid XML |
+| VEND028 | warning | A plcproj item path matches a file on disk only when case is ignored; the on-disk spelling is used |
 
 ## Worked example
 

@@ -346,6 +346,9 @@ func structEligibleRec(st *types.StructType, open map[*types.StructType]bool) er
 			if _, err := arrayLen(a); err != nil {
 				return fmt.Errorf("%w: %s.%s: %v", ErrTypeMismatch, st.Name, m.Name, err)
 			}
+			if err := arrayServable(a); err != nil {
+				return fmt.Errorf("%w: %s.%s: %v", ErrTypeMismatch, st.Name, m.Name, err)
+			}
 			elem = a.ElementType
 		}
 		switch et := elem.(type) {

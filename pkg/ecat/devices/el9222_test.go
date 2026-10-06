@@ -272,3 +272,30 @@ func TestEL9222Registration(t *testing.T) {
 		}
 	}
 }
+
+// TestEL9222ResetHighAtStartup is the LO-04 regression: Reset already
+// high on the first Step is not a rising edge, so a trip injected before
+// the first scan survives until Reset is pulsed.
+func TestEL9222ResetHighAtStartup(t *testing.T) {
+	topo, n := demoNet(t)
+	e := el9222Dev(t, n)
+	img := n.Images().Get(dev1)
+	tripped := slotOf(t, topo, el9222Demo, "OCP Inputs Channel 1", "Status__Tripped")
+	reset := slotOf(t, topo, el9222Demo, "OCP Outputs Channel 1", "Control__Reset")
+	if err := e.Trip(1); err != nil {
+		t.Fatal(err)
+	}
+	ecat.WriteBits(img.Out, reset.Byte, reset.Bit, reset.BitLen, 1)
+	n.Step(0)
+	n.Step(0)
+	if readSlot(img.In, tripped) != 1 {
+		t.Fatal("Reset held high from start-up cleared the trip")
+	}
+	ecat.WriteBits(img.Out, reset.Byte, reset.Bit, reset.BitLen, 0)
+	n.Step(0)
+	ecat.WriteBits(img.Out, reset.Byte, reset.Bit, reset.BitLen, 1)
+	n.Step(0)
+	if readSlot(img.In, tripped) != 0 {
+		t.Fatal("a Reset pulse did not clear the trip")
+	}
+}

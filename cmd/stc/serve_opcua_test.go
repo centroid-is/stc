@@ -62,6 +62,8 @@ type startupInfo struct {
 	NamespaceIndex uint16 `json:"namespace_index"`
 	NodeCount      int    `json:"node_count"`
 	Cycle          string `json:"cycle"`
+	Listen         string `json:"listen"`
+	AnonymousWrite bool   `json:"anonymous_write"`
 	Diagnostics    []struct {
 		Severity string `json:"severity"`
 		Code     string `json:"code"`
@@ -253,25 +255,66 @@ func TestServeST301Parity(t *testing.T) {
 	assert.NoError(t, s.wait(t))
 }
 
+// tryDial dials endpoint and reports the error; a session is closed.
+func tryDial(t *testing.T, endpoint string, opts ...client.Option) error {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), serveTimeout)
+	defer cancel()
+	c, err := client.Dial(ctx, endpoint, append([]client.Option{client.WithInsecureSkipVerify()}, opts...)...)
+	if err == nil {
+		_ = c.Abort(ctx)
+	}
+	return err
+}
+
 func TestServeBasic256Sha256(t *testing.T) {
 	addr := freeServeAddr(t)
 	s := startServe(t, true, serveFixture, "--opcua", addr, "--security", "basic256sha256")
+	assert.Equal(t, addr, s.info.Listen)
 	cp, kp, err := opcua.EnsureCert(t.TempDir(), "urn:stc:test-client")
 	require.NoError(t, err)
-	c := dialServe(t, s.info.Endpoint,
+	secure := []client.Option{
 		client.WithSecurityPolicyURI(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
-		client.WithClientCertificatePaths(cp, kp))
+		client.WithClientCertificatePaths(cp, kp),
+	}
+	// HI-04: secure mode does not also accept anonymous clients.
+	assert.Error(t, tryDial(t, s.info.Endpoint, secure...), "anonymous session in secure mode")
+	c := dialServe(t, s.info.Endpoint, append(secure, client.WithX509IdentityPaths(cp, kp))...)
 	requireRunning(t, c)
+	require.Equal(t, ua.Good, writeNode(t, c, s4("GVL_BatchLines.nBatchCount"), int32(7)))
 
 	// The secure-only server refuses SecurityPolicy None.
-	ctx, cancel := context.WithTimeout(context.Background(), serveTimeout)
-	defer cancel()
-	nc, err := client.Dial(ctx, s.info.Endpoint, client.WithInsecureSkipVerify(),
-		client.WithSecurityPolicyURI(ua.SecurityPolicyURINone, ua.MessageSecurityModeNone))
-	if err == nil {
-		_ = nc.Abort(ctx)
-	}
-	assert.Error(t, err)
+	assert.Error(t, tryDial(t, s.info.Endpoint,
+		client.WithSecurityPolicyURI(ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)))
+
+	// --allow-anonymous opts back in.
+	s2 := startServe(t, true, serveFixture, "--opcua", freeServeAddr(t), "--security", "basic256sha256", "--allow-anonymous")
+	requireRunning(t, dialServe(t, s2.info.Endpoint, secure...))
+}
+
+// TestServeAnonymousWrite covers --allow-anonymous-write and the listener
+// host (HI-04).
+func TestServeAnonymousWrite(t *testing.T) {
+	addr := freeServeAddr(t)
+	s := startServe(t, true, serveFixture, "--opcua", addr, "--allow-anonymous-write=false")
+	assert.Equal(t, addr, s.info.Listen)
+	assert.False(t, s.info.AnonymousWrite)
+	c := dialServe(t, s.info.Endpoint)
+	requireRunning(t, c)
+	assert.Equal(t, ua.Good, readNode(t, c, s4("GVL_BatchLines.nBatchCount")).StatusCode)
+	assert.Equal(t, ua.BadUserAccessDenied, writeNode(t, c, s4("GVL_BatchLines.nBatchCount"), int32(42)))
+	assert.NotContains(t, s.stderr.String(), "anonymous OPC UA clients can write")
+
+	// All interfaces with anonymous writes: allowed, with a warning.
+	_, port, _ := net.SplitHostPort(freeServeAddr(t))
+	all := startServe(t, true, serveFixture, "--opcua", ":"+port)
+	assert.Equal(t, ":"+port, all.info.Listen)
+	assert.True(t, all.info.AnonymousWrite)
+	eventually(t, "exposure warning", func() bool {
+		return strings.Contains(all.stderr.String(), `"event":"warning"`)
+	})
+	c2 := dialServe(t, "opc.tcp://127.0.0.1:"+port)
+	assert.Equal(t, ua.Good, writeNode(t, c2, s4("GVL_BatchLines.nBatchCount"), int32(42)))
 }
 
 func TestServeTextScanErrorAndRealtime(t *testing.T) {
@@ -296,6 +339,8 @@ END_PROGRAM
 	assert.Contains(t, s.stderr.String(), "division by zero")
 	c := dialServe(t, "opc.tcp://"+addr)
 	assert.Equal(t, int16(5), readNode(t, c, s4("GVL.x")).Value)
+	// ME-02: a write after the scan stopped is refused, not answered Good.
+	assert.Equal(t, ua.BadNotWritable, writeNode(t, c, s4("GVL.x"), int16(9)))
 }
 
 // TestServeAnalysisErrorFailsStart: analysis errors fail serve before the
@@ -320,8 +365,8 @@ func TestServeRealtimeCycles(t *testing.T) {
 }
 
 func TestServeErrors(t *testing.T) {
-	// Hold a port on all interfaces, as awcullen binds.
-	busy, err := net.Listen("tcp", ":0")
+	// Hold the exact address the server binds.
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer busy.Close()
 	port := strconv.Itoa(busy.Addr().(*net.TCPAddr).Port)
@@ -337,6 +382,7 @@ func TestServeErrors(t *testing.T) {
 		{"two projects", []string{"a.tsproj", "b.plcproj"}, "must be the only"},
 		{"empty dir", []string{empty}, "no .st files"},
 		{"bad security", []string{serveFixture, "--security", "aes"}, "invalid --security"},
+		{"no anonymous on None", []string{serveFixture, "--allow-anonymous=false"}, "needs --security basic256sha256"},
 		{"bad cycle", []string{serveFixture, "--cycle", "0s"}, "--cycle must be positive"},
 		{"port in use", []string{serveFixture, "--opcua", "127.0.0.1:" + port}, "starting opc ua server"},
 		{"cert without key", []string{serveFixture, "--opcua", freeServeAddr(t), "--cert", filepath.Join(empty, "c.der")}, "opc ua server"},
@@ -416,4 +462,13 @@ func TestServeJSONScanStopped(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(line), &ev), s.stderr.String())
 	assert.Equal(t, "scan_stopped", ev["event"])
 	assert.Contains(t, ev["error"], "division by zero")
+}
+
+func TestServeExposed(t *testing.T) {
+	for addr, want := range map[string]bool{
+		":4840": true, "0.0.0.0:4840": true, "192.168.1.5:4840": true, "plc.local:4840": true,
+		"127.0.0.1:4840": false, "[::1]:4840": false, "localhost:4840": false, "bad": true,
+	} {
+		assert.Equal(t, want, exposed(addr), addr)
+	}
 }

@@ -32,7 +32,10 @@ type ocpChannel struct {
 	tripped, warning, coolDown, hwProtection bool
 	amps                                     float64
 	lastReset, enabled                       bool
-	counter                                  uint8
+	// seeded is set once lastReset holds an observed Reset value, so
+	// Reset already high on the first Step is not a rising edge.
+	seeded  bool
+	counter uint8
 }
 
 // Bind stores the layout and resolves the per-channel entries.
@@ -75,10 +78,10 @@ func (d *EL9222) Step(_ time.Duration, out, in []byte) {
 		if f, ok := c.out["Switch"]; ok {
 			sw = ecat.Get(out, f) != 0
 		}
-		if reset && !c.lastReset {
+		if c.seeded && reset && !c.lastReset {
 			c.tripped = false
 		}
-		c.lastReset = reset
+		c.lastReset, c.seeded = reset, true
 		c.enabled = sw && !c.tripped && !c.coolDown && !c.hwProtection
 		c.counter = (c.counter + 1) & 3
 

@@ -88,8 +88,10 @@ Every read and every subscription sample calls the node's read handler, which re
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--project` | | Project or ST sources (alternative to arguments) |
-| `--opcua` | empty | Listen address such as `:4840`; the listener binds all interfaces. Empty starts no server |
-| `--security` | `none` | `none` (SecurityPolicy None, Anonymous) or `basic256sha256` (secure only) |
+| `--opcua` | empty | Listen address `host:port`. The listener binds only `host`; `:4840` or `0.0.0.0:4840` binds all interfaces. Empty starts no server |
+| `--security` | `none` | `none` (SecurityPolicy None, Anonymous) or `basic256sha256` (secure only, client certificate identity) |
+| `--allow-anonymous-write` | `true` | Let anonymous clients write. `false` limits them to browse, read and subscribe |
+| `--allow-anonymous` | `true`, `false` with `basic256sha256` | Accept anonymous clients. Can only be turned off with `basic256sha256` |
 | `--cert`, `--key` | generated | Server key pair; a self-signed pair is created once in the PKI dir |
 | `--pki-dir` | user cache dir | Where generated certificates live |
 | `--cycle` | task cycles, else 10ms | Override the single task cycle |
@@ -102,22 +104,37 @@ Every read and every subscription sample calls the node's read handler, which re
 With `--format json` one line is printed once the server listens:
 
 ```json
-{"endpoint":"opc.tcp://127.0.0.1:4840","namespace_index":4,"node_count":39,"cycle":"1ms","diagnostics":[...]}
+{"endpoint":"opc.tcp://127.0.0.1:4840","namespace_index":4,"node_count":39,"cycle":"1ms","listen":"127.0.0.1:4840","anonymous_write":true,"diagnostics":[...]}
 ```
 
-`cycle` is the project's base tick. Runtime events (`scan_stopped`,
+`cycle` is the project's base tick. `listen` is the bound address, `:4840`
+for all interfaces. `anonymous_write` tells whether anonymous clients can
+write. Runtime events (`warning`, `scan_stopped`,
 `write_error`) are then printed to stderr as `{"event": "...", "error": "..."}`,
 and on stop the final project status object follows on stdout.
 
 ## Security
 
 `stc serve` is a development emulator. With the default `--security none`
-any client on the network can read and write published symbols, limited
-only by `OPC.UA.DA.Access`. A loopback host in `--opcua` only
-changes the advertised URL; the listener always binds all interfaces. Run it on an isolated
-network or behind a host firewall, and use `--security basic256sha256`
-when the host is reachable by others. Client certificates are not
-verified.
+any client that can reach the listener can read and write published
+symbols, limited only by `OPC.UA.DA.Access`.
+
+- **Binding:** the listener binds only the host in `--opcua`. Use
+  `127.0.0.1:4840` to keep the server on this machine. `:4840` and
+  `0.0.0.0:4840` bind all interfaces, and stc prints a warning when
+  anonymous clients can write there.
+- **Anonymous writes:** `--allow-anonymous-write` defaults to `true`
+  because the tfc-hmi app connects anonymously and writes commands. Pass
+  `--allow-anonymous-write=false` for a read-only anonymous server.
+- **Secure mode:** `--security basic256sha256` serves SignAndEncrypt only
+  and requires an X509 certificate user identity. Anonymous clients are
+  refused unless `--allow-anonymous` is given.
+
+**Known limitation:** client certificates are not verified. The server
+trusts any client certificate, for the secure channel and as a user
+identity, so `basic256sha256` encrypts traffic but does not restrict who
+connects. Run the emulator on an isolated network or behind a host
+firewall.
 
 ## Testing against the golden address space
 
@@ -137,7 +154,7 @@ This is the manual acceptance procedure for the tfc-hmi Flutter app. It needs th
 stc serve "<sild>/ST301/ST301 solution.tsproj" --io "<sild>/ethercat/ST301/Device 1.xml" --io "<sild>/ethercat/ST301/Device 2.xml" --opcua 0.0.0.0:4840 --cycle 10ms --realtime
 ```
 
-2. Wait for the line `OPC UA server listening on opc.tcp://0.0.0.0:4840 (all interfaces)`.
+2. Wait for the line `OPC UA server listening on opc.tcp://0.0.0.0:4840 (all interfaces)`. The warning that anonymous clients can write is expected here, because the HMI writes anonymously.
 3. Open the tfc-hmi app and go to **Server Config**.
 4. Add a server with the endpoint `opc.tcp://<host>:4840`, where `<host>` is the machine running stc.
 5. Set the security policy to **None** and authentication to **Anonymous**. Leave the client certificate empty.

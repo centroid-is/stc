@@ -21,8 +21,10 @@ jobs:
       # ---------- Unit test coverage (standard go test) ----------
       - name: Run unit tests with coverage
         run: |
+          # Module path, not ./...: -coverpkg=./... also instruments the
+          # vendored third_party/awcullen-opcua module (a go.mod replace).
           go test -coverprofile=unit.txt -covermode=atomic \
-            -coverpkg=./... ./... -count=1 -timeout 5m
+            -coverpkg=github.com/centroid-is/stc/... ./... -count=1 -timeout 5m
 
       # ---------- Exec-based test coverage (cmd/stc) ----------
       - name: Run exec-based tests with coverage

@@ -20,7 +20,10 @@ type MapSource struct {
 	writes    []WriteRecord
 }
 
-var _ NodeSource = (*MapSource)(nil)
+var (
+	_ NodeSource  = (*MapSource)(nil)
+	_ BatchWriter = (*MapSource)(nil)
+)
 
 // NewMapSource returns a MapSource holding a copy of vals.
 func NewMapSource(vals map[string]any) *MapSource {
@@ -55,6 +58,26 @@ func (m *MapSource) Write(path string, v any) error {
 	}
 	m.vals[path] = v
 	m.writes = append(m.writes, WriteRecord{Path: path, Value: v})
+	return nil
+}
+
+// WriteBatch stores every write under one lock, or none: an injected
+// error or an unknown path rejects the whole batch.
+func (m *MapSource) WriteBatch(ws []PathWrite) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, w := range ws {
+		if err := m.failWrite[w.Path]; err != nil {
+			return err
+		}
+		if _, ok := m.vals[w.Path]; !ok {
+			return fmt.Errorf("%w: %s", ErrUnknownSymbol, w.Path)
+		}
+	}
+	for _, w := range ws {
+		m.vals[w.Path] = w.Value
+		m.writes = append(m.writes, WriteRecord{Path: w.Path, Value: w.Value})
+	}
 	return nil
 }
 

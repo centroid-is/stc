@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -142,8 +143,8 @@ func TestPersistRoundTrip(t *testing.T) {
 	assert.Equal(t, string(first), string(second), "deterministic output")
 	assert.NotContains(t, string(first), "plain")
 	assert.True(t, strings.HasPrefix(string(first), "{\n  \"version\": 1,"), string(first))
-	_, err = os.Stat(file + ".tmp")
-	assert.True(t, os.IsNotExist(err), "temp file removed by rename")
+	tmps, _ := filepath.Glob(file + ".*.tmp")
+	assert.Empty(t, tmps, "temp file removed by rename")
 
 	q := persistProject(t)
 	warns, err := q.LoadState(file)
@@ -221,8 +222,34 @@ func TestPersistSaveErrors(t *testing.T) {
 	target := filepath.Join(dir, "state.json")
 	require.NoError(t, os.MkdirAll(filepath.Join(target, "x"), 0o755))
 	assert.Error(t, p.SaveState(target))
-	_, statErr := os.Stat(target + ".tmp")
-	assert.True(t, os.IsNotExist(statErr))
+	tmps, _ := filepath.Glob(filepath.Join(dir, "*.tmp"))
+	assert.Empty(t, tmps)
+}
+
+// TestPersistConcurrentSaves is the LO-02 regression: two processes saving
+// the same state file used to share one temp name and clobber each
+// other's temp file. Each save now has its own.
+func TestPersistConcurrentSaves(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "state.json")
+	projects := []*Project{persistProject(t), persistProject(t)}
+	var wg sync.WaitGroup
+	errs := make(chan error, 40)
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func(p *Project) {
+			defer wg.Done()
+			errs <- p.SaveState(file)
+		}(projects[i%2])
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		assert.NoError(t, err)
+	}
+	tmps, _ := filepath.Glob(file + ".*.tmp")
+	assert.Empty(t, tmps)
+	_, err := projects[0].LoadState(file)
+	assert.NoError(t, err)
 }
 
 func TestPersistStateJSONKinds(t *testing.T) {

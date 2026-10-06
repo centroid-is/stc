@@ -73,3 +73,46 @@ END_VAR
 	require.NoError(t, err)
 	assert.Empty(t, vs)
 }
+
+// TestRuntimeSetMany: a batch is validated whole and applied in one
+// critical section, so readers never see part of it (HI-03).
+func TestRuntimeSetMany(t *testing.T) {
+	gf := parseRT(t, "GVL.st", `VAR_GLOBAL
+	x : INT;
+	y : INT;
+	b : BOOL;
+END_VAR
+`)
+	rt, err := NewRuntime([]*ast.SourceFile{gf})
+	require.NoError(t, err)
+	assert.ErrorContains(t, rt.SetMany([]string{"GVL.x"}, nil), "1 paths for 0 values")
+	assert.ErrorContains(t, rt.SetMany([]string{"GVL.x", "GVL.y"}, []any{5, 70000}), "out of range")
+	assert.Error(t, rt.SetMany([]string{"GVL.x", "GVL.nope"}, []any{5, 1}))
+	v, err := rt.Get("GVL.x")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), v.Int, "a rejected batch writes nothing")
+
+	require.NoError(t, rt.SetMany([]string{"GVL.x", "GVL.y", "GVL.b"}, []any{3, 4, true}))
+	vs, err := rt.GetMany([]string{"GVL.x", "GVL.y", "GVL.b"})
+	require.NoError(t, err)
+	assert.Equal(t, []any{int64(3), int64(4), true}, []any{vs[0].Int, vs[1].Int, vs[2].Bool})
+
+	require.NoError(t, rt.SetMany([]string{"GVL.x", "GVL.y"}, []any{0, 0}))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 500; i++ {
+			_ = rt.SetMany([]string{"GVL.x", "GVL.y"}, []any{i % 100, i % 100})
+		}
+	}()
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		vs, err := rt.GetMany([]string{"GVL.x", "GVL.y"})
+		require.NoError(t, err)
+		require.Equal(t, vs[0].Int, vs[1].Int, "torn batch observed")
+	}
+}

@@ -410,6 +410,23 @@ func TestPublish(t *testing.T) {
 		if v, _ := src.Get("GVL_Test.outer.vals"); !reflect.DeepEqual(v, []any{float32(1.5), float32(2.5), float32(3.5)}) {
 			t.Errorf("outer.vals = %#v", v)
 		}
+
+		// HI-03: a struct write is one unit. When any leaf is rejected,
+		// no leaf changes.
+		src.FailWrite("GVL_Test.outer.s", ErrNotWritable)
+		nv.Field(0).Field(0).SetInt(55)
+		nv.Field(2).SetString("torn")
+		nv.Field(4).Index(0).Field(0).SetInt(66)
+		if got := writeAttr(t, c, id("GVL_Test.outer"), nv.Interface(), ""); got != ua.BadNotWritable {
+			t.Errorf("outer write with a rejected leaf = %v", got)
+		}
+		src.FailWrite("GVL_Test.outer.s", nil)
+		if v, _ := src.Get("GVL_Test.outer.items[0].a"); v != int64(11) {
+			t.Errorf("rejected struct write changed items[0].a to %#v", v)
+		}
+		if v, _ := src.Get("GVL_Test.outer.s"); v != "new" {
+			t.Errorf("rejected struct write changed s to %#v", v)
+		}
 	})
 }
 

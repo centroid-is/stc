@@ -65,11 +65,13 @@ type projectTask struct {
 // instantiated once (by NewRuntime) and every task's PROGRAMs run at the
 // task's cycle time in priority order on a deterministic clock.
 type Project struct {
-	rt     *Runtime
-	tasks  []*projectTask // sorted by Priority, then Name
-	base   time.Duration
-	clock  time.Duration
-	binder *IOBinder
+	rt    *Runtime
+	tasks []*projectTask // sorted by Priority, then Name
+	base  time.Duration
+	clock time.Duration
+	// netClock is the virtual time of the binder's last network step.
+	netClock time.Duration
+	binder   *IOBinder
 	// io is the process image shared by every engine and the AT slots.
 	io    *iomap.IOTable
 	files []*ast.SourceFile // library files then project files
@@ -191,8 +193,9 @@ func (p *Project) Clock() time.Duration {
 // Tick runs one base tick. Every task whose next due time is at or before
 // the current clock runs, in priority then name order, each of its PROGRAMs
 // in list order with dt equal to the task cycle; the clock then advances by
-// BaseTick. An attached IOBinder steps once before the first due task and
-// copies outputs once after the last; the Project's AT slots (see IOSlot)
+// BaseTick. An attached IOBinder steps its network once before the first due
+// task, by the virtual time since its previous step, and copies outputs once
+// after the last; the Project's AT slots (see IOSlot)
 // are copied in and out at the same points. Engine errors do not stop other tasks;
 // they are returned joined with the task and program names. Tick holds the
 // Runtime mutex, so it is serialised with Runtime Get and Set.
@@ -209,7 +212,10 @@ func (p *Project) Tick() error {
 		if !ran {
 			ran = true
 			if p.binder != nil {
-				p.binder.preScan(p.base)
+				// Devices see all virtual time since their last step, also
+				// the base ticks on which no task was due.
+				p.binder.preScan(now - p.netClock)
+				p.netClock = now
 			}
 			if p.rt.ecat != nil {
 				p.rt.ecat.preScan(p.base, p.binder)
@@ -259,6 +265,7 @@ func (p *Project) Advance(d time.Duration) error {
 func (p *Project) SetIOBinder(b *IOBinder) {
 	p.rt.mu.Lock()
 	defer p.rt.mu.Unlock()
+	p.netClock = p.clock
 	if b != nil {
 		b.interp = p.rt.interp
 		b.progEnv = func(name string) *Env {

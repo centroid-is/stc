@@ -75,7 +75,7 @@ func runOpcuaSnapshot(cmd *cobra.Command, args []string) error {
 	if root == nil {
 		return fmt.Errorf("invalid --root %q: want a NodeId such as ns=4;s=PLC1", rootText)
 	}
-	opts, err := snapshotClientOptions(cmd)
+	opts, certID, err := snapshotClientOptions(cmd)
 	if err != nil {
 		return err
 	}
@@ -83,6 +83,12 @@ func runOpcuaSnapshot(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
 	c, err := client.Dial(ctx, endpoint, opts...)
+	if err != nil && certID != nil && identityRejected(err) {
+		// A secure server that refuses Anonymous (stc serve
+		// --security basic256sha256) takes the client certificate as the
+		// user identity.
+		c, err = client.Dial(ctx, endpoint, append(opts, certID)...)
+	}
 	if err != nil {
 		return fmt.Errorf("connecting to %s: %w", endpoint, err)
 	}
@@ -122,40 +128,48 @@ func runOpcuaSnapshot(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// identityRejected reports whether a dial failed on the user identity.
+func identityRejected(err error) bool {
+	return errors.Is(err, ua.BadIdentityTokenRejected) || errors.Is(err, ua.BadIdentityTokenInvalid) ||
+		errors.Is(err, ua.BadUserAccessDenied)
+}
+
 // snapshotClientOptions maps --security, --cert, --key and --pki-dir to
 // awcullen client options. The server certificate is not verified: this
-// is a development tool (T-29-07).
-func snapshotClientOptions(cmd *cobra.Command) ([]client.Option, error) {
+// is a development tool (T-29-07). With basic256sha256 it also returns the
+// option presenting the client certificate as the user identity, used when
+// the server rejects Anonymous.
+func snapshotClientOptions(cmd *cobra.Command) ([]client.Option, client.Option, error) {
 	opts := []client.Option{client.WithInsecureSkipVerify()}
 	sec, _ := cmd.Flags().GetString("security")
 	switch strings.ToLower(sec) {
 	case "none":
-		return append(opts, client.WithSecurityPolicyURI(ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)), nil
+		return append(opts, client.WithSecurityPolicyURI(ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)), nil, nil
 	case "basic256sha256":
 	default:
-		return nil, fmt.Errorf("invalid --security %q: want none or basic256sha256", sec)
+		return nil, nil, fmt.Errorf("invalid --security %q: want none or basic256sha256", sec)
 	}
 	certPath, _ := cmd.Flags().GetString("cert")
 	keyPath, _ := cmd.Flags().GetString("key")
 	if (certPath == "") != (keyPath == "") {
-		return nil, errors.New("--cert and --key must be given together")
+		return nil, nil, errors.New("--cert and --key must be given together")
 	}
 	if certPath == "" {
 		dir, _ := cmd.Flags().GetString("pki-dir")
 		if dir == "" {
 			cache, err := os.UserCacheDir()
 			if err != nil {
-				return nil, fmt.Errorf("no --pki-dir and no user cache dir: %w", err)
+				return nil, nil, fmt.Errorf("no --pki-dir and no user cache dir: %w", err)
 			}
 			dir = filepath.Join(cache, "stc", "opcua-client-pki")
 		}
 		var err error
 		certPath, keyPath, err = opcua.EnsureCert(dir, snapshotClientURI)
 		if err != nil {
-			return nil, fmt.Errorf("client certificate: %w", err)
+			return nil, nil, fmt.Errorf("client certificate: %w", err)
 		}
 	}
 	return append(opts,
 		client.WithSecurityPolicyURI(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
-		client.WithClientCertificatePaths(certPath, keyPath)), nil
+		client.WithClientCertificatePaths(certPath, keyPath)), client.WithX509IdentityPaths(certPath, keyPath), nil
 }
