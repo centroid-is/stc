@@ -484,7 +484,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 26-01-PLAN.md -- ATV320 model: entry layout hook, CiA402 state machine, ramps, HMIS/LFT, DI/OL1R, stimulus API
+- [x] 26-01-PLAN.md -- ATV320 model: entry layout hook, CiA402 state machine, ramps, HMIS/LFT, DI/OL1R, stimulus API
 - [ ] 26-02-PLAN.md -- Network service API, ATV320 CoE object dictionary with parameter defaults and EEPROM save, PreOp start
 - [ ] 26-03-PLAN.md -- Tc2_EtherCAT StandardFB mocks (state, master, CRC, physical write, CoE SDO) with 2-scan async latency
 - [ ] 26-04-PLAN.md -- End-to-end: trimmed CI flow, env-gated real FB_ATV320 + FB_EcDeviceDiag gate, docs, VALIDATION, coverage gate
@@ -555,7 +555,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 3/4 | In Progress|  |
 | 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
-| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
+| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 1/4 | In Progress|  |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
 | 28. OPC UA Address Space | v1.2 | 0/TBD | Not started | - |
 | 29. Live HMI & Agent Integration | v1.2 | 0/TBD | Not started | - |
