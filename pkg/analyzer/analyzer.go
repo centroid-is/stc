@@ -21,6 +21,13 @@ type AnalysisResult struct {
 	Symbols *symbols.Table
 	// Diags contains all diagnostics from parsing and semantic analysis.
 	Diags []diag.Diagnostic
+	// Files are the analysed user source files, in the order given to
+	// Analyze. Consumers such as pkg/symtree read declaration order and
+	// attributes from them.
+	Files []*ast.SourceFile
+	// LibraryFiles are the library stub files from AnalyzeOpts; nil when
+	// none were given.
+	LibraryFiles []*ast.SourceFile
 }
 
 // AnalyzeOpts provides optional configuration for Analyze.
@@ -77,8 +84,10 @@ func Analyze(files []*ast.SourceFile, cfg *project.Config, opts ...AnalyzeOpts) 
 	}
 
 	return AnalysisResult{
-		Symbols: table,
-		Diags:   diags.All(),
+		Symbols:      table,
+		Diags:        diags.All(),
+		Files:        files,
+		LibraryFiles: resolveOpts.LibraryFiles,
 	}
 }
 
