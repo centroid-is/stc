@@ -259,7 +259,6 @@ END_PROGRAM
 	assert.Equal(t, 0, errors, "nil config should work without vendor checks")
 }
 
-
 func TestAnalyzeKeepsFiles(t *testing.T) {
 	user := parser.Parse("main.st", "PROGRAM Main\nVAR x : INT; END_VAR\nEND_PROGRAM\n").File
 	lib := parser.Parse("lib.st", "FUNCTION_BLOCK FB_Lib\nEND_FUNCTION_BLOCK\n").File
