@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/ecat"
 )
 
 // RuntimeOpts configures NewRuntime.
@@ -15,6 +16,10 @@ type RuntimeOpts struct {
 	// LibraryFiles are registered before the project files, so library
 	// GVLs come first in RegisterGVLs.
 	LibraryFiles []*ast.SourceFile
+	// Network, when set, backs the Tc2_EtherCAT mocks (see
+	// ScanCycleEngine.SetNetwork). It is attached before any variable is
+	// instantiated, and Tick counts one services scan per Tick.
+	Network *ecat.Network
 }
 
 // programRun is one PROGRAM of a Runtime.
@@ -42,6 +47,10 @@ type Runtime struct {
 	// roots lists the GVLs (registration order) and then the PROGRAMs
 	// (source order) with their variable names, for Snapshot.
 	roots []rootInfo
+	// ecat is the Tc2_EtherCAT mock backend (RuntimeOpts.Network), binder
+	// the TcLinkTo binder (SetIOBinder); both run once per Tick.
+	ecat   *ecatServices
+	binder *IOBinder
 }
 
 // rootInfo is one GVL or PROGRAM root of a Runtime.
@@ -65,6 +74,9 @@ func NewRuntime(files []*ast.SourceFile, opts ...RuntimeOpts) (*Runtime, error) 
 
 	r := &Runtime{interp: New(), consts: make(map[string]bool)}
 	var progs []rootInfo
+	if o.Network != nil {
+		r.ecat = r.interp.attachNetwork(o.Network)
+	}
 	if err := r.interp.RegisterFiles(all); err != nil {
 		return nil, err
 	}
@@ -120,10 +132,14 @@ func (r *Runtime) Tick(dt time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.interp.SetDt(dt)
+	r.preScan(dt)
 	for _, p := range r.programs {
 		if err := p.engine.tick(dt, false); err != nil {
 			return fmt.Errorf("PROGRAM %s: %w", p.name, err)
 		}
+	}
+	if r.binder != nil {
+		r.binder.postScan()
 	}
 	return nil
 }
