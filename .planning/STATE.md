@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: executing
+status: verifying
 stopped_at: Completed 20-09-PLAN.md
-last_updated: "2026-10-06T03:36:39.500Z"
+last_updated: "2026-10-06T03:49:10.518Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
-  completed_phases: 15
+  completed_phases: 16
   total_plans: 57
-  completed_plans: 56
-  percent: 52
+  completed_plans: 57
+  percent: 55
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 Phase: 20 (TwinCAT Expression Semantics) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-06
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -120,6 +120,8 @@ Recent decisions affecting current work:
 - [Phase 20]: 20-09: THIS^.m and SUPER^.m resolve through the FB scope chain; SEMA038 texts mirror the interpreter's runtime errors
 - [Phase 20]: 20-09: initialisers type-check literal values only; non-literal values are walked for undeclared names (Phase 22 owns literal typing)
 - [Phase 20]: 20-09: types.ArrayDimension.Known marks literal bounds; too many initialisers is reported only with known bounds and literal repetition counts
+- [Phase 20]: Phase 20 oracle asserts 0 parse diagnostics (parser.Parse) and 0 P001 (analyzer.Analyze) for st301 and svncore; semantic errors are logged as templated buckets only
+- [Phase 20]: TwinCAT dialect check tolerates only 'cannot assign DINT to INT' (Phase 22 RUNT-05), held in one named allowlist
 
 ### Pending Todos
 
@@ -133,7 +135,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T03:36:35.322Z
+Last session: 2026-10-06T03:49:01.829Z
 Stopped at: Completed 20-09-PLAN.md
 Resume file: None
 

@@ -200,3 +200,7 @@ None.
 - Phase 20 is complete. DIAL-10 is satisfied by the zero-parse-error oracle assertion.
 - Phase 21 owns 1777 st301 errors and 32 svncore errors: missing SVNCore and Tc2 libraries, plus the flattened GVLs.
 - Phase 22 owns literal typing, conversions, ADR/SIZEOF/SHL, METHOD body checking and the RUNT-05 allowlist entry in `tests/twincat_dialect_check_test.go`.
+
+## Self-Check: PASSED
+
+All created files exist and commits f0fb6c7, 54d73f0, a358ea6 and 8347e0a are in the branch history. No tracked files were deleted.

@@ -18,7 +18,7 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 - [x] **DIAL-07**: Qualified enum values (`E.v`) work in expressions, CASE labels, CASE label lists, initialisers and comparisons; enum declarations with a base type (`(a := 0, b := 1) UINT`) and the `strict`/`to_string` attributes are accepted
 - [x] **DIAL-08**: `ACTION name ... END_ACTION` blocks (CODESYS text form after the POU and TcPOU `<Action>` XML) parse and are callable as `name()` inside their POU
 - [x] **DIAL-09**: `REF=`, `THIS^` and `SUPER^` parse, type-check and execute
-- [ ] **DIAL-10**: `stc check` on the flattened ST301 + SVNCoreComponents sources (`.planning/research/v1.2` probes) reports zero parse errors
+- [x] **DIAL-10**: `stc check` on the flattened ST301 + SVNCoreComponents sources (`.planning/research/v1.2` probes) reports zero parse errors
 
 ### TwinCAT project import (IMPT)
 
@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIAL-07 | Phase 20 | Complete |
 | DIAL-08 | Phase 19 | Complete |
 | DIAL-09 | Phase 20 | Complete |
-| DIAL-10 | Phase 20 | Pending |
+| DIAL-10 | Phase 20 | Complete |
 | IMPT-01 | Phase 21 | Pending |
 | IMPT-02 | Phase 21 | Pending |
 | IMPT-03 | Phase 21 | Pending |
