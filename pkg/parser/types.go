@@ -231,7 +231,7 @@ func (p *Parser) parseStructMember() *ast.StructMember {
 
 	var initValue ast.Expr
 	if p.match(lexer.Assign) {
-		initValue = p.parseExpr(0)
+		initValue = p.parseInitializer(0)
 	}
 
 	endTok := p.peek()

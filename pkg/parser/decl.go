@@ -366,7 +366,7 @@ func (p *Parser) parseTypeDecls() ast.Declaration {
 	// Optional default value: TYPE E : (a, b) := b; END_TYPE
 	var initValue ast.Expr
 	if p.match(lexer.Assign) {
-		initValue = p.parseExpr(0)
+		initValue = p.parseInitializer(0)
 	}
 	p.match(lexer.Semicolon)
 
