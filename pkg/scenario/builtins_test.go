@@ -246,3 +246,18 @@ func TestBuiltinsTickError(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, strings.HasPrefix(err.Error(), "cycle 2:"), err.Error())
 }
+
+// TestBuiltinsAnalogDefaultUnit: SIM_ANALOG without a unit writes the raw
+// count, with 'mA' it scales through the terminal model.
+func TestBuiltinsAnalogDefaultUnit(t *testing.T) {
+	p := mainOnly(t, "Demo Analog.xml")
+	val := "TIID^Device 1 (EtherCAT)^DEMO.A2.00 (EK1100)^DEMO.A2.01 (EL3054)^AI Standard Channel 1^Value"
+	RegisterBuiltins(p.Runtime().Interpreter(), p)
+	_, err := runST(t, p, `SIM_ANALOG('DEMO.A2.01 (EL3054)', 1, 1234.0); RUN_CYCLES(1);`)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1234, readVal(t, p, val))
+	_, err = runST(t, p, `SIM_ANALOG('DEMO.A2.01 (EL3054)', 1, 12.0, 'mA'); RUN_CYCLES(1);`)
+	require.NoError(t, err)
+	assert.EqualValues(t, 16384, readVal(t, p, val))
+}
+

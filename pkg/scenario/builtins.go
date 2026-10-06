@@ -40,7 +40,7 @@ var builtins = []builtin{
 	{"SIM_SET_LINK", "SIM_SET_LINK(link : STRING, value : ANY)", 2, 2, (*Session).setLink},
 	{"SIM_TRIP", "SIM_TRIP(slave : STRING, channel : INT)", 2, 2, (*Session).trip},
 	{"SIM_SLAVE_STATE", "SIM_SLAVE_STATE(slave : STRING, state : STRING | INT)", 2, 2, (*Session).slaveState},
-	{"SIM_ANALOG", "SIM_ANALOG(slave : STRING, channel : INT, value : REAL [, unit : STRING])", 3, 4, (*Session).analog},
+	{"SIM_ANALOG", "SIM_ANALOG(slave : STRING, channel : INT, value : REAL [, unit : 'mA' | 'V' | 'raw' (default)])", 3, 4, (*Session).analog},
 	{"SIM_DRIVE_FAULT", "SIM_DRIVE_FAULT(slave : STRING, lft : INT)", 2, 2, (*Session).driveFault},
 	{"SIM_SERIAL_PEER", "SIM_SERIAL_PEER(slave : STRING, script : STRING)", 2, 2, (*Session).serialPeer},
 	{"SIM_RAMP", "SIM_RAMP(path : STRING, from : REAL, to : REAL, over : TIME)", 4, 4, (*Session).ramp},
@@ -233,7 +233,8 @@ func (s *Session) analog(args []interp.Value) (interp.Value, error) {
 	if err != nil {
 		return interp.Value{}, err
 	}
-	a := Action{Kind: ActAnalog, Slave: slave, Channel: ch, Value: v}
+	// Without a unit the value is the raw process-data count.
+	a := Action{Kind: ActAnalog, Slave: slave, Channel: ch, Value: v, Unit: "raw"}
 	if len(args) == 4 {
 		if a.Unit, err = strArg(args, 3); err != nil {
 			return interp.Value{}, err
