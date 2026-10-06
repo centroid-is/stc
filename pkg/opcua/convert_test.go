@@ -170,6 +170,13 @@ func TestFromUAErrors(t *testing.T) {
 		{"string int", types.TypeSTRING, 1, ErrTypeMismatch},
 		{"dt int", types.TypeDT, 1, ErrTypeMismatch},
 		{"pointer", &types.PointerType{BaseType: types.TypeINT}, 1, ErrTypeMismatch},
+		{"nil", types.TypeINT, nil, ErrTypeMismatch},
+		{"uint string", types.TypeUINT, "1", ErrTypeMismatch},
+		{"uint negative", types.TypeUINT, int16(-1), ErrOutOfRange},
+		{"time duration", types.TypeTIME, time.Second, ErrTypeMismatch},
+		{"tod range", types.TypeTOD, uint32(dayMS), ErrOutOfRange},
+		{"array element", arr(types.TypeBOOL, [2]int{0, 0}), []int32{1}, ErrTypeMismatch},
+		{"enum huge", testEnum(), uint64(math.MaxUint64), ErrOutOfRange},
 	}
 	for _, tc := range tests {
 		_, err := fromUA(tc.typ, tc.in)
