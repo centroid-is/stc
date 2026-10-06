@@ -497,7 +497,13 @@ Plans:
   3. Browsing shows `urn:BeckhoffAutomation:Ua:PLC1` at namespace index 4, `ns=4;s=GVL.fb[2].HMI.p_stat_State` exists with declared case, PROGRAM MAIN publishes nothing, and `OPC.UA.DA := '0'` / `'2'` prune or flatten subtrees as TF6100 does
   4. `p_stat_*` nodes are read-only and `p_cmd_*` / `p_cfg_*` writable per `OPC.UA.DA.Access`, Description attributes carry the pragma text, and each IEC type reads with its PLCopen OPC 30000 UA type (TIME as Int64 ms, enums as Int32 with EnumStrings)
   5. A StructuredType struct such as `ST_Sensor_HMI` reads as one ExtensionObject decodable by field name from its served DataTypeDefinition, while its members stay individually readable
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 28-01-PLAN.md -- Server core: pin awcullen/opcua v1.4.0, SymbolNode/NodeSource contract + MapSource, certs, Config/Start/Stop, namespace index 4, anonymous writes, i=2259, None + Basic256Sha256 client tests
+- [ ] 28-02-PLAN.md -- Value layer: PLCopen type mapping, toUA/fromUA, enum + StructuredType DataTypes (StructureDefinition, reflect.StructOf, nested), Space/Publish with access levels, descriptions, arrays
+- [ ] 28-03-PLAN.md -- Builder: TF6100 exposure rules over SymbolNode, DeviceSet/PLC1, diagnostics, ST301-shaped fixture, golden browse snapshot
+- [ ] 28-04-PLAN.md -- (after Phases 21-23 merge) symtree/Runtime adapters, `stc serve`, parsed-ST parity with golden, VALIDATION + coverage gate
 
 ### Phase 29: Live HMI & Agent Integration
 **Goal**: The unmodified sildarvinnsla Flutter HMI and AI agents operate the simulated ST301 line live, with CI guarding fidelity against the real TF6100 server and docs describing the workflow
