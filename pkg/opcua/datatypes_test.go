@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -176,7 +177,11 @@ func TestEnsureStruct(t *testing.T) {
 	if want := ua.NewNodeIDString(4, "DT.ST_Drive_HMI"); d.DTID != want {
 		t.Fatalf("DTID = %v", d.DTID)
 	}
-	if want := ua.NewNodeIDString(4, "TE.ST_Drive_HMI.DefaultBinary"); d.EncID != want {
+	// The encoding id is process-global: when another test (the ST301
+	// fixture) registered a different ST_Drive_HMI layout first, this one
+	// gets the layout-versioned form.
+	encText, ok := d.EncID.(ua.NodeIDString)
+	if !ok || encText.NamespaceIndex != 4 || !regexp.MustCompile(`^TE\.ST_Drive_HMI(\.v[0-9a-f]{8})?\.DefaultBinary$`).MatchString(encText.ID) {
 		t.Fatalf("EncID = %v", d.EncID)
 	}
 	def := structDefOf(t, c, d.DTID)

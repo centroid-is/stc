@@ -1,0 +1,618 @@
+{
+  "root": "ns=4;s=PLC1",
+  "nodes": [
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines",
+      "parent": "ns=4;s=PLC1",
+      "reference": "Organizes",
+      "nodeClass": "Object",
+      "browseName": "4:GVL_BatchLines"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Conveyor",
+      "parent": "ns=4;s=GVL_BatchLines",
+      "reference": "HasComponent",
+      "nodeClass": "Object",
+      "browseName": "4:Conveyor"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Conveyor.Cfg",
+      "parent": "ns=4;s=GVL_BatchLines.Conveyor",
+      "reference": "HasComponent",
+      "nodeClass": "Object",
+      "browseName": "4:Cfg"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Conveyor.Cfg.eMode",
+      "parent": "ns=4;s=GVL_BatchLines.Conveyor.Cfg",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:eMode",
+      "dataType": "ns=4;s=DT.E_DriveState",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Conveyor.Cfg.eMode.EnumStrings",
+      "parent": "ns=4;s=GVL_BatchLines.Conveyor.Cfg.eMode",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "0:EnumStrings",
+      "dataType": "i=21",
+      "valueRank": 1,
+      "arrayDimensions": [
+        4
+      ],
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Conveyor.Cfg.rMax",
+      "parent": "ns=4;s=GVL_BatchLines.Conveyor.Cfg",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:rMax",
+      "dataType": "i=10",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Conveyor.rSpeed",
+      "parent": "ns=4;s=GVL_BatchLines.Conveyor",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:rSpeed",
+      "dataType": "i=10",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Conveyor.xRun",
+      "parent": "ns=4;s=GVL_BatchLines.Conveyor",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:xRun",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1",
+      "parent": "ns=4;s=GVL_BatchLines",
+      "reference": "HasComponent",
+      "nodeClass": "Object",
+      "browseName": "4:Drives_Line1"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1]",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1",
+      "reference": "HasComponent",
+      "nodeClass": "Object",
+      "browseName": "4:Drives_Line1[1]"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1]",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:HMI",
+      "dataType": "ns=4;s=DT.ST_Drive_HMI",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_cfg_AutoFreq",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_cfg_AutoFreq",
+      "dataType": "i=10",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_cmd_JogFwd",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_cmd_JogFwd",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_402_State",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_402_State",
+      "dataType": "ns=4;s=DT.E_402State",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_402_State.EnumStrings",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_402_State",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "0:EnumStrings",
+      "dataType": "i=21",
+      "valueRank": 1,
+      "arrayDimensions": [
+        6
+      ],
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_Error",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_Error",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 1,
+      "description": "Drive fault"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_Frequency",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_Frequency",
+      "dataType": "i=10",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_SlaveId",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_SlaveId",
+      "dataType": "i=5",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_State",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_State",
+      "dataType": "ns=4;s=DT.E_DriveState",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_State.EnumStrings",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI.p_stat_State",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "0:EnumStrings",
+      "dataType": "i=21",
+      "valueRank": 1,
+      "arrayDimensions": [
+        4
+      ],
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2]",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1",
+      "reference": "HasComponent",
+      "nodeClass": "Object",
+      "browseName": "4:Drives_Line1[2]"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2]",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:HMI",
+      "dataType": "ns=4;s=DT.ST_Drive_HMI",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_cfg_AutoFreq",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_cfg_AutoFreq",
+      "dataType": "i=10",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_cmd_JogFwd",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_cmd_JogFwd",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_402_State",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_402_State",
+      "dataType": "ns=4;s=DT.E_402State",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_402_State.EnumStrings",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_402_State",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "0:EnumStrings",
+      "dataType": "i=21",
+      "valueRank": 1,
+      "arrayDimensions": [
+        6
+      ],
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_Error",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_Error",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 1,
+      "description": "Drive fault"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_Frequency",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_Frequency",
+      "dataType": "i=10",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_SlaveId",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_SlaveId",
+      "dataType": "i=5",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_State",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_State",
+      "dataType": "ns=4;s=DT.E_DriveState",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_State.EnumStrings",
+      "parent": "ns=4;s=GVL_BatchLines.Drives_Line1[2].HMI.p_stat_State",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "0:EnumStrings",
+      "dataType": "i=21",
+      "valueRank": 1,
+      "arrayDimensions": [
+        4
+      ],
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.Internal_Bus_8",
+      "parent": "ns=4;s=GVL_BatchLines",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:Internal_Bus_8",
+      "dataType": "ns=4;s=DT.ST_Bus",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=GVL_BatchLines.nBatchCount",
+      "parent": "ns=4;s=GVL_BatchLines",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:nBatchCount",
+      "dataType": "i=6",
+      "valueRank": -1,
+      "accessLevel": 3,
+      "description": "Batches on line '1' ($ counted)"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_Roe",
+      "parent": "ns=4;s=PLC1",
+      "reference": "Organizes",
+      "nodeClass": "Object",
+      "browseName": "4:GVL_Roe"
+    },
+    {
+      "nodeId": "ns=4;s=GVL_Roe.aRoe",
+      "parent": "ns=4;s=GVL_Roe",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:aRoe",
+      "dataType": "i=4",
+      "valueRank": 1,
+      "arrayDimensions": [
+        4
+      ],
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=PLC1",
+      "nodeClass": "Object",
+      "browseName": "4:PLC1"
+    },
+    {
+      "nodeId": "ns=4;s=PLC1.DeviceManual",
+      "parent": "ns=4;s=PLC1",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "2:DeviceManual",
+      "dataType": "i=12",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=PLC1.DeviceRevision",
+      "parent": "ns=4;s=PLC1",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "2:DeviceRevision",
+      "dataType": "i=12",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=PLC1.DeviceState",
+      "parent": "ns=4;s=PLC1",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "2:DeviceState",
+      "dataType": "i=6",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=PLC1.Model",
+      "parent": "ns=4;s=PLC1",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "2:Model",
+      "dataType": "i=12",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=PLC1.SerialNumber",
+      "parent": "ns=4;s=PLC1",
+      "reference": "HasProperty",
+      "nodeClass": "Variable",
+      "browseName": "2:SerialNumber",
+      "dataType": "i=12",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=sensors",
+      "parent": "ns=4;s=PLC1",
+      "reference": "Organizes",
+      "nodeClass": "Object",
+      "browseName": "4:sensors"
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS11",
+      "parent": "ns=4;s=sensors",
+      "reference": "HasComponent",
+      "nodeClass": "Object",
+      "browseName": "4:EPW01_WA01_IS11"
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS11.HMI",
+      "parent": "ns=4;s=sensors.EPW01_WA01_IS11",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:HMI",
+      "dataType": "ns=4;s=DT.ST_Sensor_HMI",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS11.HMI.p_cfg_Invert",
+      "parent": "ns=4;s=sensors.EPW01_WA01_IS11.HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_cfg_Invert",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS11.HMI.p_stat_xRaw",
+      "parent": "ns=4;s=sensors.EPW01_WA01_IS11.HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_xRaw",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 1
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS12",
+      "parent": "ns=4;s=sensors",
+      "reference": "HasComponent",
+      "nodeClass": "Object",
+      "browseName": "4:EPW01_WA01_IS12"
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS12.HMI",
+      "parent": "ns=4;s=sensors.EPW01_WA01_IS12",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:HMI",
+      "dataType": "ns=4;s=DT.ST_Sensor_HMI",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS12.HMI.p_cfg_Invert",
+      "parent": "ns=4;s=sensors.EPW01_WA01_IS12.HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_cfg_Invert",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 3
+    },
+    {
+      "nodeId": "ns=4;s=sensors.EPW01_WA01_IS12.HMI.p_stat_xRaw",
+      "parent": "ns=4;s=sensors.EPW01_WA01_IS12.HMI",
+      "reference": "HasComponent",
+      "nodeClass": "Variable",
+      "browseName": "4:p_stat_xRaw",
+      "dataType": "i=1",
+      "valueRank": -1,
+      "accessLevel": 1
+    }
+  ],
+  "dataTypes": [
+    {
+      "nodeId": "ns=4;s=DT.E_402State",
+      "kind": "enumeration",
+      "values": [
+        {
+          "value": 0,
+          "name": "not_ready"
+        },
+        {
+          "value": 1,
+          "name": "switch_on_disabled"
+        },
+        {
+          "value": 2,
+          "name": "ready_to_switch_on"
+        },
+        {
+          "value": 3,
+          "name": "fault"
+        },
+        {
+          "value": 4,
+          "name": "switched_on"
+        },
+        {
+          "value": 5,
+          "name": "operation_enabled"
+        }
+      ]
+    },
+    {
+      "nodeId": "ns=4;s=DT.E_DriveState",
+      "kind": "enumeration",
+      "values": [
+        {
+          "value": 0,
+          "name": "init"
+        },
+        {
+          "value": 1,
+          "name": "cnf"
+        },
+        {
+          "value": 2,
+          "name": "rdy"
+        },
+        {
+          "value": 3,
+          "name": "run"
+        }
+      ]
+    },
+    {
+      "nodeId": "ns=4;s=DT.ST_Bus",
+      "kind": "structure",
+      "fields": [
+        {
+          "name": "nNodes",
+          "dataType": "i=4",
+          "valueRank": -1
+        },
+        {
+          "name": "xOk",
+          "dataType": "i=1",
+          "valueRank": -1
+        }
+      ]
+    },
+    {
+      "nodeId": "ns=4;s=DT.ST_Drive_HMI",
+      "kind": "structure",
+      "fields": [
+        {
+          "name": "p_cmd_JogFwd",
+          "dataType": "i=1",
+          "valueRank": -1
+        },
+        {
+          "name": "p_stat_Error",
+          "dataType": "i=1",
+          "valueRank": -1
+        },
+        {
+          "name": "p_stat_State",
+          "dataType": "ns=4;s=DT.E_DriveState",
+          "valueRank": -1
+        },
+        {
+          "name": "p_stat_402_State",
+          "dataType": "ns=4;s=DT.E_402State",
+          "valueRank": -1
+        },
+        {
+          "name": "p_stat_Frequency",
+          "dataType": "i=10",
+          "valueRank": -1
+        },
+        {
+          "name": "p_stat_SlaveId",
+          "dataType": "i=5",
+          "valueRank": -1
+        },
+        {
+          "name": "p_cfg_AutoFreq",
+          "dataType": "i=10",
+          "valueRank": -1
+        }
+      ]
+    },
+    {
+      "nodeId": "ns=4;s=DT.ST_Sensor_HMI",
+      "kind": "structure",
+      "fields": [
+        {
+          "name": "p_stat_xRaw",
+          "dataType": "i=1",
+          "valueRank": -1
+        },
+        {
+          "name": "p_cfg_Invert",
+          "dataType": "i=1",
+          "valueRank": -1
+        }
+      ]
+    }
+  ]
+}
