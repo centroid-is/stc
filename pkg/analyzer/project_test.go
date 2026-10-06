@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/centroid-is/stc/pkg/diag"
-	"github.com/centroid-is/stc/pkg/vendor/twincat"
+	"github.com/centroid-is/stc/pkg/twincat"
 )
 
-const twincatTestdata = "../vendor/twincat/testdata"
+const twincatTestdata = "../twincat/testdata"
 
 func TestAnalyzeProjectDemo(t *testing.T) {
 	m, _, err := twincat.Import(filepath.Join(twincatTestdata, "sln", "Demo", "Demo solution.tsproj"), twincat.Options{})
