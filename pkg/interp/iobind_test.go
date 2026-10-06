@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/ecat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -179,4 +180,112 @@ func TestIOBindResolution(t *testing.T) {
 	ioScan(e)
 	assert.Equal(t, uint64(0xBEEF), ecat.ReadBits(img.Out, 0, 0, 16))
 	assert.Len(t, b.Errors(), 8, "resolution runs once")
+}
+
+const ioEdgeSrc = `
+TYPE AMSADDR :
+STRUCT
+	netId : ARRAY[0..5] OF BYTE;
+	port  : UINT;
+END_STRUCT
+END_TYPE
+TYPE T_Addr : AMSADDR;
+END_TYPE
+TYPE ST_Nest :
+STRUCT
+	a : T_Addr;
+	b : BOOL;
+END_STRUCT
+END_TYPE
+TYPE ST_Bad :
+STRUCT
+	s : STRING;
+END_STRUCT
+END_TYPE
+VAR_GLOBAL
+	AL : T_Addr;
+	NS : ST_Nest;
+	BS : ST_Bad;
+	SA : ARRAY[0..1] OF STRING;
+	SH : INT;
+	AD : AMSADDR;
+END_VAR
+PROGRAM P
+END_PROGRAM
+`
+
+func TestIOBindAliasesAndEdges(t *testing.T) {
+	e := gvlEngine(t, "IO.st", ioEdgeSrc)
+	net := ioNet()
+	b := NewIOBinder([]ecat.Binding{
+		bind(ecat.DirIn, 0, 64, "T_Addr", "IO", "AL"),
+		bind(ecat.DirIn, 8, 65, "ST_Nest", "IO", "NS"),
+		bind(ecat.DirIn, 20, 8, "INT", "IO", "SH"),      // slot shorter than INT
+		bind(ecat.DirIn, 24, 48, "AMSADDR", "IO", "AD"), // port gets no bits
+		bind(ecat.DirIn, 40, 8, "ST_Bad", "IO", "BS"),
+		bind(ecat.DirIn, 40, 8, "ARRAY", "IO", "SA"),
+		bind(ecat.DirIn, 40, 1, "BOOL", "IO", "MISSING", "X"),
+	}, net)
+	e.SetIOBinder(b)
+	img := net.Images().Get(ioMaster)
+	ecat.WriteBits(img.In, 0, 0, 64, 502<<48|0x0A)
+	ecat.WriteBits(img.In, 8, 0, 64, 851<<48|0x0B)
+	ecat.WriteBits(img.In, 16, 0, 1, 1)
+	ecat.WriteBits(img.In, 20, 0, 8, 0xFF)
+	ecat.WriteBits(img.In, 24, 0, 64, 0xFFFF<<48|0x0C)
+	ioScan(e)
+	assert.Len(t, b.Errors(), 3)
+	al := ioRead(t, e, "IO", "AL")
+	assert.Equal(t, int64(502), al.Struct["PORT"].Int)
+	assert.Equal(t, int64(0x0A), al.Struct["NETID"].Array[0].Int)
+	ns := ioRead(t, e, "IO", "NS")
+	assert.Equal(t, int64(851), ns.Struct["A"].Struct["PORT"].Int)
+	assert.True(t, ns.Struct["B"].Bool)
+	assert.Equal(t, int64(0xFF), ioRead(t, e, "IO", "SH").Int, "8 of 16 bits, no sign extension past the slot")
+	ad := ioRead(t, e, "IO", "AD")
+	assert.Equal(t, int64(0x0C), ad.Struct["NETID"].Array[0].Int)
+	assert.Equal(t, int64(0), ad.Struct["PORT"].Int)
+
+	// Alias cycles stop at the nesting bound.
+	e.interp.TypeDecls["CYC_A"] = &ast.NamedType{Name: &ast.Ident{Name: "CYC_B"}}
+	e.interp.TypeDecls["CYC_B"] = &ast.NamedType{Name: &ast.Ident{Name: "CYC_A"}}
+	assert.NotNil(t, b.lookupType("CYC_A", 0))
+}
+
+func TestIOBindStructOrderFallback(t *testing.T) {
+	e := gvlEngine(t, "IO.st", ioEdgeSrc)
+	b := NewIOBinder(nil, nil)
+	e.SetIOBinder(b)
+	v := Value{Kind: ValStruct, Struct: map[string]Value{"Z": BoolValue(false), "A": BoolValue(false)}}
+	names := func(ms []memberSpec) []string {
+		var out []string
+		for _, m := range ms {
+			out = append(out, m.name)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"A", "Z"}, names(b.structOrder(v, nil)))
+	odd := &ast.StructType{Members: []*ast.StructMember{{Name: nil}, {Name: &ast.Ident{Name: "z"}}}}
+	assert.Equal(t, []string{"A", "Z"}, names(b.structOrder(v, odd)), "member set mismatch falls back to sorted")
+
+	// Unknown integer kinds (enums without a resolved base) take the rest of
+	// the slot at top level and 16 bits inside aggregates.
+	c := &bitCursor{buf: make([]byte, 8), pos: 0, end: 24}
+	w, _ := scalarWidth(Value{Kind: ValInt}, c, true)
+	assert.Equal(t, 24, w)
+	w, _ = scalarWidth(Value{Kind: ValInt}, c, false)
+	assert.Equal(t, 16, w)
+	w, _ = scalarWidth(Value{Kind: ValReal}, c, false)
+	assert.Equal(t, 64, w)
+}
+
+func TestIOBindNilNetwork(t *testing.T) {
+	e := gvlEngine(t, "IO.st", ioBindSrc)
+	b := NewIOBinder([]ecat.Binding{bind(ecat.DirIn, 0, 1, "BOOL", "IO", "B")}, nil)
+	e.SetIOBinder(b)
+	ioScan(e)
+	require.Len(t, b.Errors(), 1)
+	assert.Contains(t, b.Errors()[0].Error(), "no process image")
+	e.SetIOBinder(nil)
+	assert.Nil(t, e.ioBinder)
 }

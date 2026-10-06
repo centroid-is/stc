@@ -33,6 +33,7 @@ type ScanCycleEngine struct {
 
 	ioTable    *iomap.IOTable // I/O process image table
 	ioBindings []IOBinding    // AT-addressed variable bindings
+	ioBinder   *IOBinder      // EtherCAT TcLinkTo bindings, nil when unused
 
 	initialized bool
 }
