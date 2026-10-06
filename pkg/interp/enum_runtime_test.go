@@ -311,4 +311,25 @@ END_PROGRAM
 		v = zeroFromTypeSpecWith(&ast.EnumType{}, nil, 0)
 		assert.Equal(t, int64(0), v.Int)
 	})
+
+	t.Run("helper edge cases", func(t *testing.T) {
+		in := New()
+		in.RegisterEnumType("Color", map[string]int64{"RED": 0})
+		env := NewEnv(nil)
+		// Unknown object name: not an enum, falls through to member access.
+		_, handled, err := in.qualifiedEnum(env, &ast.MemberAccessExpr{Object: &ast.Ident{Name: "Nope"}, Member: &ast.Ident{Name: "x"}})
+		assert.False(t, handled)
+		assert.NoError(t, err)
+		// Non-identifier object and missing member are not enum lookups.
+		_, handled, _ = in.qualifiedEnum(env, &ast.MemberAccessExpr{Object: &ast.ParenExpr{Inner: &ast.Ident{Name: "Color"}}, Member: &ast.Ident{Name: "Red"}})
+		assert.False(t, handled)
+		_, handled, _ = in.qualifiedEnum(env, &ast.MemberAccessExpr{Object: &ast.Ident{Name: "Color"}})
+		assert.False(t, handled)
+
+		_, ok := constBitIndex(env, &ast.MemberAccessExpr{Object: &ast.Ident{Name: "w"}})
+		assert.False(t, ok)
+
+		in.RegisterInlineEnums("P", []*ast.VarBlock{nil})
+		assert.Len(t, in.EnumDefs, 1)
+	})
 }
