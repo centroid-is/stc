@@ -1,0 +1,32 @@
+# Jam scenario for the real ST301 project (1 ms PlcTask), run by
+# tests/scenario_st301_test.go when STC_SILD_DIR is set. Only slave names
+# and link paths from ST301 are kept here, no source.
+# FB_EcDeviceDiag fills Device_1_Diag[i] from FB_EcGetAllSlaveStates
+# entry i - 1, i.e. bus position i - 1 counting the EK1200 coupler
+# (ST301.A1.00) as position 0, so ST301.A1.03 (EL1008) is Device_1_Diag[4].
+# ECT_Diag.Device_1_SlaveInfo omits the coupler and lists the EL1008 at
+# index 3, one below its Device_1_Diag index. FB_EcDeviceDiag polls the
+# slave states every 500 ms (tStatePoll), so the windows span a full poll.
+[scenario]
+name = "st301-jam"
+description = "EL1008 input by link path, EL9222 trip, EL1008 pulled"
+cycles = 3000
+
+[[step]]
+cycle = 0
+link = { path = "TIID^Device 1 (EtherCAT)^ST301.A1.00 (EK1200)^ST301.A1.03 (EL1008)^Channel 1^Input", value = true }
+expect = { path = "ECT.ST301_A1_03.I1", value = true, within = 2 }
+
+[[step]]
+at = "200ms"
+trip = { slave = "ST301.A1.02 (EL9222-5500)", channel = 1 }
+expect = { path = "ECT.ST301_A1_02.p_stat_Enabled", value = false, within = 2 }
+
+[[step]]
+at = "1200ms"
+expect = { path = "ECT_Diag.Device_1_Diag[4].p_stat_bOk", value = true }
+
+[[step]]
+at = "1300ms"
+slave_state = { slave = "ST301.A1.03 (EL1008)", state = "not_present" }
+expect = { path = "ECT_Diag.Device_1_Diag[4].p_stat_bOk", value = false, within = 1200 }
