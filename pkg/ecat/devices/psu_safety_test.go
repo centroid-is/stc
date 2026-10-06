@@ -198,3 +198,31 @@ func TestDemoOnlyDriveUnmodelled(t *testing.T) {
 		t.Errorf("diagnostics = %v, want one ECAT010 for the ATV320", diags)
 	}
 }
+
+// Layout edge cases: fields outside "Channel n" PDOs, a channel without a
+// Value, and integer entries wider than 32 bits.
+func TestModelLayoutEdges(t *testing.T) {
+	a := &Analog{kind: analogCurrent}
+	a.Init(&ecat.Slave{Name: "E (EL3054)"})
+	a.Bind(ecat.NewLayout([]ecat.Field{
+		{Pdo: "Device", Entry: "Value", Dir: ecat.DirIn, Bit: 0, BitLen: 16},
+		{Pdo: "AI Standard Channel 2", Entry: "Status__Error", Dir: ecat.DirIn, Bit: 16, BitLen: 1},
+	}))
+	if a.Channels() != 2 || a.SetCurrent(1, 12) == nil || a.SetCurrent(2, 12) == nil {
+		t.Error("channels without Value must be rejected")
+	}
+	in := []byte{0x11, 0x22, 0x01}
+	a.Step(0, nil, in)
+	if in[0] != 0x11 || in[1] != 0x22 || in[2] != 0x01 {
+		t.Errorf("valueless channel written: % x", in)
+	}
+	e := &EL9222{}
+	e.Init(&ecat.Slave{Name: "E (EL9222-5500)"})
+	e.Bind(ecat.NewLayout([]ecat.Field{{Pdo: "Unassigned", Entry: "Spare", Dir: ecat.DirIn, Bit: 0, BitLen: 8}}))
+	if e.Channels() != 0 {
+		t.Errorf("EL9222 channels = %d", e.Channels())
+	}
+	if got := encodeAnalog(ecat.Field{DataType: "ULINT", BitLen: 64}, 1e12); got != 0xffffffff {
+		t.Errorf("wide integer clamp = %x", got)
+	}
+}

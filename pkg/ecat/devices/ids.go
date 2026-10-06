@@ -28,6 +28,10 @@ const (
 	ProductEL3054 uint32 = 0x0bee3052
 	ProductEL3064 uint32 = 0x0bf83052 // Beckhoff numbering; not in the reference exports
 	ProductEL9222 uint32 = 0x24063052 // EL9222-5500
+	ProductPS2001 uint32 = 0x07d14d02 // PS2001-2410
+	ProductEL2912 uint32 = 0x0b603052
+	ProductEP1918 uint32 = 0x077e4052 // EP1918-0002
+	ProductEL1904 uint32 = 0x07703052
 )
 
 type deviceID struct {
@@ -58,6 +62,10 @@ var knownIDs = []deviceID{
 	{"EL3054", VendorBeckhoff, ProductEL3054, analogIn4to20},
 	{"EL3064", VendorBeckhoff, ProductEL3064, analogIn0to10},
 	{"EL9222-5500", VendorBeckhoff, ProductEL9222, el9222},
+	{"PS2001-2410", VendorBeckhoff, ProductPS2001, psu},
+	{"EL2912", VendorBeckhoff, ProductEL2912, safetyDiag},
+	{"EP1918-0002", VendorBeckhoff, ProductEP1918, safetyDiag},
+	{"EL1904", VendorBeckhoff, ProductEL1904, safetyDiag},
 }
 
 type modelFallback struct {
@@ -77,6 +85,7 @@ var beckhoffFallbacks = []modelFallback{
 	{regexp.MustCompile(`^EL305\d$`), analogIn4to20},
 	{regexp.MustCompile(`^EL306\d$`), analogIn0to10},
 	{regexp.MustCompile(`^EL922\d`), el9222},
+	{regexp.MustCompile(`^PS20\d\d`), psu},
 }
 
 // Register installs every device model into r.
