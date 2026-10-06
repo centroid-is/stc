@@ -71,6 +71,7 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 		Decl:     decl,
 		Env:      env,
 	}
+	env.self = inst
 
 	// EXTENDS chain known to the FBDecls registry, base-most first, so the
 	// instance env also holds every inherited variable and ACTION, and a
@@ -229,6 +230,11 @@ func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) error {
 	}
 	// User-defined FB: execute body statements
 	if interp != nil && inst.Decl != nil && inst.Env != nil {
+		if inst.Env.self == nil {
+			// Hand-built instance: THIS^ and unqualified METHOD calls in
+			// its body still need to find it.
+			inst.Env.self = inst
+		}
 		if err := interp.EnterCall(inst.TypeName, ast.Pos{}); err != nil {
 			return err
 		}

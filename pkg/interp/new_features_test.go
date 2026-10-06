@@ -305,7 +305,7 @@ func TestEvalMethodCall(t *testing.T) {
 		Object: ident("fb"),
 		Member: ident("GetValue"),
 	}
-	v, err := interp.evalMethodCall(env, memberAccess, nil)
+	v, err := interp.evalMethodCall(env, memberAccess, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func TestEvalMethodCall_WithArgs(t *testing.T) {
 		Object: ident("fb"),
 		Member: ident("Add"),
 	}
-	v, err := interp.evalMethodCall(env, memberAccess, []ast.Expr{intLit("3"), intLit("7")})
+	v, err := interp.evalMethodCall(env, memberAccess, []ast.Expr{intLit("3"), intLit("7")}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestEvalMethodCall_NotFB(t *testing.T) {
 		Object: ident("x"),
 		Member: ident("Foo"),
 	}
-	_, err := interp.evalMethodCall(env, memberAccess, nil)
+	_, err := interp.evalMethodCall(env, memberAccess, nil, nil)
 	if err == nil {
 		t.Fatal("expected error calling method on non-FB")
 	}
@@ -388,7 +388,7 @@ func TestEvalMethodCall_MethodNotFound(t *testing.T) {
 		Object: ident("fb"),
 		Member: ident("NonExistent"),
 	}
-	_, err := interp.evalMethodCall(env, memberAccess, nil)
+	_, err := interp.evalMethodCall(env, memberAccess, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for undefined method")
 	}
@@ -1222,7 +1222,7 @@ func TestEvalMethodCall_WithLocalVars(t *testing.T) {
 		Object: ident("fb"),
 		Member: ident("Compute"),
 	}
-	v, err := interp.evalMethodCall(env, memberAccess, nil)
+	v, err := interp.evalMethodCall(env, memberAccess, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

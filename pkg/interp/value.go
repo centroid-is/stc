@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/types"
 )
 
@@ -69,6 +70,11 @@ type Value struct {
 	PtrEnv  *Env           // For ValPointer/ValReference: the env containing the target
 	PtrVar  string         // For ValPointer/ValReference: uppercase variable name
 	Enum    string         // Upper-case enum type name for enum values, else empty
+
+	// superDecl is set on the value of SUPER (a ValPointer with FBRef) and
+	// of SUPER^ (a ValFBInstance): methods and the body then come from this
+	// base declaration instead of the instance's own type.
+	superDecl *ast.FunctionBlockDecl
 }
 
 // String returns a debug representation of the Value.

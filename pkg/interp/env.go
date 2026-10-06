@@ -21,6 +21,14 @@ type Env struct {
 	vars      map[string]Value
 	subranges map[string]*SubrangeConstraint // optional subrange bounds per variable
 	actions   map[string]*ast.ActionDecl     // ACTIONs owned by the POU whose env this is
+
+	// self is the FB instance this env belongs to: set on an instance env
+	// and on the envs of its methods and SUPER^() bodies. selfDecl is the
+	// FB declaration whose code runs in this env (a method's declaring FB,
+	// or the base FB of a SUPER^() call); nil means self.Decl. SUPER^ is
+	// resolved relative to it.
+	self     *FBInstance
+	selfDecl *ast.FunctionBlockDecl
 }
 
 // NewEnv creates a new environment with an optional parent scope.
@@ -142,15 +150,46 @@ func (e *Env) DefineAction(a *ast.ActionDecl) {
 
 // LookupAction finds an ACTION by name (case-insensitive), walking the parent
 // chain. It returns the action and the env that owns it: the action body runs
-// against that env, i.e. the owning POU's variables.
+// against that env, i.e. the owning POU's variables. The walk stops at an FB
+// instance env, so code inside an FB never runs an ACTION of the PROGRAM or
+// FB that holds the instance.
 func (e *Env) LookupAction(name string) (*ast.ActionDecl, *Env) {
 	key := strings.ToUpper(name)
 	for cur := e; cur != nil; cur = cur.parent {
 		if a, ok := cur.actions[key]; ok {
 			return a, cur
 		}
+		if cur.self != nil && cur.self.Env == cur {
+			break
+		}
 	}
 	return nil, nil
+}
+
+// CurrentFB returns the FB instance whose code runs in this env (an FB body,
+// ACTION, METHOD or property accessor), or nil outside any FB.
+func (e *Env) CurrentFB() *FBInstance {
+	for cur := e; cur != nil; cur = cur.parent {
+		if cur.self != nil {
+			return cur.self
+		}
+	}
+	return nil
+}
+
+// currentFBDecl returns the declaration of the FB whose code runs in this
+// env: the declaring FB of a METHOD or of a SUPER^() body, else the
+// instance's own declaration. It is nil outside any FB.
+func (e *Env) currentFBDecl() *ast.FunctionBlockDecl {
+	for cur := e; cur != nil; cur = cur.parent {
+		if cur.self != nil {
+			if cur.selfDecl != nil {
+				return cur.selfDecl
+			}
+			return cur.self.Decl
+		}
+	}
+	return nil
 }
 
 // localAction finds an ACTION defined in this scope only.
