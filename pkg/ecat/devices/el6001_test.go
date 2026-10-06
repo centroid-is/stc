@@ -534,3 +534,29 @@ func TestEL6001BaaderMdMt1(t *testing.T) {
 		})
 	}
 }
+
+// TestEL6001PeerDelaySteps pins ScriptRule.Delay to whole Steps on an
+// EL6001: a reply with Delay N arrives N Steps later than with Delay 0
+// (review 2 LO-05).
+func TestEL6001PeerDelaySteps(t *testing.T) {
+	steps := map[int]int{}
+	for _, delay := range []int{0, 1, 3} {
+		forBothLayouts(t, func(t *testing.T, _ *ecat.Topology, n *ecat.Network, d *EL6001, s *serialSlots) {
+			peer := BaaderPeer()
+			for i := range peer.Rules {
+				peer.Rules[i].Delay = delay
+			}
+			d.SetPeer(peer)
+			plc := &plcSerial{s: s}
+			for i := 0; i < 10 && !plc.initialized; i++ {
+				plc.cycle()
+				n.Step(0)
+			}
+			_, k := plc.exchange(t, n, "md\r", 6+delay)
+			steps[delay] = k
+		})
+		if steps[delay] != steps[0]+delay {
+			t.Errorf("Delay %d: reply after %d steps, want %d", delay, steps[delay], steps[0]+delay)
+		}
+	}
+}

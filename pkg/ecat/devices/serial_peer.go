@@ -11,7 +11,8 @@ type SerialPeer interface {
 }
 
 // Ticker is optionally implemented by a SerialPeer that models time. The
-// EL6001 calls Tick once per Step, after Write and before Read.
+// EL6001 calls Tick once per Step, before Write and Read, so a request
+// written in a Step is first ticked in the next one.
 type Ticker interface {
 	Tick()
 }
@@ -20,7 +21,7 @@ type Ticker interface {
 type ScriptRule struct {
 	Request string // matched against the trimmed request text
 	Reply   string // Terminator is appended unless Reply already ends with it
-	Delay   int    // Ticks before the reply becomes readable
+	Delay   int    // Ticks before the reply becomes readable (Steps on an EL6001)
 }
 
 // DefaultTerminator ends every ScriptedPeer reply unless overridden.

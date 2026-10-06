@@ -146,13 +146,15 @@ func (d *EL6001) Step(_ time.Duration, out, in []byte) {
 		}
 	} else {
 		d.ia = false
+		// Tick before the new request is written, so a reply with Delay N
+		// is read N Steps after the request (Delay 0: the same Step).
+		if t, ok := d.peer.(Ticker); ok {
+			t.Tick()
+		}
 		if tr != d.lastTR {
 			d.lastTR = tr
 			d.transmit(out, ol)
 			d.ta = !d.ta
-		}
-		if t, ok := d.peer.(Ticker); ok {
-			t.Tick()
 		}
 		if d.peer != nil {
 			d.receive(d.peer.Read())
