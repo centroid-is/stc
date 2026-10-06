@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: verifying
-stopped_at: v1.2 roadmap created
-last_updated: "2026-10-06T00:10:46.957Z"
+status: ready_to_plan
+stopped_at: Phase 19 complete (10/10) — ready to discuss Phase 20
+last_updated: 2026-10-06T00:14:17.262Z
 last_activity: 2026-10-06
 progress:
   total_phases: 29
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 19 — TwinCAT Declaration Syntax
+**Current focus:** Phase 20 — twincat expression semantics
 
 ## Current Position
 
-Phase: 19 (TwinCAT Declaration Syntax) — EXECUTING
-Plan: 10 of 10
-Status: Phase complete — ready for verification
+Phase: 20
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-10-06
 
 Progress: [██████████] 100%
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 32 (v1.0) + 10 (v1.1) = 42
+- Total plans completed: 42 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 
