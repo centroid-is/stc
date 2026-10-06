@@ -37,7 +37,7 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 - [ ] **RUNT-05**: Integer arithmetic wraps per declared type (INT 32767+1 = -32768, UINT 0-1 = 65535) and untyped literals adopt the context type so `a := a + 1` checks for INT
 - [ ] **RUNT-06**: Array, struct and struct-array initialisers (`:= [(a := 1, s := 'x'), ...]`) with constant-expression bounds are applied at instantiation
 - [ ] **RUNT-07**: AT-bound variables read and write by declared type (sign-extended INT, REAL, enums, structs with `AT %I*` members) rather than by address width
-- [ ] **RUNT-08**: `stc check` knows the standard FBs (TON, TOF, TP, CTU, CTD, CTUD, R_TRIG, F_TRIG, SR, RS) and rejects unknown type names instead of treating them as empty FBs
+- [x] **RUNT-08**: `stc check` knows the standard FBs (TON, TOF, TP, CTU, CTD, CTUD, R_TRIG, F_TRIG, SR, RS) and rejects unknown type names instead of treating them as empty FBs
 - [ ] **RUNT-09**: `stc sim` and `stc serve` can run PROGRAMs that use user-defined FBs, functions, methods and actions from the imported project
 
 ### EtherCAT process-image simulation (ECAT)
@@ -132,7 +132,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RUNT-05 | Phase 22 | Pending |
 | RUNT-06 | Phase 22 | Pending |
 | RUNT-07 | Phase 23 | Pending |
-| RUNT-08 | Phase 20 | Pending |
+| RUNT-08 | Phase 20 | Complete |
 | RUNT-09 | Phase 23 | Pending |
 | ECAT-01 | Phase 24 | Pending |
 | ECAT-02 | Phase 24 | Pending |
