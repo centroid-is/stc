@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
@@ -45,11 +47,30 @@ func TestEnumResolve(t *testing.T) {
 	})
 
 	t.Run("non-integer base type reports SEMA036 and falls back to INT", func(t *testing.T) {
-		ds, table := runGVL(t, []gvlFile{{"t.st", "TYPE E : (a, b) REAL; END_TYPE\n"}})
-		errs := diagsWithCode(ds, CodeEnumRule)
+		// The parser accepts only integer and bit-string keywords after an
+		// enum, so `) REAL;` is a parse error from source. The checker rule
+		// covers ASTs from other producers: give the enum a REAL base here.
+		files := parseGVLFiles(t, []gvlFile{{"t.st", "TYPE E : (a, b); END_TYPE\n"}})
+		spec := files[0].Declarations[0].(*ast.TypeDecl).Type.(*ast.EnumType)
+		spec.BaseType = &ast.NamedType{Name: &ast.Ident{Name: "REAL"}}
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations(files)
+		errs := diagsWithCode(diags.All(), CodeEnumRule)
 		require.Len(t, errs, 1)
 		assert.Contains(t, errs[0].Message, "enum base type must be an integer type")
 		assert.Equal(t, types.KindINT, enumOf(t, table, "E").BaseType)
+	})
+
+	t.Run("undeclared base type reports only SEMA037", func(t *testing.T) {
+		files := parseGVLFiles(t, []gvlFile{{"t.st", "TYPE E : (a, b); END_TYPE\n"}})
+		spec := files[0].Declarations[0].(*ast.TypeDecl).Type.(*ast.EnumType)
+		spec.BaseType = &ast.NamedType{Name: &ast.Ident{Name: "T_Missing"}}
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations(files)
+		assert.Empty(t, diagsWithCode(diags.All(), CodeEnumRule))
+		assert.Len(t, diagsWithCode(diags.All(), CodeUndeclaredType), 1)
 	})
 
 	t.Run("ordinal out of base type range reports SEMA036", func(t *testing.T) {
@@ -158,8 +179,8 @@ END_FUNCTION
 		assert.Len(t, diagsWithCode(ds, CodeRedeclared), 1)
 	})
 
-	t.Run("inline enum with a bad base type reports once", func(t *testing.T) {
-		src := "FUNCTION_BLOCK FB\nVAR_INPUT\n\tm : (A, B) STRING;\nEND_VAR\nEND_FUNCTION_BLOCK\n"
+	t.Run("inline enum with an out-of-range ordinal reports once", func(t *testing.T) {
+		src := "FUNCTION_BLOCK FB\nVAR_INPUT\n\tm : (A := 0, B := 256) BYTE;\nEND_VAR\nEND_FUNCTION_BLOCK\n"
 		ds, _ := runGVL(t, []gvlFile{{"main.st", src}})
 		assert.Len(t, diagsWithCode(ds, CodeEnumRule), 1)
 	})

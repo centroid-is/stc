@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"math"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -69,6 +70,11 @@ type Resolver struct {
 	// owns it, in registration order (fbOrder), for the EXTENDS pass.
 	fbs     map[string]*fbEntry
 	fbOrder []string
+
+	// enums caches the resolved type of each enum spec, so the scope and
+	// parameter passes over one var declaration share a single EnumType
+	// (and report its diagnostics once). TYPE enums map to their shell.
+	enums map[*ast.EnumType]*types.EnumType
 }
 
 type fbEntry struct {
@@ -91,7 +97,12 @@ type pendingGVL struct {
 
 // NewResolver creates a new Resolver that populates the given symbol table.
 func NewResolver(table *symbols.Table, diags *diag.Collector) *Resolver {
-	return &Resolver{table: table, diags: diags, reportedTypes: make(map[*ast.NamedType]bool)}
+	return &Resolver{
+		table:         table,
+		diags:         diags,
+		reportedTypes: make(map[*ast.NamedType]bool),
+		enums:         make(map[*ast.EnumType]*types.EnumType),
+	}
 }
 
 // CollectDeclarations walks all source files and registers POU declarations,
@@ -428,7 +439,7 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 		sym.IsLibrary = isLibrary
 	}
 
-	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveVarBlocksInScope(name, d.VarBlocks, pouScope)
 	r.resolveActions(d.Actions, pouScope)
 }
 
@@ -454,6 +465,7 @@ func (r *Resolver) resolveMethods(methods []*ast.MethodDecl, scope *symbols.Scop
 		}
 		fn := &types.FunctionType{Name: m.Name.Name, ReturnType: ret}
 		fn.Params = r.callParams(m.VarBlocks)
+		fn.Outputs = r.callOutputs(m.VarBlocks)
 		r.insertCallable(scope, m.Name, symbols.KindMethod, fn)
 	}
 }
@@ -480,6 +492,24 @@ func (r *Resolver) callParams(blocks []*ast.VarBlock) []types.Parameter {
 		}
 	}
 	return params
+}
+
+// callOutputs lists the VAR_OUTPUT parameters of a callable in declaration
+// order, so name => target arguments can bind to them.
+func (r *Resolver) callOutputs(blocks []*ast.VarBlock) []types.Parameter {
+	var outs []types.Parameter
+	for _, vb := range blocks {
+		if vb.Section != ast.VarOutput {
+			continue
+		}
+		for _, vd := range vb.Declarations {
+			typ := r.resolveTypeSpec(vd.Type)
+			for _, n := range vd.Names {
+				outs = append(outs, types.Parameter{Name: n.Name, Type: typ, Direction: types.DirOutput})
+			}
+		}
+	}
+	return outs
 }
 
 func (r *Resolver) insertCallable(scope *symbols.Scope, name *ast.Ident, kind symbols.SymbolKind, fn *types.FunctionType) {
@@ -518,7 +548,7 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 	// Fill the pre-registered FunctionBlockType from the var blocks
 	fbType := r.fbShell(d, name)
 
-	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveVarBlocksInScope(name, d.VarBlocks, pouScope)
 	r.resolveMethods(d.Methods, pouScope)
 	r.resolveActions(d.Actions, pouScope)
 
@@ -681,7 +711,7 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 	}
 	fnType.ReturnType = retType
 
-	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveVarBlocksInScope(name, d.VarBlocks, pouScope)
 
 	// Collect parameters
 	for _, vb := range d.VarBlocks {
@@ -698,6 +728,7 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 					fnType.Params = append(fnType.Params, param)
 				case ast.VarOutput:
 					param.Direction = types.DirOutput
+					fnType.Outputs = append(fnType.Outputs, param)
 				case ast.VarInOut:
 					param.Direction = types.DirInOut
 					fnType.Params = append(fnType.Params, param)
@@ -753,8 +784,20 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 	}
 	_ = r.table.GlobalScope().Insert(sym)
 
-	// For enum types, register each enum value in the global scope
-	if et, ok := resolvedType.(*types.EnumType); ok {
+	// An enum TYPE records its attributes (DIAL-07). Its values are
+	// inserted into the global scope unless the enum is qualified_only:
+	// then only E.v names them, so a GVL or POU variable may reuse a value
+	// name. Aliases of an enum share its EnumType and leave the flags alone.
+	et, ok := resolvedType.(*types.EnumType)
+	if !ok {
+		return
+	}
+	if _, spec := d.Type.(*ast.EnumType); spec {
+		et.Qualified = ast.HasAttribute(d.Attributes, "qualified_only")
+		et.Strict = ast.HasAttribute(d.Attributes, "strict")
+		et.ToString = ast.HasAttribute(d.Attributes, "to_string")
+	}
+	if !et.Qualified {
 		for _, val := range et.Values {
 			enumSym := &symbols.Symbol{
 				Name: val,
@@ -783,16 +826,15 @@ func (r *Resolver) typeDeclType(d *ast.TypeDecl) types.Type {
 	if typ, ok := r.aliases[d]; ok {
 		return typ
 	}
+	if sh, ok := r.shells[d].(*types.EnumType); ok {
+		// An enum shell exists only for an enum spec.
+		return r.resolveEnumSpec(d.Type.(*ast.EnumType), sh)
+	}
 	resolved := r.resolveTypeSpec(d.Type)
-	// A STRUCT or enum shell exists only for a STRUCT or enum spec, which
-	// resolveTypeSpec always turns into the same Go type.
-	switch sh := r.shells[d].(type) {
-	case *types.StructType:
+	// A STRUCT shell exists only for a STRUCT spec, which resolveTypeSpec
+	// always turns into a StructType.
+	if sh, ok := r.shells[d].(*types.StructType); ok {
 		sh.Members = resolved.(*types.StructType).Members
-		return sh
-	case *types.EnumType:
-		et := resolved.(*types.EnumType)
-		sh.BaseType, sh.Values = et.BaseType, et.Values
 		return sh
 	}
 	return resolved
@@ -828,11 +870,19 @@ func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
 }
 
 // resolveVarBlocksInScope registers variable declarations directly
-// into the given scope (bypassing the table's scope stack).
-func (r *Resolver) resolveVarBlocksInScope(blocks []*ast.VarBlock, scope *symbols.Scope) {
+// into the given scope (bypassing the table's scope stack). An inline enum
+// (eStep : (E_IDLE, E_RUN);) is named <POU>.<var> and its values are
+// inserted into the POU scope, so two POUs may reuse value names.
+func (r *Resolver) resolveVarBlocksInScope(pouName string, blocks []*ast.VarBlock, scope *symbols.Scope) {
 	for _, vb := range blocks {
 		for _, vd := range vb.Declarations {
 			resolvedType := r.resolveTypeSpec(vd.Type)
+			if et, ok := resolvedType.(*types.EnumType); ok && len(vd.Names) > 0 {
+				if _, inline := vd.Type.(*ast.EnumType); inline {
+					et.Name = pouName + "." + vd.Names[0].Name
+					r.insertInlineEnumValues(vd.Type.(*ast.EnumType), et, scope)
+				}
+			}
 			for _, name := range vd.Names {
 				pos := astPosToSource(name.Span().Start)
 				sym := &symbols.Symbol{
@@ -848,6 +898,93 @@ func (r *Resolver) resolveVarBlocksInScope(blocks []*ast.VarBlock, scope *symbol
 			}
 		}
 	}
+}
+
+// insertInlineEnumValues inserts the values of an inline enum into the POU
+// scope. A value that clashes with a variable is a redeclaration.
+func (r *Resolver) insertInlineEnumValues(spec *ast.EnumType, et *types.EnumType, scope *symbols.Scope) {
+	for _, v := range spec.Values {
+		if v == nil || v.Name == nil {
+			continue
+		}
+		pos := astPosToSource(v.Name.Span().Start)
+		sym := &symbols.Symbol{Name: v.Name.Name, Kind: symbols.KindEnumValue, Pos: pos, Type: et}
+		if err := scope.Insert(sym); err != nil {
+			r.diags.Errorf(pos, CodeRedeclared, "%s", err.Error())
+		}
+	}
+}
+
+// resolveEnumSpec resolves an enum spec into an EnumType: the base type
+// (an integer or bit-string type, INT when omitted) and the value ordinals
+// (ast.EnumOrdinals, previous+1 rule). into is the pre-registered shell of
+// a TYPE declaration, or nil for an inline enum. A non-integer base type
+// and a known ordinal outside the base type's range report SEMA036.
+func (r *Resolver) resolveEnumSpec(t *ast.EnumType, into *types.EnumType) *types.EnumType {
+	if et, ok := r.enums[t]; ok {
+		return et
+	}
+	et := into
+	if et == nil {
+		et = &types.EnumType{}
+	}
+	et.BaseType = types.KindINT
+	if t.BaseType != nil {
+		bt := r.resolveTypeSpec(t.BaseType)
+		if _, _, ok := intKindRange(bt.Kind()); ok {
+			et.BaseType = bt.Kind()
+		} else if bt != types.Invalid && !r.probing {
+			r.diags.Errorf(astPosToSource(t.BaseType.Span().Start), CodeEnumRule,
+				"enum base type must be an integer type, got %s", bt)
+		}
+	}
+
+	ords := ast.EnumOrdinals(t)
+	et.Values = make([]string, len(ords))
+	et.Ordinals = make([]int64, len(ords))
+	lo, hi, _ := intKindRange(et.BaseType)
+	i := 0
+	for _, v := range t.Values {
+		if v == nil {
+			continue
+		}
+		o := ords[i]
+		et.Values[i], et.Ordinals[i] = o.Name, o.Value
+		if o.Known && (o.Value < lo || o.Value > hi) && !r.probing {
+			r.diags.Errorf(astPosToSource(v.Span().Start), CodeEnumRule,
+				"enum value %s = %d is out of range for %s (%d..%d)", o.Name, o.Value, et.BaseType, lo, hi)
+		}
+		i++
+	}
+	if !r.probing {
+		r.enums[t] = et
+	}
+	return et
+}
+
+// intKindRange returns the value range of an integer or bit-string kind.
+// ok is false for every other kind (BOOL included). The 64-bit unsigned
+// kinds are capped at MaxInt64, the largest ordinal an int64 holds.
+func intKindRange(k types.TypeKind) (lo, hi int64, ok bool) {
+	switch k {
+	case types.KindSINT:
+		return math.MinInt8, math.MaxInt8, true
+	case types.KindINT:
+		return math.MinInt16, math.MaxInt16, true
+	case types.KindDINT:
+		return math.MinInt32, math.MaxInt32, true
+	case types.KindLINT:
+		return math.MinInt64, math.MaxInt64, true
+	case types.KindUSINT, types.KindBYTE:
+		return 0, math.MaxUint8, true
+	case types.KindUINT, types.KindWORD:
+		return 0, math.MaxUint16, true
+	case types.KindUDINT, types.KindDWORD:
+		return 0, math.MaxUint32, true
+	case types.KindULINT, types.KindLWORD:
+		return 0, math.MaxInt64, true
+	}
+	return 0, 0, false
 }
 
 // resolveTypeSpec converts an AST type specification to a types.Type.
@@ -904,16 +1041,7 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 		return &types.StructType{Members: members}
 
 	case *ast.EnumType:
-		values := make([]string, len(t.Values))
-		for i, v := range t.Values {
-			if v.Name != nil {
-				values[i] = v.Name.Name
-			}
-		}
-		return &types.EnumType{
-			BaseType: types.KindINT,
-			Values:   values,
-		}
+		return r.resolveEnumSpec(t, nil)
 
 	case *ast.PointerType:
 		baseType := r.resolveTypeSpec(t.BaseType)

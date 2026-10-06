@@ -205,8 +205,16 @@ func (t *StructType) Equal(o Type) bool {
 // EnumType represents an enumeration type.
 type EnumType struct {
 	Name     string
-	BaseType TypeKind
+	BaseType TypeKind // integer or bit-string kind; INT when not declared
 	Values   []string
+	// Ordinals holds the numeric value of each entry of Values (same
+	// index), numbered with the IEC previous+1 rule.
+	Ordinals []int64
+	// Qualified, Strict and ToString record the {attribute 'qualified_only'},
+	// {attribute 'strict'} and {attribute 'to_string'} pragmas on the TYPE.
+	Qualified bool
+	Strict    bool
+	ToString  bool
 }
 
 func (t *EnumType) Kind() TypeKind { return KindEnum }
@@ -241,7 +249,11 @@ func (t *FunctionBlockType) Equal(o Type) bool {
 type FunctionType struct {
 	Name       string
 	ReturnType Type
-	Params     []Parameter
+	// Params lists the VAR_INPUT and VAR_IN_OUT parameters in declaration
+	// order; positional arguments bind to them by index.
+	Params []Parameter
+	// Outputs lists the VAR_OUTPUT parameters, bound with name => target.
+	Outputs []Parameter
 }
 
 func (t *FunctionType) Kind() TypeKind { return KindFunction }
