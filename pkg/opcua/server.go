@@ -83,6 +83,7 @@ type Server struct {
 	srv  *server.Server
 	nm   *server.NamespaceManager
 	ns   uint16
+	reg  typeRegistry // custom enum and struct DataTypes (datatypes.go)
 
 	mu      sync.Mutex
 	started bool
