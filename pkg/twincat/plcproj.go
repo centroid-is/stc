@@ -5,7 +5,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,7 +84,11 @@ func ReadPlcproj(path string) (*PlcprojInfo, []diag.Diagnostic, error) {
 			if err := d.DecodeElement(&c, &se); err != nil {
 				return nil, nil, &BadXMLError{Path: absPath, Err: err}
 			}
-			rel := slashPath(c.Include)
+			rel := slashPath(msbuildUnescape(c.Include))
+			if disk, ok := resolveCase(dir, rel); ok && disk != rel {
+				ds = append(ds, warn(pos, CodeCaseMismatch, "plcproj item %s matches %s on disk only ignoring case", c.Include, disk))
+				rel = disk
+			}
 			ext := strings.ToLower(filepath.Ext(rel))
 			kind, known := itemKinds[ext]
 			if !known {
@@ -177,4 +183,59 @@ func mergeTasks(ts []Task, ttos []ttoFile, projectPath string) ([]Task, []diag.D
 		out = append(out, t)
 	}
 	return out, ds
+}
+
+// msbuildUnescape decodes the %XX escapes MSBuild writes into Include
+// attributes for characters such as ( ) ; ' % @ $. Malformed escapes stay.
+func msbuildUnescape(s string) string {
+	if !strings.Contains(s, "%") {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' && i+2 < len(s) {
+			if v, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
+				b.WriteByte(byte(v))
+				i += 2
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// resolveCase finds rel (slash-separated, relative to dir) on disk the way
+// Windows does, ignoring case per path segment: an exact name wins, else
+// the first case-insensitive match. It reports false when some segment has
+// no match, leaving the missing file to be reported where it is read.
+func resolveCase(dir, rel string) (string, bool) {
+	segs := strings.Split(rel, "/")
+	cur := dir
+	for i, seg := range segs {
+		if seg == "" || seg == "." || seg == ".." {
+			cur = filepath.Join(cur, seg)
+			continue
+		}
+		entries, err := os.ReadDir(cur)
+		if err != nil {
+			return "", false
+		}
+		match := ""
+		for _, e := range entries {
+			if e.Name() == seg {
+				match = seg
+				break
+			}
+			if match == "" && strings.EqualFold(e.Name(), seg) {
+				match = e.Name()
+			}
+		}
+		if match == "" {
+			return "", false
+		}
+		segs[i] = match
+		cur = filepath.Join(cur, match)
+	}
+	return strings.Join(segs, "/"), true
 }

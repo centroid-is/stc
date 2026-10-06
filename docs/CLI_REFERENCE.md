@@ -422,6 +422,7 @@ Reads the tsproj (and `_Config/PLC/*.xti`), the plcproj and every TcPOU, TcGVL a
 | VEND025 | warning | tsproj and TcTTO cycle times disagree |
 | VEND026 | warning | More than one sibling library candidate |
 | VEND027 | error | A project or object file is not valid XML |
+| VEND028 | warning | A plcproj item path matches a file on disk only when case is ignored; the on-disk spelling is used |
 
 **Exit codes**: 0 on success, 1 on error.
 

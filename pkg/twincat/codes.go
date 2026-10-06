@@ -18,4 +18,6 @@ const (
 	CodeAmbiguousSibling = "VEND026"
 	// CodeBadXML: a project or object file is not valid XML (error).
 	CodeBadXML = "VEND027"
+	// CodeCaseMismatch: a plcproj item path differs in case from the file on disk (warning).
+	CodeCaseMismatch = "VEND028"
 )
