@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1098,7 +1099,7 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 		}
 		fbInst := obj.FBRef
 		// Check for property getter
-		if prop := findProperty(fbInst, memberName); prop != nil && prop.Getter != nil {
+		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Getter != nil {
 			return interp.execPropertyGetter(fbInst, prop)
 		}
 		return fbInst.GetMember(memberName), nil
@@ -1134,7 +1135,7 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 		}
 		fbInst := obj.FBRef
 		// Check for property setter
-		if prop := findProperty(fbInst, memberName); prop != nil && prop.Setter != nil {
+		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Setter != nil {
 			return interp.execPropertySetter(fbInst, prop, val)
 		}
 		fbInst.SetInput(memberName, val)
@@ -1322,18 +1323,38 @@ func (interp *Interpreter) runFBInstance(inst *FBInstance) error {
 	return inst.Execute(inst.deltaFor(interp.clock, interp.dt), interp)
 }
 
+// fbDeclChain returns inst's declaration followed by the FBs it EXTENDS,
+// derived-most first. The FBDecls registry supplies the chain; when it does
+// not know a base, the instance's recorded ParentDecl continues the walk (the
+// test runner and hand-built instances set only ParentDecl). Each level is
+// visited once, so a cycle or a long chain cannot loop.
+func fbDeclChain(inst *FBInstance, interp *Interpreter) []*ast.FunctionBlockDecl {
+	if inst.Decl == nil {
+		return nil
+	}
+	var out []*ast.FunctionBlockDecl
+	add := func(base *ast.FunctionBlockDecl) {
+		chain := fbExtendsChain(base, interp)
+		for i := len(chain) - 1; i >= 0; i-- {
+			if !slices.Contains(out, chain[i]) {
+				out = append(out, chain[i])
+			}
+		}
+	}
+	add(inst.Decl)
+	if inst.ParentDecl != nil && inst.Decl.Extends != nil && !slices.Contains(out, inst.ParentDecl) {
+		add(inst.ParentDecl)
+	}
+	return out
+}
+
 // findAction looks up an ACTION by name on an FB instance: the FB's own
 // actions, then the EXTENDS chain, then whatever was registered on the
 // instance env when it was created.
-func findAction(inst *FBInstance, name string) *ast.ActionDecl {
-	upper := strings.ToUpper(name)
-	decls := []*ast.FunctionBlockDecl{inst.Decl, inst.ParentDecl}
-	for _, d := range decls {
-		if d == nil {
-			continue
-		}
+func findAction(inst *FBInstance, name string, interp *Interpreter) *ast.ActionDecl {
+	for _, d := range fbDeclChain(inst, interp) {
 		for _, a := range d.Actions {
-			if a.Name != nil && strings.ToUpper(a.Name.Name) == upper {
+			if a.Name != nil && strings.EqualFold(a.Name.Name, name) {
 				return a
 			}
 		}
@@ -1381,10 +1402,10 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 	fbInst := obj.FBRef
 
 	// Find the method in the FB declaration (including inherited methods)
-	method := findMethod(fbInst, methodName)
+	method := findMethod(fbInst, methodName, interp)
 	if method == nil {
 		// inst.A1(); runs the FB's ACTION in the instance env.
-		if act := findAction(fbInst, methodName); act != nil {
+		if act := findAction(fbInst, methodName, interp); act != nil {
 			if len(argExprs) > 0 {
 				return Value{}, &RuntimeError{Msg: fmt.Sprintf("action %s takes no arguments", act.Name.Name), Pos: pos}
 			}
@@ -1467,56 +1488,28 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 	return retVal, nil
 }
 
-// findMethod looks up a method by name in the FB declaration hierarchy.
-// It checks the FB's own methods first, then walks up the EXTENDS chain
-// if parent declarations are available.
-func findMethod(inst *FBInstance, name string) *ast.MethodDecl {
-	if inst.Decl == nil {
-		return nil
-	}
-	upperName := strings.ToUpper(name)
-
-	// Search in the FB's own methods
-	for _, m := range inst.Decl.Methods {
-		if m.Name != nil && strings.ToUpper(m.Name.Name) == upperName {
-			return m
+// findMethod looks up a method by name in the FB declaration hierarchy: the
+// FB's own methods first, then each FB up the EXTENDS chain.
+func findMethod(inst *FBInstance, name string, interp *Interpreter) *ast.MethodDecl {
+	for _, d := range fbDeclChain(inst, interp) {
+		for _, m := range d.Methods {
+			if m.Name != nil && strings.EqualFold(m.Name.Name, name) {
+				return m
+			}
 		}
 	}
-
-	// If the FB extends another, search parent's methods via ParentDecl
-	if inst.Decl.Extends != nil && inst.ParentDecl != nil {
-		parentInst := &FBInstance{
-			TypeName:   inst.Decl.Extends.Name,
-			Decl:       inst.ParentDecl,
-			Env:        inst.Env,
-			ParentDecl: inst.ParentDecl, // propagate further up the chain
-		}
-		return findMethod(parentInst, name)
-	}
-
 	return nil
 }
 
-// findProperty looks up a property by name in the FB declaration hierarchy.
-func findProperty(inst *FBInstance, name string) *ast.PropertyDecl {
-	if inst.Decl == nil {
-		return nil
-	}
-	upperName := strings.ToUpper(name)
-	for _, p := range inst.Decl.Properties {
-		if p.Name != nil && strings.ToUpper(p.Name.Name) == upperName {
-			return p
+// findProperty looks up a property by name in the FB declaration hierarchy:
+// the FB's own properties first, then each FB up the EXTENDS chain.
+func findProperty(inst *FBInstance, name string, interp *Interpreter) *ast.PropertyDecl {
+	for _, d := range fbDeclChain(inst, interp) {
+		for _, p := range d.Properties {
+			if p.Name != nil && strings.EqualFold(p.Name.Name, name) {
+				return p
+			}
 		}
-	}
-	// Walk EXTENDS chain
-	if inst.Decl.Extends != nil && inst.ParentDecl != nil {
-		parentInst := &FBInstance{
-			TypeName:   inst.Decl.Extends.Name,
-			Decl:       inst.ParentDecl,
-			Env:        inst.Env,
-			ParentDecl: inst.ParentDecl,
-		}
-		return findProperty(parentInst, name)
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package interp
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -377,5 +378,56 @@ END_PROGRAM
 		err := eng.Tick(time.Millisecond)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "undefined function: X")
+	})
+}
+
+// TestThreeLevelExtends covers method, property and action lookup on an FB
+// that EXTENDS an FB that itself EXTENDS a third. findMethod used to recurse
+// on the same parent forever and abort the process with a stack overflow.
+func TestThreeLevelExtends(t *testing.T) {
+	src := `
+FUNCTION_BLOCK FB_A
+VAR n : DINT; END_VAR
+METHOD Bump : BOOL
+n := n + 1;
+END_METHOD
+PROPERTY Count : DINT
+GET
+Count := n;
+END_GET
+END_PROPERTY
+ACTION BaseAct
+n := n + 100;
+END_ACTION
+END_FUNCTION_BLOCK
+FUNCTION_BLOCK FB_B EXTENDS FB_A
+METHOD Twice : BOOL
+n := n + 2;
+END_METHOD
+END_FUNCTION_BLOCK
+FUNCTION_BLOCK FB_C EXTENDS FB_B
+ACTION Act
+n := n + 10;
+END_ACTION
+END_FUNCTION_BLOCK
+PROGRAM MAIN
+VAR c : FB_C; ok : BOOL; seen : DINT; END_VAR
+c.Act();
+ok := c.Bump();
+ok := c.Twice();
+c.BaseAct();
+seen := c.Count;
+END_PROGRAM
+`
+	eng := gvlEngine(t, "ext3.st", src)
+	require.NoError(t, eng.Tick(time.Millisecond))
+	assert.Equal(t, int64(113), fbOutput(t, eng.env, "c", "n").Int)
+	assert.Equal(t, int64(113), intVar(t, eng.env, "seen"))
+
+	t.Run("unknown member on a 3-level chain is still an error", func(t *testing.T) {
+		eng := gvlEngine(t, "ext3b.st", strings.Replace(src, "c.Act();", "c.Nope();", 1))
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "method 'Nope' not found on FB 'FB_C'")
 	})
 }
