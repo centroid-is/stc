@@ -87,9 +87,9 @@ END_PROGRAM
 		Code     string `json:"code"`
 		Message  string `json:"message"`
 		Pos      struct {
-			File   string `json:"file"`
-			Line   int    `json:"line"`
-			Col    int    `json:"col"`
+			File string `json:"file"`
+			Line int    `json:"line"`
+			Col  int    `json:"col"`
 		} `json:"pos"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &diags); err != nil {
@@ -147,5 +147,151 @@ func TestCheckCommandNoFiles(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "no input files") {
 		t.Errorf("expected helpful error about no input files, got: %s", stderr)
+	}
+}
+
+const symbolsFixture = `TYPE E_State : (Idle := 0, Run := 1); END_TYPE
+
+{attribute 'OPC.UA.DA' := '1'}
+TYPE ST_HMI :
+STRUCT
+	{attribute 'OPC.UA.DA.Access' := '1'}
+	p_stat_State : E_State;
+END_STRUCT
+END_TYPE
+
+FUNCTION_BLOCK FB_Drive
+VAR
+	HMI : ST_HMI;
+END_VAR
+END_FUNCTION_BLOCK
+
+PROGRAM MAIN
+VAR
+	n : INT;
+END_VAR
+END_PROGRAM
+`
+
+const symbolsGVL = `VAR_GLOBAL
+	fb : ARRAY[1..3] OF FB_Drive;
+END_VAR
+`
+
+func TestCheckSymbolsText(t *testing.T) {
+	dir := t.TempDir()
+	file := writeTestST(t, dir, "main.st", symbolsFixture)
+	gvl := writeTestST(t, dir, "GVL.st", symbolsGVL)
+
+	stdout, stderr, exitCode := runStc(t, "check", file, gvl, "--symbols")
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	for _, want := range []string{
+		"GVL\n",
+		"  GVL.fb : ARRAY[1..3] OF FB_Drive\n",
+		"MAIN\n",
+		"  MAIN.n : INT\n",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "GVL.fb[1]") {
+		t.Errorf("array elements must not be expanded:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "0 error(s)") {
+		t.Errorf("diagnostic summary missing from stderr: %s", stderr)
+	}
+
+	// Without the flag stdout stays empty.
+	stdout, _, _ = runStc(t, "check", file, gvl)
+	if stdout != "" {
+		t.Errorf("expected no stdout without --symbols, got %q", stdout)
+	}
+}
+
+func TestCheckSymbolsJSON(t *testing.T) {
+	dir := t.TempDir()
+	file := writeTestST(t, dir, "main.st", symbolsFixture)
+	gvl := writeTestST(t, dir, "GVL.st", symbolsGVL)
+
+	stdout, stderr, exitCode := runStc(t, "check", file, gvl, "--symbols", "--format", "json")
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	var out struct {
+		Diagnostics []map[string]any `json:"diagnostics"`
+		Symbols     struct {
+			Roots []struct {
+				Name     string `json:"name"`
+				Kind     string `json:"kind"`
+				Children []struct {
+					Path    string `json:"path"`
+					Low     int    `json:"low"`
+					High    int    `json:"high"`
+					Element struct {
+						Children []struct {
+							Path     string `json:"path"`
+							Children []struct {
+								Path        string            `json:"path"`
+								EnumStrings map[string]string `json:"enum_strings"`
+							} `json:"children"`
+						} `json:"children"`
+					} `json:"element"`
+				} `json:"children"`
+			} `json:"roots"`
+		} `json:"symbols"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout)
+	}
+	if out.Diagnostics == nil {
+		t.Errorf("diagnostics must be an array, not null")
+	}
+	if len(out.Symbols.Roots) != 2 || out.Symbols.Roots[0].Name != "GVL" || out.Symbols.Roots[1].Kind != "program" {
+		t.Fatalf("unexpected roots: %+v", out.Symbols.Roots)
+	}
+	fb := out.Symbols.Roots[0].Children[0]
+	if fb.Path != "GVL.fb" || fb.Low != 1 || fb.High != 3 {
+		t.Errorf("unexpected array node: %+v", fb)
+	}
+	st := fb.Element.Children[0].Children[0]
+	if st.Path != "GVL.fb[*].HMI.p_stat_State" || st.EnumStrings["1"] != "Run" {
+		t.Errorf("unexpected enum member: %+v", st)
+	}
+}
+
+func TestCheckSymbolsWithErrors(t *testing.T) {
+	dir := t.TempDir()
+	file := writeTestST(t, dir, "test.st", `PROGRAM Main
+VAR
+    x : INT;
+    s : STRING;
+END_VAR
+    x := s;
+END_PROGRAM
+`)
+	stdout, _, exitCode := runStc(t, "check", file, "--symbols")
+	if exitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "  Main.x : INT\n") {
+		t.Errorf("symbols must print before exiting:\n%s", stdout)
+	}
+
+	stdout, _, exitCode = runStc(t, "check", file, "--symbols", "--format", "json")
+	if exitCode != 1 {
+		t.Fatalf("expected exit 1, got %d", exitCode)
+	}
+	var out struct {
+		Diagnostics []map[string]any `json:"diagnostics"`
+		Symbols     json.RawMessage  `json:"symbols"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(out.Diagnostics) == 0 || len(out.Symbols) == 0 {
+		t.Errorf("expected diagnostics and symbols: %s", stdout)
 	}
 }

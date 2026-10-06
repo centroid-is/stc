@@ -415,7 +415,7 @@ func (s *ecatServices) decodeValue(cur Value, img []byte, pos *int) Value {
 func (s *ecatServices) memberOrder(v Value) []string {
 	var names []string
 	if s.interp != nil {
-		for _, tn := range sortedKeys(s.interp.TypeDecls) {
+		for _, tn := range sortedTypeNames(s.interp.TypeDecls) {
 			st, ok := s.interp.TypeDecls[tn].(*ast.StructType)
 			if !ok || len(st.Members) != len(v.Struct) {
 				continue
@@ -444,7 +444,8 @@ func (s *ecatServices) memberOrder(v Value) []string {
 	return names
 }
 
-func sortedKeys(m map[string]ast.TypeSpec) []string {
+// sortedTypeNames returns the registered type names in order.
+func sortedTypeNames(m map[string]ast.TypeSpec) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

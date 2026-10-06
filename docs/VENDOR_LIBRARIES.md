@@ -974,6 +974,41 @@ builds entirely on existing infrastructure.
 
 ---
 
+## TwinCAT project import
+
+`stc vendor import`, `stc check`, `stc test --project` and `stc sim` accept a
+`.tsproj` or `.plcproj` directly. Every `PlaceholderReference` in the plcproj
+resolves in this order; the first hit wins:
+
+1. **Project.** POUs, GVLs and DUTs listed in the plcproj itself.
+2. **Sibling plcproj.** A `<Library>.plcproj` near the project (for example
+   `SVNCoreComponents/SVNCoreComponents/SVNCoreComponents.plcproj`). Its
+   sources load as real code, not as stubs.
+3. **`[build.library_paths]`.** A directory named after the library in
+   `stc.toml`.
+4. **Embedded stubs.** Declaration-only `.st` files shipped inside the `stc`
+   binary (`stdlib/beckhoff`), loaded with their dependency closure.
+5. **Unresolved.** Reported as a VEND020 warning.
+
+Shipped libraries:
+
+| Library | Closure | Notes |
+|---------|---------|-------|
+| Tc2_Standard | built in | The checker already provides TON, TOF, R_TRIG and friends |
+| Tc2_System | common types, Tc2_System | `PVOID` is `POINTER TO BYTE` for now |
+| Tc2_Utilities | + Tc2_System | FB_LocalSystemTime, RTC, TIMESTRUCT |
+| Tc2_EtherCAT | + Tc2_System, Tc2_Utilities | CoE SDO read/write, slave state FBs |
+| Tc2_ModbusSrv | + Tc2_System | Also ships the Modbus TCP client FBs (TF6250) |
+| Tc2_SerialCom | + Tc2_System | |
+| Tc2_MC2 | + Tc2_System | |
+| Tc3_Module | + Tc2_System | Marker stub |
+| Tc3_IPCDiag | + Tc2_System | Marker stub |
+| Tc3_EventLogger | + Tc2_System | |
+
+`E_EcSlaveState`, `EcDiagParam` and `FB_EcDeviceDiag` are SVNCoreComponents
+types, not Beckhoff ones, so they come from the sibling project and are not in
+the Tc2_EtherCAT stub.
+
 ## Sources
 
 - [RuSTy Libraries Documentation](https://plc-lang.github.io/rusty/libraries.html)

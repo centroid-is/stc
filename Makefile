@@ -13,6 +13,7 @@ build:
 
 test:
 	go test ./... -count=1
+	go test ./stdlib/vendor/... -count=1
 
 lint:
 	golangci-lint run ./...

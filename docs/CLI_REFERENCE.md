@@ -84,6 +84,8 @@ myfile.st:22:3: warning: unused variable 'temp' (SEMA008)
 
 **Exit codes**: 0 if no errors (warnings allowed), 1 if errors exist.
 
+**TwinCAT projects**: `stc check <x.tsproj|x.plcproj>` imports the project on the fly (see `stc vendor import`) and checks it with its sibling libraries and shipped stubs. Positions point into the original `.TcPOU`/`.TcGVL`/`.TcDUT` files. TwinCAT-specific checker code: SEMA039 warns about an attribute name in double quotes, which TwinCAT ignores.
+
 ---
 
 ### `stc test`
@@ -137,6 +139,8 @@ ok
 
 **Exit codes**: 0 if all tests pass, 1 if any test fails.
 
+**TwinCAT projects**: `stc test tests/ --project x.tsproj` loads the project's POUs, GVLs and DUTs (and sibling library sources) as real code under the tests. Only embedded stubs and `library_paths` stubs are auto-stubbed.
+
 ---
 
 ### `stc sim`
@@ -184,6 +188,8 @@ Cycle    Time         OUTPUT1
 **Output (JSON)**: Full simulation result with per-cycle input/output snapshots.
 
 **Exit codes**: 0 on success, 1 on error.
+
+**TwinCAT projects**: `stc sim <x.tsproj|x.plcproj>` runs the program called by the first task (falling back to the first PROGRAM). `--dt` defaults to that task's cycle time. User FBs and methods from other project files are not registered yet (Phase 23).
 
 ---
 
@@ -356,9 +362,54 @@ No flags. Designed to be launched by editors (e.g., VS Code). Communicates via J
 
 ---
 
+### `stc vendor import`
+
+Import a TwinCAT solution or PLC project into one stc project model.
+
+```
+stc vendor import <x.tsproj|x.plcproj> [--out dir] [--format json] [-D sym]
+```
+
+Reads the tsproj (and `_Config/PLC/*.xti`), the plcproj and every TcPOU, TcGVL and TcDUT it lists, including methods, actions and properties. It reads the PLC name, AMS port and tasks, and resolves library references (project, sibling plcproj, `[build.library_paths]`, embedded stubs; see docs/VENDOR_LIBRARIES.md). Text output summarises the PLC, tasks, source counts and library resolution. `--out dir` writes compact `.st` files at the plcproj paths, libraries under `libs/`, and an `stc.toml`; every target is validated before the first write.
+
+**JSON example** (abridged):
+```json
+{
+  "plc_name": "ST301",
+  "ams_port": 851,
+  "tasks": [{"name": "PlcTask", "cycle_time_ns": 1000000, "priority": 20, "programs": ["MAIN"]}],
+  "sources": [{"rel_path": "POUs/MAIN.TcPOU", "kind": "pou", "name": "MAIN"}],
+  "libraries": [
+    {"name": "SVNCoreComponents", "resolved_from": "sibling"},
+    {"name": "Tc2_EtherCAT", "resolved_from": "stub"},
+    {"name": "Tc2_Standard", "resolved_from": "builtin"}
+  ],
+  "diagnostics": []
+}
+```
+
+`resolved_from` is one of `project`, `sibling`, `library_path`, `stub`, `builtin` or `unresolved`.
+
+**Import diagnostics**:
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| VEND020 | warning | Library reference resolved nowhere |
+| VEND021 | warning | plcproj Compile item with an unsupported extension |
+| VEND022 | info | TwinSAFE project, extra PLC project or non-ST implementation skipped |
+| VEND023 | warning | A CDATA segment could not be placed at its XML line |
+| VEND024 | warning | No task information; a 10 ms default task is used |
+| VEND025 | warning | tsproj and TcTTO cycle times disagree |
+| VEND026 | warning | More than one sibling library candidate |
+| VEND027 | error | A project or object file is not valid XML |
+
+**Exit codes**: 0 on success, 1 on error.
+
+---
+
 ### `stc vendor extract`
 
-Extract function block stubs from TwinCAT project files.
+Extract declaration-only stubs from a TwinCAT project.
 
 ```
 stc vendor extract <path.plcproj> [flags]
@@ -371,22 +422,94 @@ stc vendor extract <path.plcproj> [flags]
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--output` | `-o` | (stdout) | Output directory for extracted `.st` files |
+| `--format` | `-f` | `text` | `json` prints `{"stubs": [...], "diagnostics": [...]}` |
 
-Parses the `.plcproj` XML, finds all referenced `.TcPOU` files, and extracts `FUNCTION_BLOCK` declarations without implementation bodies.
+Renders every POU, GVL, DUT and interface the plcproj lists, in plcproj order. Methods and properties keep their signatures and bodies are dropped. Every stub parses. Items that cannot be converted are reported as diagnostics instead of being skipped.
 
 **Example**:
 ```bash
-# Extract to stdout
-stc vendor extract MyProject.plcproj
-
-# Extract to directory
 stc vendor extract MyProject.plcproj --output vendor/custom/
-# Extracted: FB_Motor -> vendor/custom/FB_Motor.st
-# Extracted: FB_Valve -> vendor/custom/FB_Valve.st
-# 2 POU(s) extracted to vendor/custom/
+stc vendor extract MyProject.plcproj --format json
 ```
 
 **Exit codes**: 0 on success, 1 on error.
+
+---
+
+### `stc ecat validate`
+
+Resolve `{attribute 'TcLinkTo' := '...'}` links in ST sources against TwinCAT EtherCAT exports.
+
+```
+stc ecat validate --io <Device N.xml> [--io <Device M.xml>...] [-D SYM...] <file.st>...
+```
+
+**Arguments**: One or more ST files. A file holding a GVL names the GVL after the file name, so `ECT.st` declares `ECT`. Type and function block declarations (DUTs, FBs with `AT %I*`/`%Q*` members) can be passed alongside the GVLs.
+
+**Flags**:
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--io` | | (required) | TwinCAT EtherCATConfig export (`Device N.xml`), one per master. Repeatable. |
+| `--define` | `-D` | | Define a preprocessor symbol. Repeatable. |
+| `--format` | | `text` | `text` or `json` |
+
+The exports are loaded with the same rules as `generate_gvl.py`: terminals nest under the EK coupler or CX head they hang off, and link paths read `TIID^<master>^<coupler>^<box>^<pdo or module>^<entry>`. Process image offsets come from the export's `<ProcessImage>` when present and are computed from the PDO layout otherwise. TwinCAT's pseudo-inputs are also linkable: per slave `WcState^WcState`, `InfoData^State` and `InfoData^AdsAddr`, and per master `Inputs^DevState`, `Inputs^SlaveCount`, `Inputs^Frm0State`, `Inputs^Frm0WcState`, `InfoData^AmsNetId` and `InfoData^ChangeCount`.
+
+Every linked leaf is matched to a process image slot. A struct link (`.I1 := TIID^...; .O1 := TIID^...`) produces one binding per member, and member paths may descend into nested structs and function block instances.
+
+**Example** (demo fixtures in `tests/ecat_fixtures`, with `demo_ect.st` copied to `ECT.st`):
+
+```bash
+stc ecat validate --io "Demo Device 1.xml" --io "Demo Device 2.xml" demo_types.st ECT.st
+# VARIABLE        DIR  MASTER               BYTE.BIT  BITS  LINK
+# ECT.A1_01.I1    in   Device 1 (EtherCAT)  0.0       1     TIID^Device 1 (EtherCAT)^DEMO.A1.00 (EK1200)^DEMO.A1.01 (EL1008)^Channel 1^Input
+# ECT.V1_C1       out  Device 1 (EtherCAT)  15.0      8     TIID^Device 1 (EtherCAT)^DEMO.V1 (CTEU-EtherCAT Modular)^Module 1 (VAEM-L1-S-8-PT [16DO])^Outputs^C1 Output
+# ...
+# 35 bindings, 0 errors, 0 warnings
+```
+
+**Text output**: a table with columns `VARIABLE`, `DIR` (`in` or `out`), `MASTER`, `BYTE.BIT` (offset in that master's input or output image), `BITS` and `LINK`, followed by one `file:line:col: severity: CODE message` line per diagnostic and a `N bindings, N errors, N warnings` summary.
+
+**JSON output** (`--format json`):
+
+```json
+{
+  "bindings": [
+    {
+      "var": "ECT.A1_01.I1",
+      "link": "TIID^Device 1 (EtherCAT)^DEMO.A1.00 (EK1200)^DEMO.A1.01 (EL1008)^Channel 1^Input",
+      "master": "Device 1 (EtherCAT)",
+      "dir": "in",
+      "byte": 0,
+      "bit": 0,
+      "bitLen": 1,
+      "typeName": "BOOL"
+    }
+  ],
+  "diagnostics": [],
+  "images": {
+    "Device 1 (EtherCAT)": { "inBytes": 145, "outBytes": 17 },
+    "Device 2 (EtherCAT)": { "inBytes": 227, "outBytes": 14 }
+  }
+}
+```
+
+A load or read failure prints `{"error": "..."}` in JSON mode and exits 1.
+
+**Diagnostic codes**:
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| `ECAT001` | error | Link target not found in the topology. The message lists up to three nearest child segments. |
+| `ECAT002` | error | A `.member` in a multi-member TcLinkTo is not declared by the variable's type, or the member path is deeper than 16 levels. |
+| `ECAT003` | error | Size mismatch: the variable's bit width differs from the entry's `BitLen`. |
+| `ECAT004` | error | Direction mismatch: `AT %Q*` linked to an input entry, or `AT %I*` linked to an output entry. |
+| `ECAT005` | warning | Two variables bind the same slot. Both bindings are kept. |
+| `ECAT006` | error | Malformed TcLinkTo value, such as a missing `:=` or mixed single and member forms. |
+| `ECAT007` | warning | A linked leaf has no `AT %I*`/`%Q*` declaration, or uses a non-I/O area such as `%M`. |
+
+**Exit codes**: 0 when no error is reported (warnings allowed), 1 on any error or when an export or source file cannot be loaded.
 
 ---
 

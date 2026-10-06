@@ -57,7 +57,7 @@ Technical architecture of the stc compiler toolchain for developers.
 Arrows indicate "imports" direction (A --> B means A imports B).
 
 ```
-cmd/stc -------> pkg/analyzer, pkg/ast, pkg/diag, pkg/emit, pkg/format,
+cmd/stc -------> pkg/analyzer, pkg/ast, pkg/diag, pkg/ecat, pkg/emit, pkg/format,
                  pkg/incremental, pkg/lint, pkg/lsp, pkg/parser, pkg/pipeline,
                  pkg/preprocess, pkg/project, pkg/sim, pkg/testing, pkg/vendor,
                  pkg/version
@@ -67,10 +67,11 @@ cmd/stc-mcp ---> pkg/analyzer, pkg/ast, pkg/diag, pkg/emit, pkg/format,
 
 pkg/analyzer --> pkg/ast, pkg/checker, pkg/diag, pkg/project
 pkg/checker ---> pkg/ast, pkg/diag, pkg/symbols, pkg/types
+pkg/ecat ------> pkg/ast, pkg/diag, pkg/iomap, pkg/source, pkg/types
 pkg/emit ------> pkg/ast
 pkg/format ----> pkg/ast
 pkg/incremental> pkg/ast, pkg/diag, pkg/parser, pkg/pipeline, pkg/source
-pkg/interp ----> pkg/ast, pkg/types
+pkg/interp ----> pkg/ast, pkg/ecat, pkg/iomap, pkg/types
 pkg/iomap -----> pkg/ast
 pkg/lexer -----> pkg/ast, pkg/source
 pkg/lint ------> pkg/ast, pkg/diag
@@ -162,6 +163,24 @@ type PlantModel interface {
 ```
 
 Built-in models: `MotorModel`, `ValveModel`, `CylinderModel`.
+
+### EtherCAT topology and link binding (pkg/ecat)
+
+`pkg/ecat` lets a program run against the I/O image a real TwinCAT EtherCAT master would present, wired through the same `TcLinkTo` pragmas the project uses on the target.
+
+- **Loader** (`topology.go`, `tree.go`). `LoadProject` reads TwinCAT EtherCATConfig exports (`Device N.xml`), one `Master` per file. Nesting and link paths are a port of `generate_gvl.py`: a box's role comes from its port media (`Info/Physics`), terminals nest under the EK coupler or CX head they are daisy-chained to, and `LinkPath` builds `TIID^master^coupler^box^pdo^entry`.
+- **Layout** (`image.go`). Every PDO entry and pseudo-input gets a `Slot` (master, direction, byte, bit, bit length). Offsets from the export's `<ProcessImage>` are preferred; without one the layout is computed from the PDO order. `Topology.Slot(path)` and `Paths()` look slots up by link path, and `Images` holds one input and one output byte array per master.
+- **Links** (`link.go`, `collect.go`, `resolve.go`). `ParseTcLinkTo` parses single and multi-member values. `CollectLinks` walks GVLs and PROGRAMs on the AST, following struct and FB members, and emits one `LinkedVar` per linked leaf. `Resolve` binds each to its slot and reports ECAT001 to ECAT007 (see `stc ecat validate` in CLI_REFERENCE.md).
+- **Network** (`network.go`). `Network` owns the images, writes healthy Beckhoff pseudo-inputs every step (slave `State` = OP, `WcState` clear, `SlaveCount`, `AmsNetId`, `AdsAddr`), and runs one `Device` per slave from a `Registry` keyed by vendor and product id. `Passthrough` is the default device. A fault API (`SetSlaveState`, `SetWcState`, `SetDevState`, `ClearFaults`) overrides the pseudo-inputs.
+
+The interpreter side is `interp.IOBinder`, attached with `ScanCycleEngine.SetIOBinder`. Each `Tick` calls it at two points:
+
+1. After AT-address inputs are synced from the I/O table, `preScan` steps the network (pseudo-inputs and device models) and copies every input binding from the image into its variable.
+2. After AT-address outputs are written back, `postScan` copies every output binding from its variable into the image.
+
+The codec decodes by declared type and slot width and never reads past a slot. Bindings that cannot be decoded are dropped and reported through `IOBinder.Errors()`. A nil binder leaves the scan cycle unchanged.
+
+Device models for specific terminals and drives arrive in Phases 25 and 26 through the `Registry`. Scenario scripting on top of the fault API arrives in Phase 27.
 
 ### Config (pkg/project)
 

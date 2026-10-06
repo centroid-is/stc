@@ -5,18 +5,25 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/project"
 	stctesting "github.com/centroid-is/stc/pkg/testing"
+	"github.com/centroid-is/stc/pkg/twincat"
 	"github.com/centroid-is/stc/pkg/vendor"
 	"github.com/spf13/cobra"
 )
 
 func newTestCmd() *cobra.Command {
+	var projectPath string
 	cmd := &cobra.Command{
 		Use:   "test [dir]",
 		Short: "Run ST unit tests",
-		Long:  "Discover and run *_test.st test files in the specified directory (default: current directory).",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Discover and run *_test.st test files in the specified directory (default: current directory).
+
+With --project <x.tsproj|x.plcproj>, the TwinCAT project is imported and its
+POUs, GVLs, DUTs and interfaces (plus sibling library projects) are available
+to the tests; embedded Beckhoff library stubs are auto-stubbed.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
 			if len(args) > 0 {
@@ -49,6 +56,11 @@ func newTestCmd() *cobra.Command {
 				}
 				opts.MockFiles = mockFiles
 			}
+			if projectPath != "" {
+				if err := loadTestProject(projectPath, format, &opts); err != nil {
+					return err
+				}
+			}
 
 			result, err := stctesting.RunWithOpts(dir, opts)
 			if err != nil {
@@ -80,7 +92,35 @@ func newTestCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&projectPath, "project", "", "TwinCAT project (.tsproj or .plcproj) whose sources the tests run against")
 	return cmd
+}
+
+// loadTestProject imports a TwinCAT project into opts: project and sibling
+// library sources become RunOpts.ProjectFiles, stub files are appended to
+// RunOpts.LibraryFiles. Error diagnostics from the import or parse abort the
+// run; warnings are printed to stderr in text mode.
+func loadTestProject(path, format string, opts *stctesting.RunOpts) error {
+	if !isProjectPath(path) {
+		return fmt.Errorf("--project expects a .tsproj or .plcproj file, got %s", path)
+	}
+	m, ds, err := twincat.Import(path, twincat.Options{Defines: opts.Defines})
+	if err != nil {
+		return fmt.Errorf("importing %s: %w", path, err)
+	}
+	projectFiles, stubs, pds := twincat.ParseForTest(m, opts.Defines)
+	ds = append(ds, pds...)
+	for _, d := range ds {
+		if d.Severity == diag.Error || format != "json" {
+			fmt.Fprintln(os.Stderr, d.String())
+		}
+	}
+	if hasErrors(ds) {
+		return fmt.Errorf("project %s has errors", path)
+	}
+	opts.ProjectFiles = projectFiles
+	opts.LibraryFiles = append(opts.LibraryFiles, stubs...)
+	return nil
 }
 
 // printTextResults prints human-readable test results to stdout.

@@ -212,6 +212,15 @@ func TestTemplateMessage(t *testing.T) {
 	}
 }
 
+// literalClass matches the literal-typing errors removed in Phase 22 (85
+// on the oracles before plan 22-02). Argument messages quote the parameter
+// name, so the parsed message is matched, not raw JSON.
+var literalClass = regexp.MustCompile(`^(cannot assign LREAL to (REAL|UDINT|UINT|USINT)` +
+	`|cannot assign DINT to INT` +
+	`|array index must be an integer type, got LREAL` +
+	`|cannot compare BYTE and DINT` +
+	`|cannot pass DINT as input parameter "[^"]*" \(expected (BYTE|WORD)\))$`)
+
 // TestTwinCATProbeOracle runs the Phase 19 classification gate and the Phase
 // 20 zero-parse-error gate over the large flattened customer sources. They
 // are never committed, so the test only runs when STC_PROBES_DIR points at a
@@ -257,6 +266,20 @@ func TestTwinCATProbeOracle(t *testing.T) {
 				}
 			}
 			t.Logf("%s: %d %s diagnostics and %d errors from analyzer.Analyze", name, p001, parseCode, errs)
+
+			// Phase 22: the literal-typing message class stays at zero.
+			t.Run("literal_class", func(t *testing.T) {
+				n := 0
+				for _, d := range res.Diags {
+					if d.Severity == diag.Error && literalClass.MatchString(d.Message) {
+						n++
+						t.Logf("%s:%d: %s", name, d.Pos.Line, templateMessage(d.Message))
+					}
+				}
+				if n != 0 {
+					t.Errorf("%s: want 0 literal-typing errors, got %d", name, n)
+				}
+			})
 			if p001 != 0 {
 				t.Errorf("%s: want 0 %s diagnostics from analyzer.Analyze, got %d", name, parseCode, p001)
 			}

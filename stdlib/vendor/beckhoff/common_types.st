@@ -34,3 +34,25 @@ TYPE E_OpenPath : (
     PATH_BOOTPRJPATH
 );
 END_TYPE
+
+(* PVOID -- untyped address. TwinCAT defines PVOID as UXINT (ULINT on 64-bit,
+   UDINT on 32-bit). stc declares it as POINTER TO BYTE (locked Phase 21
+   decision). Phase 22 must make ADR(...) results and any POINTER TO <T>
+   assignable to PVOID. *)
+TYPE PVOID : POINTER TO BYTE; END_TYPE
+
+(* Platform-width integer aliases (TwinCAT PLC manual 16.5.11), 64-bit sizes *)
+TYPE __XWORD : LWORD; END_TYPE
+
+TYPE XWORD : LWORD; END_TYPE
+
+TYPE UXINT : ULINT; END_TYPE
+
+TYPE __UXINT : ULINT; END_TYPE
+
+TYPE XINT : LINT; END_TYPE
+
+TYPE __XINT : LINT; END_TYPE
+
+(* AMSPORT -- AMS port number (Tc2_System alias) *)
+TYPE AMSPORT : UINT; END_TYPE

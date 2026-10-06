@@ -112,8 +112,9 @@ func (interp *Interpreter) assignBit(env *Env, target *ast.BitAccessExpr, val Va
 // assignBitAt sets or clears bit n of cur, the current value of targetExpr,
 // and writes the result back through assignToTarget so identifier,
 // reference, member, array element and GVL targets all reuse their existing
-// write paths. The IEC type of cur is kept; the result is masked to the
-// width for unsigned kinds and sign-extended for signed kinds.
+// write paths. The result is stored through storeAs against cur, so the IEC
+// type of cur is kept and the result wraps to its width (masked for unsigned
+// kinds, sign-extended for signed kinds).
 func (interp *Interpreter) assignBitAt(env *Env, targetExpr ast.Expr, cur Value, n int64, val Value) error {
 	pos := targetExpr.Span().Start
 	width, err := valueBitWidth(cur, pos)
@@ -130,16 +131,9 @@ func (interp *Interpreter) assignBitAt(env *Env, targetExpr ast.Expr, cur Value,
 	} else {
 		bits &^= mask
 	}
-	if width < 64 {
-		shift := uint(64 - width)
-		if isUnsignedBits(cur.IECType) {
-			bits &= (uint64(1) << uint(width)) - 1
-		} else {
-			bits = uint64(int64(bits<<shift) >> shift)
-		}
-	}
-	cur.Int = int64(bits)
-	return interp.assignToTarget(env, targetExpr, cur)
+	next := cur
+	next.Int = int64(bits)
+	return interp.assignToTarget(env, targetExpr, storeAs(cur, next))
 }
 
 // constBitIndex reports the bit index named by the member of x.member when

@@ -256,7 +256,10 @@ func satMul(a, b int64) int64 {
 // (checker blocker 2); every value is walked for undeclared names.
 func (c *Checker) checkPlainInit(value ast.Expr, target types.Type) {
 	valueType := c.checkExpr(value)
-	if !isLiteralExpr(value) || valueType == types.Invalid {
+	if valueType == types.Invalid {
+		return
+	}
+	if k, _, _ := untypedConst(value); k == untypedNone && !isLiteralExpr(value) {
 		return
 	}
 	if asEnum(target) != nil {
@@ -266,6 +269,10 @@ func (c *Checker) checkPlainInit(value ast.Expr, target types.Type) {
 	if _, primitive := target.(*types.PrimitiveType); !primitive {
 		// Pointers, references, arrays, structs and FBs given a plain
 		// literal (p : POINTER TO INT := 0) are left to Phase 22.
+		return
+	}
+	// Initialisers and assignments share one untyped-constant rule.
+	if c.untypedStore(value, target, CodeTypeMismatch) {
 		return
 	}
 	if !initLiteralCompatible(valueType, target) {
@@ -278,15 +285,15 @@ func (c *Checker) reportInitMismatch(value ast.Expr, valueType, target types.Typ
 		"cannot initialise %s with %s", target, valueType)
 }
 
-// initLiteralCompatible reports whether a literal of type valueType may
-// initialise a variable of the elementary type target. It follows the
-// assignment literal rule (isLiteralCompatible plus widening) and also lets
-// an integer literal initialise a bit-string or real variable and a string
-// literal a CHAR or WCHAR, as CODESYS does.
+// initLiteralCompatible reports whether a typed literal of type valueType
+// may initialise a variable of the elementary type target (untyped
+// constants are handled by untypedAssignable first). It allows widening,
+// an integer literal initialising a bit-string or real variable and a
+// string literal a CHAR or WCHAR, as CODESYS does.
 func initLiteralCompatible(valueType, target types.Type) bool {
 	vk, tk := valueType.Kind(), target.Kind()
 	switch {
-	case valueType.Equal(target), isLiteralCompatible(vk, tk), types.CanWiden(vk, tk):
+	case valueType.Equal(target), types.CanWiden(vk, tk):
 		return true
 	case types.IsAnyInt(vk) && (types.IsAnyReal(tk) || (types.IsAnyBit(tk) && tk != types.KindBOOL)):
 		return true

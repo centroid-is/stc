@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<TcSmItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" TcSmVersion="1.0" TcVersion="3.1.4026.22" ClassName="CNestedPlcProjDef">
+	<Project GUID="{00000000-0000-0000-0000-000000000002}" Name="Demo" PrjFilePath="..\..\Demo\Demo.plcproj" TmcFilePath="..\..\Demo\Demo.tmc" AmsPort="851">
+		<Instance File="Demo Instance.xti"/>
+	</Project>
+</TcSmItem>

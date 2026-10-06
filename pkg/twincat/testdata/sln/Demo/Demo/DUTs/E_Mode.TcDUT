@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_Mode" Id="{00000000-0000-0000-0000-000000000021}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+TYPE E_Mode :
+(
+	Idle := 0,
+	Run := 1
+) INT;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

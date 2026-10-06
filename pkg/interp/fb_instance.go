@@ -104,57 +104,25 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 		}
 	}
 
-	// Walk VarBlocks, initialize variables, and track input/output names
-	resolve := interp.TypeResolverFunc()
-	var varBlocks []*ast.VarBlock
-	for _, d := range chain {
-		varBlocks = append(varBlocks, d.VarBlocks...)
+	if interp == nil {
+		interp = New()
 	}
-	for _, vb := range varBlocks {
-		for _, vd := range vb.Declarations {
-			// FB-typed member: instantiate rather than zero-fill. One shared
-			// value must never be defined for several names, so instantiate
-			// per name below.
-			typeName := typeNameFromSpec(vd.Type)
-			upperType := strings.ToUpper(typeName)
-			isStdlibFB := false
-			var stdFactory func() StandardFB
-			var nestedDecl *ast.FunctionBlockDecl
-			if typeName != "" && depth < maxFBNestDepth {
-				if f, ok := interp.stdFBFactory(upperType); ok {
-					isStdlibFB, stdFactory = true, f
-				} else if interp != nil && interp.FBDecls != nil {
-					nestedDecl = interp.FBDecls[upperType]
-				}
-			}
-
-			for _, n := range vd.Names {
-				var val Value
-				switch {
-				case isStdlibFB:
-					val = MakeFBInstanceValue(typeName, stdFactory())
-				case nestedDecl != nil:
-					nested := newUserFBInstanceDepth(typeName, nestedDecl, interp, env, depth+1)
-					val = Value{Kind: ValFBInstance, FBRef: nested}
-				default:
-					val = zeroFromTypeSpecWith(vd.Type, resolve, 0)
-					// If there is an init value, try to evaluate it
-					if vd.InitValue != nil && interp != nil {
-						if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-							val = iv
-						}
+	// Variables of the whole chain, base first, through the shared
+	// instantiation path; nested FB members are one level deeper.
+	for _, d := range chain {
+		for _, vb := range d.VarBlocks {
+			for _, vd := range vb.Declarations {
+				interp.instantiateVar(env, env, vd, depth+1)
+				for _, n := range vd.Names {
+					upper := strings.ToUpper(n.Name)
+					switch vb.Section {
+					case ast.VarInput:
+						inst.inputNames = append(inst.inputNames, upper)
+					case ast.VarOutput:
+						inst.outputNames = append(inst.outputNames, upper)
+					case ast.VarInOut:
+						inst.inoutNames = append(inst.inoutNames, upper)
 					}
-				}
-
-				env.Define(n.Name, val)
-				upper := strings.ToUpper(n.Name)
-				switch vb.Section {
-				case ast.VarInput:
-					inst.inputNames = append(inst.inputNames, upper)
-				case ast.VarOutput:
-					inst.outputNames = append(inst.outputNames, upper)
-				case ast.VarInOut:
-					inst.inoutNames = append(inst.inoutNames, upper)
 				}
 			}
 		}
@@ -276,7 +244,7 @@ func (inst *FBInstance) SetInput(name string, v Value) {
 	}
 	if inst.Env != nil {
 		if cur, ok := inst.Env.Get(name); ok {
-			v = adoptEnumTag(cur, v)
+			v = storeAs(cur, v)
 		}
 		if !inst.Env.Set(name, v) {
 			inst.Env.Define(name, v)
@@ -428,6 +396,13 @@ func zeroFromTypeSpec(ts ast.TypeSpec) Value {
 }
 
 func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Value {
+	return zeroFromType(ts, typeCtx{resolve: resolve}, depth)
+}
+
+// zeroFromType builds the zero value of ts. Named user types resolve through
+// ctx.resolve; array bounds and member or TYPE defaults use ctx.interp and
+// ctx.env when set (see typeCtx).
+func zeroFromType(ts ast.TypeSpec, ctx typeCtx, depth int) Value {
 	if depth > maxTypeNestDepth {
 		return Zero(types.KindDINT)
 	}
@@ -441,30 +416,35 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 			if typ, found := types.LookupElementaryType(name); found {
 				return Zero(typ.Kind())
 			}
+			// An FB type used as an array element or struct member: a live
+			// instance of its own (ARRAY[1..2] OF FB_Drive).
+			if fb, ok := ctx.fbInstance(t.Name.Name, depth); ok {
+				return fb
+			}
 			// Not elementary: it may be a user-defined TYPE (struct, array,
 			// enum, subrange or alias). Resolve and recurse so that aggregates
 			// nested inside other aggregates are built correctly.
-			if resolve != nil {
-				if target, found := resolve(name); found {
-					v := zeroFromTypeSpecWith(target, resolve, depth+1)
+			if ctx.resolve != nil {
+				if target, found := ctx.resolve(name); found {
+					v := zeroFromType(target, ctx, depth+1)
 					if _, isEnum := target.(*ast.EnumType); isEnum {
 						v.Enum = name
 					}
-					return v
+					return ctx.typeDefault(name, target, v)
 				}
 			}
 		}
 		// Unknown type name; default to INT zero
 		return Zero(types.KindDINT)
 	case *ast.ArrayType:
-		return zeroArrayWith(t, resolve, depth)
+		return zeroArrayCtx(t, ctx, depth)
 	case *ast.StructType:
-		return zeroStructWith(t, resolve, depth)
+		return zeroStructCtx(t, ctx, depth)
 	case *ast.StringType:
 		return Value{Kind: ValString, Str: ""}
 	case *ast.SubrangeType:
 		// Use the base type's zero
-		return zeroFromTypeSpecWith(t.BaseType, resolve, depth+1)
+		return zeroFromType(t.BaseType, ctx, depth+1)
 	case *ast.PointerType:
 		// Null pointer
 		return Value{Kind: ValPointer}
@@ -478,51 +458,83 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 	}
 }
 
+// maxArraySlots caps the slots allocated for one array dimension so a huge
+// declared bound cannot exhaust memory.
+const maxArraySlots = 10000
+
 // zeroArray creates a zero-filled array Value from an ArrayType AST node.
 // The interpreter uses direct indexing (arr[i] maps to slice index i),
 // so for ARRAY[1..10] we allocate high+1 elements to support 1-based indexing.
 func zeroArray(at *ast.ArrayType) Value {
-	return zeroArrayWith(at, nil, 0)
+	return zeroArrayCtx(at, typeCtx{}, 0)
 }
 
-func zeroArrayWith(at *ast.ArrayType, resolve TypeResolver, depth int) Value {
+func zeroArrayCtx(at *ast.ArrayType, ctx typeCtx, depth int) Value {
 	if len(at.Ranges) == 0 {
 		return Value{Kind: ValArray, Array: []Value{}}
 	}
-	// Evaluate the first dimension range
-	_, high := evalSubrangeConst(at.Ranges[0])
+	// Only the first dimension is modelled.
+	low, high := ctx.bounds(at.Ranges[0])
+	if low < 0 {
+		ctx.fail(at.Ranges[0].Low, "negative array lower bound not supported: %s", exprText(at.Ranges[0].Low))
+		low = 0
+	}
+	if high < low {
+		ctx.fail(at.Ranges[0].High, "array upper bound %d is below lower bound %d", high, low)
+		high = low
+	}
 	size := high + 1 // allocate enough for direct indexing
-	if size <= 0 {
-		size = 1
+	if size > maxArraySlots {
+		ctx.fail(at.Ranges[0].High, "array size %d exceeds the %d element limit", size, maxArraySlots)
+		size = maxArraySlots
+		if low >= size {
+			low = 0
+		}
 	}
-	if size > 10000 {
-		size = 10000 // safety cap
-	}
-	elemZero := zeroFromTypeSpecWith(at.ElementType, resolve, depth+1)
+	elemZero := zeroFromType(at.ElementType, ctx, depth+1)
 	arr := make([]Value, size)
+	if elemZero.Kind == ValFBInstance {
+		// FB instances are references, so Clone would share one instance
+		// between all elements: build each element separately.
+		arr[0] = elemZero
+		for i := 1; i < len(arr); i++ {
+			arr[i] = zeroFromType(at.ElementType, ctx, depth+1)
+		}
+		return Value{Kind: ValArray, Array: arr, ArrayLow: int(low)}
+	}
 	for i := range arr {
 		// Clone per element: an aggregate element is backed by a slice or map,
 		// so sharing one zero value would make a write to one slot visible in
 		// every slot.
 		arr[i] = elemZero.Clone()
 	}
-	return Value{Kind: ValArray, Array: arr}
+	return Value{Kind: ValArray, Array: arr, ArrayLow: int(low)}
 }
 
 // zeroStruct creates a zero-valued struct Value from a StructType AST node.
 // Keys are stored in UPPER case to match the interpreter's member access logic.
 func zeroStruct(st *ast.StructType) Value {
-	return zeroStructWith(st, nil, 0)
+	return zeroStructCtx(st, typeCtx{}, 0)
 }
 
-func zeroStructWith(st *ast.StructType, resolve TypeResolver, depth int) Value {
+// zeroStructCtx builds a struct value with every member at its declared
+// default (member initialiser) or zero, and records member names in declared
+// case and order in Fields.
+func zeroStructCtx(st *ast.StructType, ctx typeCtx, depth int) Value {
 	fields := make(map[string]Value, len(st.Members))
+	names := make([]string, 0, len(st.Members))
 	for _, m := range st.Members {
-		if m.Name != nil {
-			fields[strings.ToUpper(m.Name.Name)] = zeroFromTypeSpecWith(m.Type, resolve, depth+1)
+		if m.Name == nil {
+			continue
 		}
+		v := zeroFromType(m.Type, ctx, depth+1)
+		if m.InitValue != nil {
+			v = ctx.applyInit(m.Type, m.InitValue, v)
+		}
+		fields[strings.ToUpper(m.Name.Name)] = v
+		names = append(names, m.Name.Name)
 	}
-	return Value{Kind: ValStruct, Struct: fields}
+	return Value{Kind: ValStruct, Struct: fields, Fields: names}
 }
 
 // evalSubrangeConst extracts integer bounds from a SubrangeSpec.

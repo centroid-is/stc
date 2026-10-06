@@ -56,7 +56,7 @@ func TestEmitAttributeCommentAndQuoting(t *testing.T) {
 	out := emitClean(t, src, DefaultOptions())
 	assertEmitInOrder(t, out,
 		"VAR\n",
-		"    // c1\n    {attribute 'q' := 'it''s'} // t\n    {warning disable C0001}\n    v : BOOL;\n")
+		"    // c1\n    {attribute \"q\" := \"it's\"} // t\n    {warning disable C0001}\n    v : BOOL;\n")
 }
 
 func TestEmitAttributeAllOwners(t *testing.T) {

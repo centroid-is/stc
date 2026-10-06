@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="MAIN" Id="{00000000-0000-0000-0000-000000000040}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	fbMotor : FB_Motor;
+	pt : ST_Point;
+	sum : INT;
+	spd : INT;
+	ok : BOOL;
+	lib : FB_LibThing;
+	ecState : FB_EcGetSlaveState;
+	addr : UINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[GVL_Main.counter := GVL_Main.counter + 1;
+fbMotor.enable := GVL_Main.mode = E_Mode.Run;
+fbMotor();
+spd := fbMotor.Speed;
+ok := fbMotor.Start(force := FALSE);
+pt := GVL_Main.origin;
+sum := F_Add(a := pt.x, b := pt.y);
+lib(execute := ok);
+ecState(sNetId := '', nSlaveAddr := addr, bExecute := ok);
+quotedFlag := ecState.bBusy;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

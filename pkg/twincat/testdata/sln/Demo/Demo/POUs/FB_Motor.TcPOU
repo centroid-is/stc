@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_Motor" Id="{00000000-0000-0000-0000-000000000030}" SpecialFunc="None">
+    <Declaration><![CDATA[{attribute 'reflection'}
+(* A small motor block with methods, an action and a property. *)
+FUNCTION_BLOCK FB_Motor
+VAR_INPUT
+	enable : BOOL;
+END_VAR
+VAR_OUTPUT
+	running : BOOL;
+END_VAR
+VAR
+	speedSet : INT;
+	startCount : DINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[running := enable;
+IF NOT running THEN
+	speedSet := 0;
+END_IF]]></ST>
+    </Implementation>
+    <Method Name="Start" Id="{00000000-0000-0000-0000-000000000031}">
+      <Declaration><![CDATA[METHOD PUBLIC Start : BOOL
+VAR_INPUT
+	force : BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[startCount := startCount + 1;
+Start := enable OR force;]]></ST>
+      </Implementation>
+    </Method>
+    <Action Name="Reset" Id="{00000000-0000-0000-0000-000000000032}">
+      <Implementation>
+        <ST><![CDATA[running := FALSE;
+startCount := 0;]]></ST>
+      </Implementation>
+    </Action>
+    <Property Name="Speed" Id="{00000000-0000-0000-0000-000000000033}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Speed : INT]]></Declaration>
+      <Get Name="Get" Id="{00000000-0000-0000-0000-000000000034}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[Speed := speedSet;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{00000000-0000-0000-0000-000000000035}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[speedSet := Speed;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Method Name="Stop" Id="{00000000-0000-0000-0000-000000000036}">
+      <Declaration><![CDATA[METHOD Stop
+VAR
+	wasRunning : BOOL;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[wasRunning := running;
+running := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

@@ -56,6 +56,18 @@ func NewSimulationEngine(cfg SimConfig) *SimulationEngine {
 	}
 }
 
+// NewSimulationEngineWith creates a simulation engine that drives an
+// existing, already configured scan engine (for example one PROGRAM of an
+// interp.Runtime) instead of building its own. cfg.Program and cfg.GVLs are
+// ignored; the scan engine is initialised if it is not yet.
+func NewSimulationEngineWith(cfg SimConfig, scan *interp.ScanCycleEngine) *SimulationEngine {
+	if cfg.RecordInterval <= 0 {
+		cfg.RecordInterval = 1
+	}
+	scan.Initialize()
+	return &SimulationEngine{cfg: cfg, scan: scan}
+}
+
 // Run executes the simulation for NumCycles iterations and returns the result.
 // The simulation loop:
 //  1. Inject waveform values as program inputs

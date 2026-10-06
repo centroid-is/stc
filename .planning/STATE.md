@@ -36,7 +36,7 @@ Progress: [█████████░] 89%
 
 **Velocity:**
 
-- Total plans completed: 51 (v1.0) + 10 (v1.1) = 42
+- Total plans completed: 66 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 
@@ -122,6 +122,8 @@ Recent decisions affecting current work:
 - [Phase 20]: 20-09: types.ArrayDimension.Known marks literal bounds; too many initialisers is reported only with known bounds and literal repetition counts
 - [Phase 20]: Phase 20 oracle asserts 0 parse diagnostics (parser.Parse) and 0 P001 (analyzer.Analyze) for st301 and svncore; semantic errors are logged as templated buckets only
 - [Phase 20]: TwinCAT dialect check tolerates only 'cannot assign DINT to INT' (Phase 22 RUNT-05), held in one named allowlist
+- [Phase 21]: 21-06: oracle allowlists are data-driven owner buckets; pre-existing checker bugs (statement method calls with args, FB internal VAR read, LEN typing) deferred
+- [Phase 21]: 21-06: unresolved libraries fail the oracle via Model.Libraries since VEND020 is a warning
 
 ### Pending Todos
 

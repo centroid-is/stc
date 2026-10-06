@@ -431,3 +431,55 @@ END_PROGRAM
 		assert.Nil(t, in.GlobalParent())
 	})
 }
+
+func TestRegisterGVLsCrossConst(t *testing.T) {
+	diag := parser.Parse("ECT_Diag.st", `
+VAR_GLOBAL
+    Device_1_SlaveInfo : ARRAY[1..EcDiagParam.MAX_EC_SLAVES] OF ST_EcSlaveInfo :=
+        [(p_stat_sName := 'A1'), (p_stat_sName := 'A2'), (p_stat_sName := 'A3')];
+    eLevel : E_Level := E_Level.High;
+END_VAR`)
+	param := parser.Parse("EcDiagParam.st", `
+VAR_GLOBAL CONSTANT
+    MAX_EC_SLAVES : INT := 4;
+    HIGH_LEVEL : INT := 7;
+END_VAR`)
+	types := parser.Parse("T.st", `
+TYPE ST_EcSlaveInfo : STRUCT p_stat_sName : STRING; nAddr : UINT := 1001; END_STRUCT END_TYPE
+TYPE E_Level : (Low := 0, High := EcDiagParam.HIGH_LEVEL) END_TYPE`)
+	for _, r := range []parser.ParseResult{diag, param, types} {
+		require.Empty(t, r.Diags)
+	}
+	in := New()
+	in.TypeDecls = map[string]ast.TypeSpec{}
+	for _, d := range types.File.Declarations {
+		td := d.(*ast.TypeDecl)
+		in.TypeDecls[strings.ToUpper(td.Name.Name)] = td.Type
+		if et, ok := td.Type.(*ast.EnumType); ok {
+			in.RegisterEnumDecl(td.Name.Name, et, nil)
+		}
+	}
+	in.RegisterGVLs([]*ast.GVLDecl{
+		diag.File.Declarations[0].(*ast.GVLDecl),
+		param.File.Declarations[0].(*ast.GVLDecl),
+	})
+	require.Empty(t, in.InitErrors())
+
+	info, ok := in.lookupGVL("ECT_Diag").GetLocal("Device_1_SlaveInfo")
+	require.True(t, ok)
+	require.Len(t, info.Array, 5, "index 4 must be valid")
+	assert.Equal(t, 1, info.ArrayLow)
+	assert.Equal(t, "A3", info.Array[3].Struct["P_STAT_SNAME"].Str)
+	assert.Equal(t, int64(1001), info.Array[4].Struct["NADDR"].Int)
+	lvl, _ := in.lookupGVL("ECT_Diag").GetLocal("eLevel")
+	assert.Equal(t, int64(7), lvl.Int)
+
+	t.Run("single GVL keeps RegisterGVL behaviour", func(t *testing.T) {
+		in := New()
+		env := in.RegisterGVL(param.File.Declarations[0].(*ast.GVLDecl))
+		require.NotNil(t, env)
+		v, _ := env.GetLocal("MAX_EC_SLAVES")
+		assert.Equal(t, int64(4), v.Int)
+		assert.Nil(t, in.RegisterGVL(nil))
+	})
+}

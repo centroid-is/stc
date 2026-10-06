@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/ast"
@@ -12,23 +13,29 @@ import (
 	"github.com/centroid-is/stc/pkg/incremental"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/symtree"
+	"github.com/centroid-is/stc/pkg/twincat"
 	"github.com/centroid-is/stc/pkg/vendor"
 	"github.com/spf13/cobra"
 )
 
 func newCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "check [file...]",
+		Use:   "check [file... | x.tsproj | x.plcproj]",
 		Short: "Type-check ST source files",
 		Long: `Run semantic analysis on one or more IEC 61131-3 Structured Text source files.
 
 Reports type errors, undeclared variables, unused variables, unreachable code,
-and vendor compatibility warnings. Exit code 1 if errors found, 0 otherwise.`,
+and vendor compatibility warnings. Exit code 1 if errors found, 0 otherwise.
+
+A single TwinCAT .tsproj or .plcproj argument is imported on the fly and
+checked with its library stubs; diagnostics point at TcPOU files and lines.`,
 		RunE: runCheck,
 	}
 
 	cmd.Flags().String("vendor", "", "Vendor target for compatibility checking (beckhoff, schneider, portable)")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+	cmd.Flags().Bool("symbols", false, "Print the symbol tree after diagnostics")
 	addGVLNameFlag(cmd)
 
 	return cmd
@@ -42,6 +49,10 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	if err := validateGVLName(cmd, args, format); err != nil {
 		return err
+	}
+
+	if hasProjectArg(args) {
+		return runCheckProject(cmd, args, format, vendorFlag, defines)
 	}
 
 	if len(args) == 0 {
@@ -110,6 +121,84 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	allDiags = append(allDiags, incrResult.Diags...)
 	allDiags = append(allDiags, analysisResult.Diags...)
 
+	return reportDiags(cmd, format, analysisResult, allDiags,
+		fmt.Sprintf("(%d/%d files re-parsed)", stats.StaleFiles, stats.TotalFiles))
+}
+
+// isProjectPath reports whether p names a TwinCAT solution or PLC project.
+func isProjectPath(p string) bool {
+	switch strings.ToLower(filepath.Ext(p)) {
+	case ".tsproj", ".plcproj":
+		return true
+	}
+	return false
+}
+
+// hasProjectArg reports whether any argument is a TwinCAT project path.
+func hasProjectArg(args []string) bool {
+	for _, a := range args {
+		if isProjectPath(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// failUsage reports a usage error: {"error": "..."} on stdout under
+// --format json, otherwise "Error: ..." on stderr; then exits 1.
+func failUsage(cmd *cobra.Command, format string, err error) {
+	if format == "json" {
+		out, _ := json.Marshal(map[string]string{"error": err.Error()})
+		fmt.Fprintln(os.Stdout, string(out))
+	} else {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	}
+	exitWithFailure(cmd)
+}
+
+// runCheckProject imports a TwinCAT project and checks it through
+// analyzer.AnalyzeProject. It bypasses the incremental cache: conversion is
+// cheap and the cache is keyed on raw .st files, not on TcPOU XML.
+func runCheckProject(cmd *cobra.Command, args []string, format, vendorFlag string, defines map[string]bool) error {
+	if len(args) != 1 {
+		failUsage(cmd, format, fmt.Errorf("a project path (.tsproj or .plcproj) must be the only argument"))
+	}
+	if cmd.Flags().Changed(gvlNameFlag) {
+		failUsage(cmd, format, fmt.Errorf("--%s cannot be used with a project path; GVL names come from the TcGVL objects", gvlNameFlag))
+	}
+
+	m, importDiags, err := twincat.Import(args[0], twincat.Options{Defines: defines})
+	if err != nil {
+		failUsage(cmd, format, fmt.Errorf("importing %s: %w", args[0], err))
+	}
+
+	// Import already failed on a broken stc.toml next to the project, so a
+	// config found here loads.
+	var cfg *project.Config
+	if cp, err := project.FindConfig(filepath.Dir(m.ProjectPath)); err == nil {
+		cfg, _ = project.LoadConfig(cp)
+	}
+	if vendorFlag != "" {
+		if cfg == nil {
+			cfg = &project.Config{}
+		}
+		cfg.Build.VendorTarget = vendorFlag
+	}
+
+	res := analyzer.AnalyzeProject(m, cfg, defines)
+	allDiags := append(append([]diag.Diagnostic{}, importDiags...), res.Diags...)
+	return reportDiags(cmd, format, res, allDiags,
+		fmt.Sprintf("(%d source(s), %d library source(s) from %s)", len(m.Sources), len(m.LibrarySources), m.PlcName))
+}
+
+// reportDiags prints diagnostics as a JSON array (stdout) or text (stderr)
+// with an error/warning summary and a trailing note line, plus the symbol
+// tree of analysisResult under --symbols, then exits 1 when any error was
+// reported.
+func reportDiags(cmd *cobra.Command, format string, analysisResult analyzer.AnalysisResult, allDiags []diag.Diagnostic, note string) error {
+	if allDiags == nil {
+		allDiags = []diag.Diagnostic{}
+	}
 	// Count errors and warnings
 	errorCount := 0
 	warningCount := 0
@@ -122,10 +211,33 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// --symbols: build the static symbol tree (RUNT-01) for printing.
+	var tree *symtree.Tree
+	if withSymbols, _ := cmd.Flags().GetBool("symbols"); withSymbols {
+		var err error
+		if tree, err = symtree.Build(analysisResult); err != nil {
+			fmt.Fprintf(os.Stderr, "error: building symbol tree: %v\n", err)
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			os.Exit(1)
+		}
+	}
+
 	switch format {
 	case "json":
 		// JSON output to stdout
-		out, err := json.MarshalIndent(allDiags, "", "  ")
+		var payload any = allDiags
+		if tree != nil {
+			symJSON, err := tree.JSON()
+			if err != nil {
+				return fmt.Errorf("JSON marshal error: %w", err)
+			}
+			payload = struct {
+				Diagnostics []diag.Diagnostic `json:"diagnostics"`
+				Symbols     json.RawMessage   `json:"symbols"`
+			}{allDiags, symJSON}
+		}
+		out, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
 			return fmt.Errorf("JSON marshal error: %w", err)
 		}
@@ -138,7 +250,10 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		}
 		// Print summary to stderr
 		fmt.Fprintf(os.Stderr, "%d error(s), %d warning(s)\n", errorCount, warningCount)
-		fmt.Fprintf(os.Stderr, "(%d/%d files re-parsed)\n", stats.StaleFiles, stats.TotalFiles)
+		fmt.Fprintln(os.Stderr, note)
+		if tree != nil {
+			fmt.Fprint(os.Stdout, tree.Text())
+		}
 	}
 
 	// Exit code: 1 if errors, 0 if warnings-only or clean

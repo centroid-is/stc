@@ -71,6 +71,14 @@ type Value struct {
 	PtrVar  string         // For ValPointer/ValReference: uppercase variable name
 	Enum    string         // Upper-case enum type name for enum values, else empty
 
+	// ArrayLow is the declared lower bound of an ARRAY value. Arrays use
+	// direct indexing (Array[i] is element i), so slots below ArrayLow are
+	// padding. Read-only metadata, copied by Clone.
+	ArrayLow int
+	// Fields lists a STRUCT value's member names in declared case and
+	// order. Read-only metadata shared by Clone; Struct keys stay upper-case.
+	Fields []string
+
 	// superDecl is set on the value of SUPER (a ValPointer with FBRef) and
 	// of SUPER^ (a ValFBInstance): methods and the body then come from this
 	// base declaration instead of the instance's own type.
@@ -90,7 +98,7 @@ func (v Value) String() string {
 		}
 		return "FALSE"
 	case ValInt:
-		return fmt.Sprintf("%d", v.Int)
+		return formatInt(v)
 	case ValReal:
 		return fmt.Sprintf("%g", v.Real)
 	case ValString:
@@ -238,7 +246,7 @@ func (v Value) MarshalJSON() ([]byte, error) {
 		}
 		return []byte("false"), nil
 	case ValInt:
-		return []byte(fmt.Sprintf("%d", v.Int)), nil
+		return []byte(formatInt(v)), nil
 	case ValReal:
 		return []byte(fmt.Sprintf("%g", v.Real)), nil
 	case ValString:

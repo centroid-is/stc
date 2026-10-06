@@ -22,20 +22,20 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### TwinCAT project import (IMPT)
 
-- [ ] **IMPT-01**: `stc vendor import <x.tsproj|x.plcproj>` reads TcPOU (declaration, implementation, methods, actions, properties), TcGVL and TcDUT files listed in the plcproj and builds one project model stc can check and run
-- [ ] **IMPT-02**: Library placeholder references in the plcproj resolve in order: project POUs, sibling library plcproj (SVNCoreComponents), shipped stubs; unresolved references are reported as diagnostics
-- [ ] **IMPT-03**: Task cycle time and PLC project name are read from the `.tsproj` and used by the runtime and the OPC UA namespace
-- [ ] **IMPT-04**: Shipped stubs cover Tc2_EtherCAT (`FB_EcGetSlaveState`, `FB_EcGetAllSlaveStates`, `FB_EcSetSlaveState`, `FB_EcGetMasterState`, `FB_EcGetAllSlaveCrcErrors`, `FB_EcGetSlaveCrcErrorEx`, `FB_EcCoESDoRead`, `FB_EcCoESDoWrite`, `FB_EcPhysicalWriteCmd`, `ST_EcSlaveState`, `E_EcSlaveState`), Tc2_System additions (`AMSADDR`, `T_AmsNetIdArr`, `F_CreateAmsNetId`, `MEMCPY`), Tc2_ModbusSrv, Tc3_Module and Tc2_SerialCom so the sildarvinnsla projects type-check
-- [ ] **IMPT-05**: `stc vendor extract` emits stubs that parse (closing keywords, methods included) and no longer silently skips TcGVL/TcDUT entries
+- [x] **IMPT-01**: `stc vendor import <x.tsproj|x.plcproj>` reads TcPOU (declaration, implementation, methods, actions, properties), TcGVL and TcDUT files listed in the plcproj and builds one project model stc can check and run
+- [x] **IMPT-02**: Library placeholder references in the plcproj resolve in order: project POUs, sibling library plcproj (SVNCoreComponents), shipped stubs; unresolved references are reported as diagnostics
+- [x] **IMPT-03**: Task cycle time and PLC project name are read from the `.tsproj` and used by the runtime and the OPC UA namespace
+- [x] **IMPT-04**: Shipped stubs cover Tc2_EtherCAT (`FB_EcGetSlaveState`, `FB_EcGetAllSlaveStates`, `FB_EcSetSlaveState`, `FB_EcGetMasterState`, `FB_EcGetAllSlaveCrcErrors`, `FB_EcGetSlaveCrcErrorEx`, `FB_EcCoESDoRead`, `FB_EcCoESDoWrite`, `FB_EcPhysicalWriteCmd`, `ST_EcSlaveState`; `E_EcSlaveState` is declared by SVNCoreComponents, not Beckhoff), Tc2_System additions (`AMSADDR`, `T_AmsNetIdArr`, `F_CreateAmsNetId`, `MEMCPY`), Tc2_ModbusSrv, Tc3_Module and Tc2_SerialCom so the sildarvinnsla projects type-check
+- [x] **IMPT-05**: `stc vendor extract` emits stubs that parse (closing keywords, methods included) and no longer silently skips TcGVL/TcDUT entries
 
 ### Runtime model (RUNT)
 
-- [ ] **RUNT-01**: After analysis a symbol tree exists for every GVL, PROGRAM, FB instance, struct member and array element with IEC type, layout, enum strings and attributes, addressable by dotted path (`GVL.fb[2].HMI.p_stat_State`)
-- [ ] **RUNT-02**: The live interpreter supports `Get(path)` / `Set(path, value)` by dotted path with type coercion, usable from Go, tests, MCP and servers
+- [x] **RUNT-01**: After analysis a symbol tree exists for every GVL, PROGRAM, FB instance, struct member and array element with IEC type, layout, enum strings and attributes, addressable by dotted path (`GVL.fb[2].HMI.p_stat_State`)
+- [x] **RUNT-02**: The live interpreter supports `Get(path)` / `Set(path, value)` by dotted path with type coercion, usable from Go, tests, MCP and servers
 - [ ] **RUNT-03**: All GVLs are instantiated once and PROGRAMs run per task with the configured cycle time; `Tick()` stepping stays deterministic and a free-running mode paces the scan against wall-clock for interactive use
 - [ ] **RUNT-04**: `PERSISTENT`/`RETAIN` variables load from and save to a state file so `p_cfg_*` values survive restarts
-- [ ] **RUNT-05**: Integer arithmetic wraps per declared type (INT 32767+1 = -32768, UINT 0-1 = 65535) and untyped literals adopt the context type so `a := a + 1` checks for INT
-- [ ] **RUNT-06**: Array, struct and struct-array initialisers (`:= [(a := 1, s := 'x'), ...]`) with constant-expression bounds are applied at instantiation
+- [x] **RUNT-05**: Integer arithmetic wraps per declared type (INT 32767+1 = -32768, UINT 0-1 = 65535) and untyped literals adopt the context type so `a := a + 1` checks for INT
+- [x] **RUNT-06**: Array, struct and struct-array initialisers (`:= [(a := 1, s := 'x'), ...]`) with constant-expression bounds are applied at instantiation
 - [ ] **RUNT-07**: AT-bound variables read and write by declared type (sign-extended INT, REAL, enums, structs with `AT %I*` members) rather than by address width
 - [x] **RUNT-08**: `stc check` knows the standard FBs (TON, TOF, TP, CTU, CTD, CTUD, R_TRIG, F_TRIG, SR, RS) and rejects unknown type names instead of treating them as empty FBs
 - [ ] **RUNT-09**: `stc sim` and `stc serve` can run PROGRAMs that use user-defined FBs, functions, methods and actions from the imported project
@@ -55,12 +55,12 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### OPC UA server (OPCUA)
 
-- [ ] **OPCUA-01**: `stc serve --project ... --opcua :4840` starts an OPC UA server (awcullen/opcua) with SecurityPolicy None + Anonymous by default and optional Basic256Sha256 with self-signed certificates
-- [ ] **OPCUA-02**: The PLC namespace `urn:BeckhoffAutomation:Ua:PLC1` is registered at index 4; nodes are addressable as `ns=4;s=<GVL|PROGRAM>.<path>[i].<member>` with declared case; the standard Server object including `i=2259` ServerStatus.State is served
-- [ ] **OPCUA-03**: Exposure follows TF6100 rules: a symbol is published if it or any ancestor instance or type-level member has `OPC.UA.DA := '1'`; `'1'` inherits to children; `'0'` prunes a subtree; `'2'` publishes a struct without member nodes; type-level attributes inside FB/STRUCT declarations apply to every instance; intermediate FB/array object nodes are created when a descendant is exposed
-- [ ] **OPCUA-04**: `OPC.UA.DA.Access` 1/2/3 maps to AccessLevel (missing = read/write) and `OPC.UA.DA.Description` to the Description attribute
-- [ ] **OPCUA-05**: Structs with `OPC.UA.DA.StructuredType` (on the variable or on the TYPE/FB header) are readable as ExtensionObjects with a served DataTypeDefinition, while members remain individually addressable; enums are Int32 with EnumStrings/EnumValues; arrays are single nodes with ValueRank/ArrayDimensions
-- [ ] **OPCUA-06**: Data types map per PLCopen OPC 30000 (BOOL Boolean, INT Int16, UINT/WORD UInt16, DINT Int32, UDINT/DWORD UInt32, REAL Float, LREAL Double, STRING String, TIME Int64 ms, DT DateTime, TOD UInt32, BYTE Byte)
+- [x] **OPCUA-01**: `stc serve --project ... --opcua :4840` starts an OPC UA server (awcullen/opcua) with SecurityPolicy None + Anonymous by default and optional Basic256Sha256 with self-signed certificates
+- [x] **OPCUA-02**: The PLC namespace `urn:BeckhoffAutomation:Ua:PLC1` is registered at index 4; nodes are addressable as `ns=4;s=<GVL|PROGRAM>.<path>[i].<member>` with declared case; the standard Server object including `i=2259` ServerStatus.State is served
+- [x] **OPCUA-03**: Exposure follows TF6100 rules: a symbol is published if it or any ancestor instance or type-level member has `OPC.UA.DA := '1'`; `'1'` inherits to children; `'0'` prunes a subtree; `'2'` publishes a struct without member nodes; type-level attributes inside FB/STRUCT declarations apply to every instance; intermediate FB/array object nodes are created when a descendant is exposed
+- [x] **OPCUA-04**: `OPC.UA.DA.Access` 1/2/3 maps to AccessLevel (missing = read/write) and `OPC.UA.DA.Description` to the Description attribute
+- [x] **OPCUA-05**: Structs with `OPC.UA.DA.StructuredType` (on the variable or on the TYPE/FB header) are readable as ExtensionObjects with a served DataTypeDefinition, while members remain individually addressable; enums are Int32 with EnumStrings/EnumValues; arrays are single nodes with ValueRank/ArrayDimensions
+- [x] **OPCUA-06**: Data types map per PLCopen OPC 30000 (BOOL Boolean, INT Int16, UINT/WORD UInt16, DINT Int32, UDINT/DWORD UInt32, REAL Float, LREAL Double, STRING String, TIME Int64 ms, DT DateTime, TOD UInt32, BYTE Byte)
 - [ ] **OPCUA-07**: Writes go through the symbol tree with coercion so the `p_cmd_*` set-TRUE / FB-clears handshake works while the scan runs
 - [ ] **OPCUA-08**: Subscriptions and monitored items deliver data changes sampled from the running scan
 - [ ] **OPCUA-09**: The emulated address space for ST301 is diffed in CI against a stored browse fixture of the real TF6100 server (node ids, data types, access levels, struct definitions)
@@ -120,17 +120,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIAL-08 | Phase 19 | Complete |
 | DIAL-09 | Phase 20 | Complete |
 | DIAL-10 | Phase 20 | Complete |
-| IMPT-01 | Phase 21 | Pending |
-| IMPT-02 | Phase 21 | Pending |
-| IMPT-03 | Phase 21 | Pending |
-| IMPT-04 | Phase 21 | Pending |
-| IMPT-05 | Phase 21 | Pending |
-| RUNT-01 | Phase 22 | Pending |
-| RUNT-02 | Phase 22 | Pending |
+| IMPT-01 | Phase 21 | Complete |
+| IMPT-02 | Phase 21 | Complete |
+| IMPT-03 | Phase 21 | Complete |
+| IMPT-04 | Phase 21 | Complete |
+| IMPT-05 | Phase 21 | Complete |
+| RUNT-01 | Phase 22 | Complete |
+| RUNT-02 | Phase 22 | Complete |
 | RUNT-03 | Phase 23 | Pending |
 | RUNT-04 | Phase 23 | Pending |
-| RUNT-05 | Phase 22 | Pending |
-| RUNT-06 | Phase 22 | Pending |
+| RUNT-05 | Phase 22 | Complete |
+| RUNT-06 | Phase 22 | Complete |
 | RUNT-07 | Phase 23 | Pending |
 | RUNT-08 | Phase 20 | Complete |
 | RUNT-09 | Phase 23 | Pending |
@@ -144,12 +144,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ECAT-08 | Phase 26 | Pending |
 | ECAT-09 | Phase 27 | Pending |
 | ECAT-10 | Phase 27 | Pending |
-| OPCUA-01 | Phase 28 | Pending |
-| OPCUA-02 | Phase 28 | Pending |
-| OPCUA-03 | Phase 28 | Pending |
-| OPCUA-04 | Phase 28 | Pending |
-| OPCUA-05 | Phase 28 | Pending |
-| OPCUA-06 | Phase 28 | Pending |
+| OPCUA-01 | Phase 28 | Complete |
+| OPCUA-02 | Phase 28 | Complete |
+| OPCUA-03 | Phase 28 | Complete |
+| OPCUA-04 | Phase 28 | Complete |
+| OPCUA-05 | Phase 28 | Complete |
+| OPCUA-06 | Phase 28 | Complete |
 | OPCUA-07 | Phase 29 | Pending |
 | OPCUA-08 | Phase 29 | Pending |
 | OPCUA-09 | Phase 29 | Pending |

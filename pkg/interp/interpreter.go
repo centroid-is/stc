@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"regexp"
@@ -50,6 +51,14 @@ type Interpreter struct {
 	// used as an array element or struct member resolves to the right shape
 	// instead of falling back to an INT zero.
 	TypeDecls map[string]ast.TypeSpec
+	// TypeInits maps upper-case TYPE names to the TYPE's own default
+	// (TYPE T_Speed : INT := 50; END_TYPE), applied wherever the type is
+	// instantiated.
+	TypeInits map[string]ast.Expr
+
+	// initErrs collects array bound and initialiser failures found while
+	// instantiating variables; see InitErrors.
+	initErrs []error
 
 	// FBDecls maps uppercase user-defined function block names to their
 	// declarations. FB instantiation consults this so that an FB-typed VAR
@@ -205,18 +214,32 @@ func (interp *Interpreter) parseLitInt(s string) (Value, error) {
 		if err != nil {
 			return Value{}, &RuntimeError{Msg: fmt.Sprintf("invalid integer base: %s", baseStr)}
 		}
-		n, err := strconv.ParseInt(digits, base, 64)
+		n, err := parseInt64Bits(digits, base)
 		if err != nil {
 			return Value{}, &RuntimeError{Msg: fmt.Sprintf("invalid integer literal: %s", s)}
 		}
 		return Value{Kind: ValInt, Int: n, IECType: types.KindDINT}, nil
 	}
 
-	n, err := strconv.ParseInt(s, 10, 64)
+	n, err := parseInt64Bits(s, 10)
 	if err != nil {
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("invalid integer literal: %s", s)}
 	}
 	return Value{Kind: ValInt, Int: n, IECType: types.KindDINT}, nil
+}
+
+// parseInt64Bits parses digits in base as an int64, accepting values up to
+// 2^64-1 (ULINT/LWORD range) as their int64 bit pattern.
+func parseInt64Bits(digits string, base int) (int64, error) {
+	n, err := strconv.ParseInt(digits, base, 64)
+	if err == nil {
+		return n, nil
+	}
+	u, uerr := strconv.ParseUint(digits, base, 64)
+	if uerr != nil {
+		return 0, err
+	}
+	return int64(u), nil
 }
 
 func (interp *Interpreter) parseLitReal(s string) (Value, error) {
@@ -369,6 +392,14 @@ func (interp *Interpreter) evalBinary(env *Env, e *ast.BinaryExpr) (Value, error
 
 	op := strings.ToUpper(e.Op.Text)
 
+	// Bitwise AND/OR/XOR on integer (bit-string) operands; the checker
+	// accepts these for BYTE..LWORD.
+	if left.Kind == ValInt && right.Kind == ValInt {
+		if v, ok := bitwise(op, left.Int, right.Int, resultIntKind(e.Left, e.Right, left, right)); ok {
+			return v, nil
+		}
+	}
+
 	// Boolean operators
 	switch op {
 	case "AND":
@@ -445,9 +476,9 @@ func (interp *Interpreter) evalBinary(env *Env, e *ast.BinaryExpr) (Value, error
 		return interp.evalBinaryReal(lf, op, rf)
 	}
 
-	// Both are int
+	// Both are int: the result takes the operands' IEC kind and wraps to it
 	if left.Kind == ValInt && right.Kind == ValInt {
-		return interp.evalBinaryInt(left.Int, op, right.Int)
+		return interp.evalBinaryInt(left.Int, op, right.Int, resultIntKind(e.Left, e.Right, left, right))
 	}
 
 	return Value{}, &RuntimeError{
@@ -455,39 +486,67 @@ func (interp *Interpreter) evalBinary(env *Env, e *ast.BinaryExpr) (Value, error
 	}
 }
 
-func (interp *Interpreter) evalBinaryInt(l int64, op string, r int64) (Value, error) {
+// evalBinaryInt applies op to the integers l and r. Arithmetic results wrap
+// to kind and carry it as their IECType; KindInvalid marks an untyped
+// constant expression, which is neither wrapped nor retyped from DINT.
+// ULINT and LWORD divide, take the modulus and compare as uint64.
+func (interp *Interpreter) evalBinaryInt(l int64, op string, r int64, kind types.TypeKind) (Value, error) {
+	unsigned := isUnsigned64(kind)
+	arith := func(n int64) (Value, error) {
+		if kind == types.KindInvalid {
+			return IntValue(n), nil
+		}
+		return Value{Kind: ValInt, Int: wrapInt(n, kind), IECType: kind}, nil
+	}
 	switch op {
 	case "+":
-		return IntValue(l + r), nil
+		return arith(l + r)
 	case "-":
-		return IntValue(l - r), nil
+		return arith(l - r)
 	case "*":
-		return IntValue(l * r), nil
+		return arith(l * r)
 	case "/":
 		if r == 0 {
 			return Value{}, &RuntimeError{Msg: "division by zero"}
 		}
-		return IntValue(l / r), nil
+		if unsigned {
+			return arith(int64(uint64(l) / uint64(r)))
+		}
+		return arith(l / r)
 	case "MOD":
 		if r == 0 {
 			return Value{}, &RuntimeError{Msg: "division by zero"}
 		}
-		return IntValue(l % r), nil
+		if unsigned {
+			return arith(int64(uint64(l) % uint64(r)))
+		}
+		return arith(l % r)
 	case "=":
 		return BoolValue(l == r), nil
 	case "<>":
 		return BoolValue(l != r), nil
+	}
+	cmp := compareInt(l, r, unsigned)
+	switch op {
 	case "<":
-		return BoolValue(l < r), nil
+		return BoolValue(cmp < 0), nil
 	case ">":
-		return BoolValue(l > r), nil
+		return BoolValue(cmp > 0), nil
 	case "<=":
-		return BoolValue(l <= r), nil
+		return BoolValue(cmp <= 0), nil
 	case ">=":
-		return BoolValue(l >= r), nil
+		return BoolValue(cmp >= 0), nil
 	default:
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported int operator: %s", op)}
 	}
+}
+
+// compareInt returns -1, 0 or 1 comparing l and r, as uint64 when unsigned.
+func compareInt(l, r int64, unsigned bool) int {
+	if unsigned {
+		return cmp.Compare(uint64(l), uint64(r))
+	}
+	return cmp.Compare(l, r)
 }
 
 func (interp *Interpreter) evalBinaryReal(l float64, op string, r float64) (Value, error) {
@@ -534,7 +593,12 @@ func (interp *Interpreter) evalUnary(env *Env, e *ast.UnaryExpr) (Value, error) 
 	case "-":
 		switch operand.Kind {
 		case ValInt:
-			return IntValue(-operand.Int), nil
+			// A typed operand keeps its kind and wraps (-(-32768) is -32768
+			// for INT); an untyped one stays DINT.
+			if bitWidth(operand.IECType) == 0 || isUntypedIntLiteral(e.Operand) {
+				return IntValue(-operand.Int), nil
+			}
+			return Value{Kind: ValInt, Int: wrapInt(-operand.Int, operand.IECType), IECType: operand.IECType}, nil
 		case ValReal:
 			return RealValue(-operand.Real), nil
 		default:
@@ -675,7 +739,7 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 				}
 				return nil
 			}
-			val = adoptEnumTag(existing, val)
+			val = storeAs(existing, val)
 		}
 		// Check subrange constraints
 		if msg := env.CheckSubrange(target.Name, val); msg != "" {
@@ -742,7 +806,7 @@ func (interp *Interpreter) execAssignIndex(env *Env, target *ast.IndexExpr, val 
 	if val.IsAggregate() {
 		val = val.Clone()
 	}
-	arr.Array[i] = adoptEnumTag(arr.Array[i], val)
+	arr.Array[i] = storeAs(arr.Array[i], val)
 	if id, ok := target.Object.(*ast.Ident); ok {
 		// Through assignToTarget, so a reference variable writes its target
 		// instead of being replaced by a copy of the array.
@@ -851,8 +915,11 @@ func (interp *Interpreter) execFor(env *Env, s *ast.ForStmt) error {
 
 	varName := s.Variable.Name
 
-	// Define or set the loop variable
-	if !env.Set(varName, from) {
+	// Define or set the loop variable; an existing counter keeps its IEC
+	// type and wraps to its width.
+	if cur, ok := env.Get(varName); ok {
+		env.Set(varName, storeAs(cur, from))
+	} else {
 		env.Define(varName, from)
 	}
 
@@ -887,7 +954,7 @@ func (interp *Interpreter) execFor(env *Env, s *ast.ForStmt) error {
 
 		// Increment loop variable
 		current, _ = env.Get(varName)
-		env.Set(varName, IntValue(current.Int+step))
+		env.Set(varName, storeAs(current, IntValue(current.Int+step)))
 	}
 	return nil
 }
@@ -1027,6 +1094,15 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 		}
 		if v.Kind != ValFBInstance || v.FBRef == nil {
 			return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", c.Member.Name)}
+		}
+	case *ast.IndexExpr:
+		// fbs[i](IN := x): an element of an ARRAY OF FB.
+		var err error
+		if v, err = interp.evalExpr(env, c); err != nil {
+			return err
+		}
+		if v.Kind != ValFBInstance || v.FBRef == nil {
+			return &RuntimeError{Msg: "array element is not a function block instance", Pos: c.Span().Start}
 		}
 	}
 	if v.Kind != ValFBInstance || v.FBRef == nil {
@@ -1180,7 +1256,7 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 	case ValStruct:
 		if obj.Struct != nil {
 			key := strings.ToUpper(memberName)
-			obj.Struct[key] = adoptEnumTag(obj.Struct[key], val)
+			obj.Struct[key] = storeAs(obj.Struct[key], val)
 			// Write back the struct to the env; a reference variable
 			// writes its target instead of being replaced by a copy.
 			if objIdent, ok := target.Object.(*ast.Ident); ok {
@@ -1215,7 +1291,7 @@ func (interp *Interpreter) execAssignDeref(env *Env, target *ast.DerefExpr, val 
 		return &RuntimeError{Msg: "nil pointer dereference"}
 	}
 	cur, _ := ptr.PtrEnv.Get(ptr.PtrVar)
-	if !ptr.PtrEnv.Set(ptr.PtrVar, adoptEnumTag(cur, val)) {
+	if !ptr.PtrEnv.Set(ptr.PtrVar, storeAs(cur, val)) {
 		return &RuntimeError{Msg: fmt.Sprintf("dangling pointer: variable '%s' no longer exists", ptr.PtrVar)}
 	}
 	return nil
@@ -1752,4 +1828,25 @@ func (interp *Interpreter) execPropertySetter(inst *FBInstance, prop *ast.Proper
 		}
 	}
 	return nil
+}
+
+// bitwise applies AND, OR or XOR to two integers; ok is false for any other
+// operator. A known result kind wraps and types the result; otherwise the
+// result is an untyped DINT constant.
+func bitwise(op string, l, r int64, kind types.TypeKind) (Value, bool) {
+	var n int64
+	switch op {
+	case "AND":
+		n = l & r
+	case "OR":
+		n = l | r
+	case "XOR":
+		n = l ^ r
+	default:
+		return Value{}, false
+	}
+	if kind == types.KindInvalid {
+		return IntValue(n), true
+	}
+	return Value{Kind: ValInt, Int: wrapInt(n, kind), IECType: kind}, true
 }

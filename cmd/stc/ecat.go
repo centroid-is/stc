@@ -29,7 +29,8 @@ TcLinkTo-linked variable in the given ST files and resolve it to a process
 image slot. GVL files are named after their file name. Reports unresolved
 targets (ECAT001), undeclared members (ECAT002), size mismatches (ECAT003),
 direction mismatches (ECAT004), duplicate bindings (ECAT005, warning) and
-malformed values (ECAT006). Exit code 1 if any error is reported.`,
+malformed values (ECAT006) and linked leaves without AT %I*/%Q* (ECAT007,
+warning). Exit code 1 if any error is reported.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runEcatValidate,
 	}

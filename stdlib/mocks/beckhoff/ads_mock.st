@@ -9,9 +9,9 @@ VAR_INPUT
     IDXGRP      : UDINT;
     IDXOFFS     : UDINT;
     LEN         : UDINT;
-    DESTADDR    : UDINT;
+    DESTADDR    : PVOID;
     READ        : BOOL;
-    TMOUT       : TIME := T#5S;
+    TMOUT       : TIME := DEFAULT_ADS_TIMEOUT;
 END_VAR
 VAR_OUTPUT
     BUSY        : BOOL;

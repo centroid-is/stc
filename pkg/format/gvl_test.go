@@ -21,7 +21,7 @@ func TestFormatGVL(t *testing.T) {
 		assertInOrder(t, out,
 			"END_TYPE",
 			"// Synthetic EtherCAT GVL shape",
-			"{attribute 'qualified_only'}",
+			`{attribute "qualified_only"}`,
 			"VAR_GLOBAL RETAIN PERSISTENT",
 			"// ==== Device 1 (EtherCAT) ====",
 			"{attribute 'TcLinkTo'",

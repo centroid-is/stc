@@ -246,6 +246,9 @@ type FunctionBlockType struct {
 	Inputs  []Parameter
 	Outputs []Parameter
 	InOuts  []Parameter
+	// Properties are the FB's PROPERTY declarations, readable and writable
+	// as members (fb.Prop) from outside the FB.
+	Properties []Parameter
 	// ParamAliases maps an upper-cased alternative input name to the
 	// canonical input it sets (the IEC R of CTU sets RESET). Only the
 	// standard FBs have aliases.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_Fbd" Id="{00000000-0000-0000-0000-0000000000b0}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Fbd
+VAR
+	x : BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <FBD>
+        <network />
+      </FBD>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -19,4 +19,7 @@ type SimResult struct {
 	Cycles    []CycleRecord `json:"cycles"`
 	Duration  time.Duration `json:"duration"`
 	NumCycles int           `json:"num_cycles"`
+	// Get holds the values requested with `stc sim --get`, read after the
+	// last cycle and rendered with interp.Runtime.ToJSON.
+	Get map[string]any `json:"get,omitempty"`
 }

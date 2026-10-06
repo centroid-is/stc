@@ -36,6 +36,7 @@ func NewChecker(table *symbols.Table, diags *diag.Collector) *Checker {
 func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 	for _, file := range files {
 		for _, decl := range file.Declarations {
+			c.checkDoubleQuotedAttrs(decl)
 			switch d := decl.(type) {
 			case *ast.ProgramDecl:
 				if d.Name != nil {
@@ -251,6 +252,15 @@ func (c *Checker) checkStmt(stmt ast.Statement) {
 }
 
 func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
+	// An expression statement `fb();` or `fb(1, b := 2);` on an FB
+	// instance parses as an AssignStmt without a value. Check it as the FB
+	// call statement it is.
+	if s.Value == nil {
+		if call, ok := s.Target.(*ast.CallExpr); ok && c.isFBInstanceCallee(call.Callee) {
+			c.checkCallStmt(callExprAsStmt(call))
+			return
+		}
+	}
 	if s.Value != nil {
 		c.checkConstantTarget(s.Target)
 	}
@@ -281,13 +291,13 @@ func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
 		return
 	}
 
+	// An untyped constant adopts the target type (range-checked).
+	if c.untypedStore(s.Value, targetType, CodeTypeMismatch) {
+		return
+	}
+
 	// Check type compatibility: value must widen to target
 	if !targetType.Equal(valueType) {
-		// Integer literals (default DINT) are compatible with any integer type
-		// Real literals (default LREAL) are compatible with any real type
-		if isLiteralExpr(s.Value) && isLiteralCompatible(valueType.Kind(), targetType.Kind()) {
-			return
-		}
 		if !types.CanWiden(valueType.Kind(), targetType.Kind()) {
 			pos := astPosToSource(s.Span().Start)
 			c.diags.Errorf(pos, CodeTypeMismatch,
@@ -396,10 +406,10 @@ func (c *Checker) checkCaseStmt(s *ast.CaseStmt) {
 		for _, label := range branch.Labels {
 			switch l := label.(type) {
 			case *ast.CaseLabelValue:
-				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Value))
+				c.caseLabelCompatible(l, exprType, l.Value, c.checkExpr(l.Value))
 			case *ast.CaseLabelRange:
-				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Low))
-				c.caseLabelCompatible(l, exprType, c.checkExpr(l.High))
+				c.caseLabelCompatible(l, exprType, l.Low, c.checkExpr(l.Low))
+				c.caseLabelCompatible(l, exprType, l.High, c.checkExpr(l.High))
 			}
 		}
 		for _, stmt := range branch.Body {
@@ -409,6 +419,50 @@ func (c *Checker) checkCaseStmt(s *ast.CaseStmt) {
 	for _, stmt := range s.ElseBranch {
 		c.checkStmt(stmt)
 	}
+}
+
+// checkDoubleQuotedAttrs warns once for every attribute anywhere in decl
+// whose name is written in double quotes. TwinCAT ignores such attributes
+// (e.g. {attribute "qualified_only"} has no effect), and so does stc.
+func (c *Checker) checkDoubleQuotedAttrs(decl ast.Declaration) {
+	ast.Inspect(decl, func(n ast.Node) bool {
+		if a, ok := n.(*ast.Attribute); ok && a.DoubleQuoted {
+			c.diags.Warnf(astPosToSource(a.Span().Start), CodeAttrDoubleQuoted,
+				"attribute name in double quotes is ignored by TwinCAT; use single quotes")
+		}
+		return true
+	})
+}
+
+// isFBInstanceCallee reports whether callee is a plain name that resolves to
+// a function block instance in the current scope.
+func (c *Checker) isFBInstanceCallee(callee ast.Expr) bool {
+	name := exprName(callee)
+	if name == "" || c.currentScope == nil {
+		return false
+	}
+	sym := c.currentScope.Lookup(name)
+	if sym == nil {
+		return false
+	}
+	_, ok := sym.Type.(*types.FunctionBlockType)
+	return ok
+}
+
+// callExprAsStmt converts a call expression used as a statement into the
+// equivalent CallStmt: positional arguments first, then named ones.
+func callExprAsStmt(call *ast.CallExpr) *ast.CallStmt {
+	nb := call.NodeBase
+	nb.NodeKind = ast.KindCallStmt
+	args := make([]*ast.CallArg, 0, len(call.Args)+len(call.NamedArgs))
+	for _, a := range call.Args {
+		args = append(args, &ast.CallArg{
+			NodeBase: ast.NodeBase{NodeKind: ast.KindCallArg, NodeSpan: a.Span()},
+			Value:    a,
+		})
+	}
+	args = append(args, call.NamedArgs...)
+	return &ast.CallStmt{NodeBase: nb, Callee: call.Callee, Args: args}
 }
 
 func (c *Checker) checkCallStmt(s *ast.CallStmt) {
@@ -448,6 +502,11 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 	bound := make(map[string]bool)
 	for _, arg := range s.Args {
 		if arg.Name == nil {
+			// A positional argument is not matched to a parameter here;
+			// still check its value so its variables count as used.
+			if arg.Value != nil {
+				c.checkExpr(arg.Value)
+			}
 			continue
 		}
 		argName := strings.ToUpper(arg.Name.Name)
@@ -514,11 +573,10 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 				continue
 			}
 			if argType != types.Invalid && paramType != nil {
+				if !arg.IsOutput && c.untypedStore(arg.Value, paramType, CodeWrongArgType) {
+					continue
+				}
 				if !paramType.Equal(argType) && !types.CanWiden(argType.Kind(), paramType.Kind()) {
-					// Allow literal compatibility (e.g., integer literal 100 passed as INT param)
-					if isLiteralExpr(arg.Value) && isLiteralCompatible(argType.Kind(), paramType.Kind()) {
-						continue
-					}
 					pos := astPosToSource(arg.Value.Span().Start)
 					c.diags.Errorf(pos, CodeWrongArgType,
 						"cannot pass %s as %s parameter %q (expected %s)",
@@ -699,6 +757,7 @@ func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
 	if done {
 		return result
 	}
+	left, right = adoptUntyped(e.Left, e.Right, left, right)
 	switch {
 	case isArithmeticOp(op):
 		common, ok := types.CommonType(left.Kind(), right.Kind())
@@ -721,6 +780,11 @@ func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
 		return types.TypeBOOL
 
 	case isBooleanOp(op):
+		if bitString(left.Kind()) && bitString(right.Kind()) {
+			// Bitwise AND/OR/XOR on ANY_BIT operands (BYTE..LWORD).
+			common, _ := types.CommonType(left.Kind(), right.Kind())
+			return &types.PrimitiveType{Kind_: common}
+		}
 		if left.Kind() != types.KindBOOL || right.Kind() != types.KindBOOL {
 			pos := astPosToSource(e.Op.Span.Start)
 			c.diags.Errorf(pos, CodeTypeMismatch,
@@ -802,6 +866,21 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 
 		if fnType, ok := sym.Type.(*types.FunctionType); ok {
 			return c.checkUserFuncCall(e, fnType)
+		}
+
+		if sym.Type == types.Invalid {
+			// The symbol's type is already reported (e.g. an undeclared FB
+			// type, SEMA037). Do not cascade a not-callable error, but
+			// still check the arguments so their variables count as used.
+			for _, a := range e.Args {
+				c.checkExpr(a)
+			}
+			for _, a := range e.NamedArgs {
+				if a.Value != nil {
+					c.checkExpr(a.Value)
+				}
+			}
+			return types.Invalid
 		}
 
 		pos := astPosToSource(e.Callee.Span().Start)
@@ -908,6 +987,11 @@ func (c *Checker) checkMemberAccessExpr(e *ast.MemberAccessExpr) types.Type {
 		for _, io := range t.InOuts {
 			if strings.EqualFold(io.Name, memberName) {
 				return io.Type
+			}
+		}
+		for _, p := range t.Properties {
+			if strings.EqualFold(p.Name, memberName) {
+				return p.Type
 			}
 		}
 		pos := astPosToSource(e.Member.Span().Start)
@@ -1050,19 +1134,6 @@ func isLiteralExpr(e ast.Expr) bool {
 		ue := e.(*ast.UnaryExpr)
 		_, ok := ue.Operand.(*ast.Literal)
 		return ok
-	}
-	return false
-}
-
-// isLiteralCompatible checks if a literal type can be used where
-// a target type is expected. Integer literals are compatible with any
-// integer type, and real literals with any real type.
-func isLiteralCompatible(litKind, targetKind types.TypeKind) bool {
-	if types.IsAnyInt(litKind) && types.IsAnyInt(targetKind) {
-		return true
-	}
-	if types.IsAnyReal(litKind) && types.IsAnyReal(targetKind) {
-		return true
 	}
 	return false
 }

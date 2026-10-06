@@ -48,7 +48,7 @@ fi
 echo
 awk -v module="$MODULE/" '
 BEGIN {
-    n = split("pkg/parser:95 pkg/lexer:95 pkg/checker:94 pkg/interp:95 pkg/types:95 pkg/emit:95", rows, " ")
+    n = split("pkg/parser:95 pkg/lexer:95 pkg/checker:94 pkg/interp:95 pkg/types:95 pkg/emit:95 pkg/symtree:95", rows, " ")
     for (i = 1; i <= n; i++) {
         split(rows[i], kv, ":")
         order[i] = kv[1]
