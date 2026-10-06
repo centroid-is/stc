@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,6 +61,10 @@ func TestRefAssign(t *testing.T) {
 	require.Len(t, errs, 1)
 	assert.Equal(t, CodeRefThisSuper, errs[0].Code)
 	assert.Contains(t, errs[0].Message, "not a REFERENCE TO")
+
+	errs = refErrors(t, vars, "s.m REF= x;")
+	require.Len(t, errs, 1)
+	assert.Contains(t, errs[0].Message, "REF= target expression is not a REFERENCE TO")
 
 	// Undeclared names on either side report SEMA010 only.
 	assert.Equal(t, []string{CodeUndeclared}, codesOf(refErrors(t, vars, "zz REF= x;")))
@@ -140,7 +145,7 @@ func TestThisSuper(t *testing.T) {
 	})
 
 	t.Run("SUPER with EXTENDS", func(t *testing.T) {
-		assert.Empty(t, thisSuperErrors(t, "", "SUPER^.M(a := 1); SUPER^(); n := SUPER^.M(a := 1); SUPER^.x := 1; SUPER^(inA := 1);", "", ""))
+		assert.Empty(t, thisSuperErrors(t, "", "SUPER^.M(a := 1); SUPER^(); y := SUPER^.M(a := 1); SUPER^.x := 1; SUPER^(inA := 1);", "", ""))
 	})
 
 	t.Run("SUPER without EXTENDS", func(t *testing.T) {
@@ -155,6 +160,22 @@ func TestThisSuper(t *testing.T) {
 		assert.Equal(t, CodeRefThisSuper, errs[0].Code)
 	})
 
+	t.Run("SUPER with a base that is not an FB", func(t *testing.T) {
+		src := refTypes + "FUNCTION_BLOCK FB_C EXTENDS ST_Batch\nSUPER^();\nEND_FUNCTION_BLOCK\n"
+		ds, _ := runGVL(t, []gvlFile{{"c.st", src}})
+		assert.Equal(t, []string{CodeUndeclaredType}, codesOf(errorsOf(ds)))
+	})
+
+	t.Run("THIS member without a type", func(t *testing.T) {
+		files := parseGVLFiles(t, []gvlFile{{"a.st", "FUNCTION_BLOCK FB_A\nTHIS^.ghost := 1;\nEND_FUNCTION_BLOCK\n"}})
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations(files)
+		require.NoError(t, table.LookupPOU("FB_A").Insert(&symbols.Symbol{Name: "ghost", Kind: symbols.KindProperty}))
+		NewChecker(table, diags).CheckBodies(files)
+		assert.Empty(t, errorsOf(diags.All()))
+	})
+
 	t.Run("SUPER with an undeclared base", func(t *testing.T) {
 		src := "FUNCTION_BLOCK FB_C EXTENDS FB_Missing\nSUPER^();\nEND_FUNCTION_BLOCK\n"
 		ds, _ := runGVL(t, []gvlFile{{"c.st", src}})
@@ -165,7 +186,7 @@ func TestThisSuper(t *testing.T) {
 func TestRefAutoDeref(t *testing.T) {
 	const vars = `r : REFERENCE TO ARRAY[0..3] OF ST_Batch; n : INT; d : DINT;
 	rs : REFERENCE TO ST_Batch; ri : REFERENCE TO DINT; rr : REFERENCE TO ARRAY[0..3] OF ST_Batch;
-	rb : REFERENCE TO BOOL; b : BOOL;`
+	rb : REFERENCE TO BOOL; b : BOOL; ps : POINTER TO ST_Batch;`
 	for _, body := range []string{
 		"r[1].x := 1;",
 		"n := r[0].x;",
@@ -180,6 +201,7 @@ func TestRefAutoDeref(t *testing.T) {
 		"b := NOT rb;",
 		"d := -ri;",
 		"IF ri > 0 THEN d := ri * 2; END_IF",
+		"n := ps^.x;",
 	} {
 		assert.Empty(t, refErrors(t, vars, body), body)
 	}

@@ -22,6 +22,9 @@ type Checker struct {
 	currentReturnType   types.Type
 	currentFunctionName string
 	currentScope        *symbols.Scope
+	// currentFB is the FUNCTION_BLOCK whose body or action is being
+	// checked; THIS and SUPER refer to it. nil outside an FB.
+	currentFB *ast.FunctionBlockDecl
 }
 
 // NewChecker creates a new Checker using the given symbol table and diagnostics.
@@ -43,8 +46,10 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 			case *ast.FunctionBlockDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION_BLOCK")
+					c.currentFB = d
 					c.checkPOUBody(d.Name.Name, d.Body)
 					c.checkActionBodies(d.Name.Name, d.Actions)
+					c.currentFB = nil
 				}
 			case *ast.TypeDecl:
 				if st, ok := d.Type.(*ast.StructType); ok {
@@ -211,6 +216,8 @@ func (c *Checker) checkStmt(stmt ast.Statement) {
 	switch s := stmt.(type) {
 	case *ast.AssignStmt:
 		c.checkAssignStmt(s)
+	case *ast.RefAssignStmt:
+		c.checkRefAssignStmt(s)
 	case *ast.IfStmt:
 		c.checkIfStmt(s)
 	case *ast.ForStmt:
@@ -254,6 +261,12 @@ func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
 
 	if targetType == types.Invalid || valueType == types.Invalid {
 		return
+	}
+
+	// A reference reads and writes through to its target (research
+	// Pitfall 10); a reference assigned to a reference keeps both types.
+	if !(isReference(targetType) && isReference(valueType)) {
+		targetType, valueType = derefRef(targetType), derefRef(valueType)
 	}
 
 	if involvesEnum(valueType, targetType) {
@@ -524,6 +537,10 @@ func (c *Checker) checkExpr(expr ast.Expr) types.Type {
 		return c.checkDerefExpr(e)
 	case *ast.BitAccessExpr:
 		return c.checkBitAccessExpr(e)
+	case *ast.ThisExpr:
+		return c.checkThisExpr(e)
+	case *ast.SuperExpr:
+		return c.checkSuperExpr(e)
 	case *ast.ParenExpr:
 		return c.checkExpr(e.Inner)
 	case *ast.ErrorNode:
@@ -644,8 +661,8 @@ func (c *Checker) checkLiteral(e *ast.Literal) types.Type {
 }
 
 func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
-	left := c.checkExpr(e.Left)
-	right := c.checkExpr(e.Right)
+	left := derefRef(c.checkExpr(e.Left))
+	right := derefRef(c.checkExpr(e.Right))
 
 	if left == types.Invalid || right == types.Invalid {
 		return types.Invalid // propagate errors, don't cascade
@@ -695,7 +712,7 @@ func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
 }
 
 func (c *Checker) checkUnaryExpr(e *ast.UnaryExpr) types.Type {
-	operandType := c.checkExpr(e.Operand)
+	operandType := derefRef(c.checkExpr(e.Operand))
 	if operandType == types.Invalid {
 		return types.Invalid
 	}
@@ -729,8 +746,8 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 		// Member callees (inst.M(), THIS^.M(), GVL.fb()) are accepted
 		// unchecked, arguments included (research Pitfall 11): the callee
 		// type of a member call is not resolved yet. The instance they are
-		// called on still counts as used.
-		c.markRootUsed(e.Callee)
+		// called on still counts as used, and THIS^ / SUPER^ are validated.
+		c.checkMemberCalleeRoot(e.Callee)
 		return types.Invalid
 	}
 
@@ -836,6 +853,10 @@ func (c *Checker) checkMemberAccessExpr(e *ast.MemberAccessExpr) types.Type {
 	if typ, ok := c.checkConstBitIndex(e, objType); ok {
 		return typ
 	}
+	objType = derefRef(objType)
+	if typ, ok := c.selfMember(e.Object, objType, e.Member); ok {
+		return typ
+	}
 
 	switch t := objType.(type) {
 	case *types.StructType:
@@ -890,7 +911,7 @@ func (c *Checker) checkMemberAccessExpr(e *ast.MemberAccessExpr) types.Type {
 }
 
 func (c *Checker) checkIndexExpr(e *ast.IndexExpr) types.Type {
-	objType := c.checkExpr(e.Object)
+	objType := derefRef(c.checkExpr(e.Object))
 	if objType == types.Invalid {
 		return types.Invalid
 	}
