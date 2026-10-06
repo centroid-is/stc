@@ -42,7 +42,7 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### EtherCAT process-image simulation (ECAT)
 
-- [ ] **ECAT-01**: `pkg/ecat` loads TwinCAT `EtherCATConfig` exports (the `Device N.xml` files) into masters, slaves (name, model, vendor, product, phys addr, port physics, parent coupler) and their active TxPdo/RxPdo entries, reproducing the E-bus nesting and `Module N` segments used by `generate_gvl.py`
+- [x] **ECAT-01**: `pkg/ecat` loads TwinCAT `EtherCATConfig` exports (the `Device N.xml` files) into masters, slaves (name, model, vendor, product, phys addr, port physics, parent coupler) and their active TxPdo/RxPdo entries, reproducing the E-bus nesting and `Module N` segments used by `generate_gvl.py`
 - [ ] **ECAT-02**: `TcLinkTo` pragma strings (single target and multi-member `.m := path; ...` form) are parsed and resolved against the loaded topology to a (master, byte, bit) slot; `stc ecat validate` reports unresolved links and type-size mismatches with file positions
 - [ ] **ECAT-03**: Each master has an input and output process image; `AT %I*`/`%Q*` variables, struct members and FB members bound by `TcLinkTo` are copied from/to their slots at scan boundaries
 - [ ] **ECAT-04**: Device models selected by (VendorId, ProductCode) implement a common `Slave` interface and ship for EL1008/EL1018, EL2008, EP2338-0002/-1002, Festo CTEU outputs, EL3054/EL3064 (status word + scaled INT), EL9222-5500 (per-channel status/control with trip injection), PS2001-2410, EL2912/EP1918/EL1904 standard diagnostics, and couplers/passive terminals with no PDOs
@@ -134,7 +134,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RUNT-07 | Phase 23 | Pending |
 | RUNT-08 | Phase 20 | Complete |
 | RUNT-09 | Phase 23 | Pending |
-| ECAT-01 | Phase 24 | Pending |
+| ECAT-01 | Phase 24 | Complete |
 | ECAT-02 | Phase 24 | Pending |
 | ECAT-03 | Phase 24 | Pending |
 | ECAT-04 | Phase 25 | Pending |
