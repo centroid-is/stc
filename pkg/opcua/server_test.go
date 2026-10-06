@@ -9,6 +9,9 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/awcullen/opcua/client"
+	"github.com/awcullen/opcua/ua"
 )
 
 func loadCert(t *testing.T, path string) *x509.Certificate {
@@ -299,5 +302,83 @@ func TestStopWithoutStart(t *testing.T) {
 	}
 	if err := s.Start(); err == nil {
 		t.Fatal("Start after Stop succeeded")
+	}
+}
+
+const beckhoffNS = "urn:BeckhoffAutomation:Ua:PLC1"
+
+func TestConnectNoneAnonymous(t *testing.T) {
+	t.Parallel()
+	s := startServer(t, nil)
+	c := dialAnon(t, s)
+	dv := readValue(t, c, ua.VariableIDServerNamespaceArray)
+	if !dv.StatusCode.IsGood() {
+		t.Fatalf("NamespaceArray status %v", dv.StatusCode)
+	}
+	arr, ok := dv.Value.([]string)
+	if !ok {
+		t.Fatalf("NamespaceArray is %T", dv.Value)
+	}
+	if len(arr) < 5 || arr[4] != beckhoffNS || arr[1] != "urn:stc:opcua" ||
+		arr[2] != fillerNamespace2 || arr[3] != fillerNamespace3 {
+		t.Fatalf("NamespaceArray = %q", arr)
+	}
+}
+
+func TestServerStatusRunning(t *testing.T) {
+	t.Parallel()
+	s := startServer(t, nil)
+	c := dialAnon(t, s)
+	dv := readValue(t, c, ua.VariableIDServerServerStatusState)
+	if dv.StatusCode != ua.Good {
+		t.Fatalf("i=2259 status %v", dv.StatusCode)
+	}
+	if v, ok := dv.Value.(int32); !ok || v != 0 {
+		t.Fatalf("i=2259 = %v (%T), want int32 0 (Running)", dv.Value, dv.Value)
+	}
+	dv = readValue(t, c, ua.VariableIDServerServerStatusBuildInfoProductName)
+	if dv.Value != "stc TF6100 emulator" {
+		t.Fatalf("ProductName = %v", dv.Value)
+	}
+}
+
+func TestConnectBasic256Sha256(t *testing.T) {
+	t.Parallel()
+	s := startServer(t, func(c *Config) { c.AllowNone = false; c.EnableBasic256Sha256 = true })
+	cp, kp, err := EnsureCert(t.TempDir(), "urn:stc:test-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := dial(t, s,
+		client.WithSecurityPolicyURI(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
+		client.WithClientCertificatePaths(cp, kp))
+	if err != nil {
+		t.Fatalf("secure dial: %v", err)
+	}
+	dv := readValue(t, c, ua.VariableIDServerServerStatusState)
+	if v, ok := dv.Value.(int32); !ok || v != 0 || dv.StatusCode != ua.Good {
+		t.Fatalf("i=2259 over Basic256Sha256 = %v (%v)", dv.Value, dv.StatusCode)
+	}
+}
+
+func TestSecureOnlyRejectsNone(t *testing.T) {
+	t.Parallel()
+	s := startServer(t, func(c *Config) { c.AllowNone = false; c.EnableBasic256Sha256 = true })
+	if _, err := dial(t, s); err == nil {
+		t.Fatal("SecurityPolicy None dial succeeded against a secure-only server")
+	}
+}
+
+func TestBrowseObjects(t *testing.T) {
+	t.Parallel()
+	s := startServer(t, nil)
+	c := dialAnon(t, s)
+	refs := browseForward(t, c, ua.ObjectIDObjectsFolder)
+	found := false
+	for _, r := range refs {
+		found = found || ua.ToNodeID(r.NodeID, nil) == ua.ObjectIDServer
+	}
+	if !found {
+		t.Fatalf("Objects children %v lack the Server object", browseNames(refs))
 	}
 }

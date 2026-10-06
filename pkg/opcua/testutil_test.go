@@ -2,7 +2,6 @@ package opcua
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -177,8 +176,5 @@ func browseNames(refs []ua.ReferenceDescription) []string {
 func errContains(err error, sub string) bool {
 	return err != nil && strings.Contains(err.Error(), sub)
 }
-
-// isTimeout reports whether err is a deadline error.
-func isTimeout(err error) bool { return errors.Is(err, context.DeadlineExceeded) }
 
 func itoa(n int) string { return fmt.Sprint(n) }
