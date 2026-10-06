@@ -423,7 +423,14 @@ Plans:
   2. A Go test can `Set("GVL.x.p_cmd_Start", true)` and `Get(...)` it back on a live interpreter, with coercion from JSON-style values (number to INT/REAL, string to enum name)
   3. INT `32767 + 1` yields `-32768`, UINT `0 - 1` yields `65535`, and `a := a + 1` on an INT checks without a type error
   4. A struct-array initialiser `:= [(a := 1, s := 'x'), ...]` over `ARRAY[1..GVL.CONST]` is visible through `Get` at cycle 0
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 22-01-PLAN.md -- Interp value semantics: storeAs/wrapInt store choke point, typed binary results, ULINT/LWORD uint64 paths
+- [ ] 22-02-PLAN.md -- Checker untyped literals: adoption in binary/compare/assign/args/CASE/initialisers, range errors, dialect allow-list removed
+- [ ] 22-03-PLAN.md -- pkg/symtree (Build/Lookup/Walk/JSON) with AnalysisResult.Files and `stc check --symbols`
+- [ ] 22-04-PLAN.md -- Initialisers and constant-expression bounds at instantiation, shared instantiateVar, two-pass GVL registration
+- [ ] 22-05-PLAN.md -- interp.Runtime Get/Set/ToJSON, `stc sim --set/--get`, ST301-shaped fixture, oracle zero assertion, coverage gate
 
 ### Phase 23: Project Execution Runtime
 **Goal**: A whole imported project runs on the host the way the PLC runs it: GVLs once, PROGRAMs per task at the configured cycle, retained state across restarts, wildcard I/O by declared type
