@@ -44,7 +44,7 @@ func (c ioCodec) bitSize(v Value, spec ast.TypeSpec) int {
 			elem = at.ElementType
 		}
 		n := 0
-		for _, el := range v.Array {
+		for _, el := range arrayElems(v) {
 			n += c.bitSize(el, elem)
 		}
 		return n
@@ -59,6 +59,19 @@ func (c ioCodec) bitSize(v Value, spec ast.TypeSpec) int {
 		return w
 	}
 	return 0
+}
+
+// arrayElems returns the declared elements of an array value, ArrayLow
+// through the last slot. Arrays use direct indexing, so the slots below
+// ArrayLow are padding that must never reach a process image or a byte
+// buffer. Both byte codecs (this one and the Tc2_EtherCAT pointer buffers)
+// walk arrays through this helper so they cannot diverge.
+func arrayElems(v Value) []Value {
+	lo := v.ArrayLow
+	if lo < 0 || lo > len(v.Array) {
+		lo = 0
+	}
+	return v.Array[lo:]
 }
 
 // lookupType resolves a declared type name to its user TYPE spec, following
@@ -97,7 +110,7 @@ func (c ioCodec) codecSupports(v Value, spec ast.TypeSpec, depth int) bool {
 		if at, ok := c.resolveSpec(spec).(*ast.ArrayType); ok {
 			elem = at.ElementType
 		}
-		for _, el := range v.Array {
+		for _, el := range arrayElems(v) {
 			if !c.codecSupports(el, elem, depth+1) {
 				return false
 			}
@@ -227,8 +240,10 @@ func (c ioCodec) decode(cur Value, spec ast.TypeSpec, bc *bitCursor, top bool) V
 		}
 		out := cur
 		out.Array = make([]Value, len(cur.Array))
-		for i, el := range cur.Array {
-			out.Array[i] = c.decode(el, elem, bc, false)
+		copy(out.Array, cur.Array)
+		lo := len(cur.Array) - len(arrayElems(cur))
+		for i, el := range arrayElems(cur) {
+			out.Array[lo+i] = c.decode(el, elem, bc, false)
 		}
 		return out
 	case ValStruct:
@@ -272,7 +287,7 @@ func (c ioCodec) encode(v Value, spec ast.TypeSpec, bc *bitCursor, top bool) {
 		if at, ok := c.resolveSpec(spec).(*ast.ArrayType); ok {
 			elem = at.ElementType
 		}
-		for _, el := range v.Array {
+		for _, el := range arrayElems(v) {
 			c.encode(el, elem, bc, false)
 		}
 		return
