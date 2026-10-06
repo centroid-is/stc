@@ -7,6 +7,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/scenario"
 	stctesting "github.com/centroid-is/stc/pkg/testing"
 	"github.com/centroid-is/stc/pkg/twincat"
 	"github.com/centroid-is/stc/pkg/vendor"
@@ -14,7 +15,7 @@ import (
 )
 
 func newTestCmd() *cobra.Command {
-	var projectPath string
+	var projectPaths, ioFlags []string
 	cmd := &cobra.Command{
 		Use:   "test [dir]",
 		Short: "Run ST unit tests",
@@ -22,7 +23,15 @@ func newTestCmd() *cobra.Command {
 
 With --project <x.tsproj|x.plcproj>, the TwinCAT project is imported and its
 POUs, GVLs, DUTs and interfaces (plus sibling library projects) are available
-to the tests; embedded Beckhoff library stubs are auto-stubbed.`,
+to the tests; embedded Beckhoff library stubs are auto-stubbed.
+
+Project (plant) mode: with --io <Device N.xml glob>, or with --project given
+.st files (repeat --project, or pass a directory), every TEST_CASE runs
+against a fresh simulated plant: the whole project with its task schedule
+and, with --io, the EtherCAT network. Test bodies use SET, GET,
+SIM_SET_LINK, SIM_TRIP, SIM_SLAVE_STATE, SIM_ANALOG, SIM_DRIVE_FAULT,
+SIM_SERIAL_PEER, SIM_RAMP, RUN_CYCLES and ADVANCE_TIME (whole scans), and
+read GVLs directly. Test files then hold only TEST_CASEs.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
@@ -56,8 +65,17 @@ to the tests; embedded Beckhoff library stubs are auto-stubbed.`,
 				}
 				opts.MockFiles = mockFiles
 			}
-			if projectPath != "" {
-				if err := loadTestProject(projectPath, format, &opts); err != nil {
+			switch {
+			case len(ioFlags) > 0 && len(projectPaths) == 0:
+				return fmt.Errorf("--io requires --project")
+			case isPlantMode(projectPaths, ioFlags):
+				spec, err := loadTestPlant(cmd, projectPaths, ioFlags, opts.Defines, format)
+				if err != nil {
+					return err
+				}
+				opts.Plant = spec
+			case len(projectPaths) == 1:
+				if err := loadTestProject(projectPaths[0], format, &opts); err != nil {
 					return err
 				}
 			}
@@ -92,8 +110,50 @@ to the tests; embedded Beckhoff library stubs are auto-stubbed.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&projectPath, "project", "", "TwinCAT project (.tsproj or .plcproj) whose sources the tests run against")
+	cmd.Flags().StringSliceVar(&projectPaths, "project", nil, "TwinCAT project (.tsproj or .plcproj) whose sources the tests run against, or .st files/directories of a project to simulate (repeatable)")
+	cmd.Flags().StringSliceVar(&ioFlags, "io", nil, "EtherCATConfig export (Device N.xml, globs allowed) simulated under the project in plant mode (repeatable)")
 	return cmd
+}
+
+// isPlantMode reports whether stc test runs in project (plant) mode: any
+// --io, or a --project list that is not a single .tsproj/.plcproj.
+func isPlantMode(projectPaths, ioFlags []string) bool {
+	if len(projectPaths) == 0 {
+		return false
+	}
+	return len(ioFlags) > 0 || len(projectPaths) > 1 || !isProjectPath(projectPaths[0])
+}
+
+// loadTestPlant loads the project and the --io exports into a PlantSpec,
+// once for the whole run (each TEST_CASE builds its own Plant from it).
+// Load and resolve warnings go to stderr in text mode; errors always.
+func loadTestPlant(cmd *cobra.Command, projectPaths, ioFlags []string, defines map[string]bool, format string) (*scenario.PlantSpec, error) {
+	errOut := cmd.ErrOrStderr()
+	emit := func(ds []diag.Diagnostic) {
+		for _, d := range ds {
+			if d.Severity == diag.Error || format != "json" {
+				fmt.Fprintln(errOut, d.String())
+			}
+		}
+	}
+	src, ds, err := loadProjectSpec(projectPaths, defines)
+	emit(ds)
+	if err != nil {
+		return nil, err
+	}
+	ioFiles, err := expandIOGlobs(ioFlags)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := scenario.BuildPlantSpec(src, ioFiles)
+	emit(spec.Diagnostics)
+	if err != nil {
+		if spec.Topology == nil {
+			return nil, fmt.Errorf("--io: %w", err)
+		}
+		return nil, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", countErrors(spec.Diagnostics))
+	}
+	return &spec, nil
 }
 
 // loadTestProject imports a TwinCAT project into opts: project and sibling

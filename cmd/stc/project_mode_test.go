@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	stctesting "github.com/centroid-is/stc/pkg/testing"
 )
 
 const (
@@ -47,9 +49,20 @@ func TestTestProjectErrors(t *testing.T) {
 	if code == 0 || !strings.Contains(stderr, "Nope.tsproj") {
 		t.Errorf("missing project: exit %d %s", code, stderr)
 	}
-	_, stderr, code = runStc(t, "test", "--project", "../../testdata/parse/motor_control.st", demoTestsDir)
-	if code == 0 || !strings.Contains(stderr, "tsproj") {
-		t.Errorf("not a project: exit %d %s", code, stderr)
+	// A .st file selects plant mode; this one has no MAIN, so every case
+	// fails with the plant initialisation error.
+	stdout, _, code := runStc(t, "test", "--project", "../../testdata/parse/motor_control.st", demoTestsDir)
+	if code != 1 || !strings.Contains(stdout, "plant initialisation") {
+		t.Errorf(".st project: exit %d %s", code, stdout)
+	}
+	// Two TwinCAT projects cannot be combined.
+	_, stderr, code = runStc(t, "test", "--project", demoTsproj, "--project", inlineTsproj, demoTestsDir)
+	if code == 0 || !strings.Contains(stderr, "only argument") {
+		t.Errorf("two projects: exit %d %s", code, stderr)
+	}
+	// The legacy importer still checks its argument when called directly.
+	if err := loadTestProject("x.st", "text", &stctesting.RunOpts{}); err == nil || !strings.Contains(err.Error(), "tsproj") {
+		t.Errorf("loadTestProject .st: %v", err)
 	}
 	// An Error diagnostic during import aborts.
 	dir := t.TempDir()
