@@ -23,7 +23,7 @@ const (
 	adsErrPortNotFound    uint32 = 0x6   // target port (slave address) not found
 	adsErrMachineNotFound uint32 = 0x7   // target machine (master) not found
 	adsErrTimeout         uint32 = 0x745 // timeout elapsed
-	adsErrInvalidParm     uint32 = 0x705 // invalid parameter (bad pointer)
+	adsErrInvalidParm     uint32 = 0x706 // invalid parameter values (bad pointer)
 )
 
 // defaultEcTimeout is the tTimeout used when a request passes T#0S.
