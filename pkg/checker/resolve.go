@@ -319,6 +319,7 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 	// POU: a single main.st holding VAR_GLOBAL and PROGRAM Main is a normal
 	// layout, so the variables still register bare and only GVL.x is lost.
 	registerQualified := true
+	r.yieldStdFB(name)
 	if existing := r.table.LookupGlobal(name); existing != nil {
 		switch {
 		case isLibrary && existing.IsLibrary:
@@ -387,6 +388,7 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 		})
 	}
 	for _, sym := range bare {
+		r.yieldStdFB(sym.Name)
 		if err := global.Insert(sym); err != nil {
 			r.diags.Errorf(sym.Pos, CodeRedeclared, "%s", err.Error())
 		}
@@ -806,6 +808,7 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 				Pos:  pos,
 				Type: resolvedType,
 			}
+			r.yieldStdFB(val)
 			_ = r.table.GlobalScope().Insert(enumSym)
 		}
 	}

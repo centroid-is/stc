@@ -105,6 +105,37 @@ func TestStdFB(t *testing.T) {
 		assert.Empty(t, errorsOf(diags.All()))
 	})
 
+	t.Run("user globals and enum values shadow standard FB names", func(t *testing.T) {
+		src := "TYPE E_Flip : (SR, RS, TP); END_TYPE\n" +
+			"VAR_GLOBAL\n\tTON : INT;\nEND_VAR\n" +
+			"PROGRAM P\nVAR\n\te : E_Flip;\n\ti : INT;\n\tc : CTU;\nEND_VAR\n" +
+			"e := TP; e := SR; e := RS; i := TON; c(CU := TRUE, PV := 3); i := c.CV;\nEND_PROGRAM\n"
+		ds := errorsOf(runAction(t, src))
+		assert.Empty(t, ds)
+	})
+
+	t.Run("POU variables and inline enum values shadow standard FB names", func(t *testing.T) {
+		src := "PROGRAM P\nVAR\n\tTP : INT;\n\tm : (TON, TOF);\nEND_VAR\nTP := 1; m := TOF;\nEND_PROGRAM\n"
+		assert.Empty(t, errorsOf(runAction(t, src)))
+	})
+
+	t.Run("qualified enum values and GVL names shadow standard FB names", func(t *testing.T) {
+		ds := errorsOf(runGVL2(t,
+			gvlFile{"TOF.st", "VAR_GLOBAL\n\tx : INT;\nEND_VAR\n"},
+			gvlFile{"main.st", "PROGRAM P\nVAR\n\tt : TON;\nEND_VAR\nt(IN := TRUE, PT := T#1s); TOF.x := 1;\nEND_PROGRAM\n"}))
+		assert.Empty(t, ds)
+	})
+
+	t.Run("library GVL variable named like a standard FB wins", func(t *testing.T) {
+		lib := parser.Parse("lib.st", "VAR_GLOBAL\n\tR_TRIG : BOOL;\nEND_VAR\n").File
+		user := parseFile("PROGRAM P\nVAR\n\tb : BOOL;\nEND_VAR\nb := R_TRIG;\nEND_PROGRAM\n")
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{user}, ResolveOpts{LibraryFiles: []*ast.SourceFile{lib}})
+		NewChecker(table, diags).CheckBodies([]*ast.SourceFile{user})
+		assert.Empty(t, errorsOf(diags.All()))
+	})
+
 	t.Run("action_inside probe", func(t *testing.T) {
 		data, err := os.ReadFile("../../tests/twincat_probes/action_inside.st")
 		require.NoError(t, err)
@@ -117,6 +148,12 @@ func TestStdFB(t *testing.T) {
 			}
 		}
 	})
+}
+
+func runGVL2(t *testing.T, files ...gvlFile) []diag.Diagnostic {
+	t.Helper()
+	ds, _ := runGVL(t, files)
+	return ds
 }
 
 func paramNames(ps []types.Parameter) []string {

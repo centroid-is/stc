@@ -89,3 +89,14 @@ func (r *Resolver) registerStdFBs() {
 func (r *Resolver) isStdFB(sym *symbols.Symbol) bool {
 	return sym != nil && r.std[strings.ToUpper(sym.Name)] == sym
 }
+
+// yieldStdFB removes the standard FB registered under name, if any, so a
+// user or library global of any kind (GVL variable, enum value, POU, TYPE)
+// takes the name without a redeclaration diagnostic. Standard FBs never
+// shadow a declaration: they are the lowest-priority globals.
+func (r *Resolver) yieldStdFB(name string) {
+	if existing := r.table.GlobalScope().LookupLocal(name); r.isStdFB(existing) {
+		r.table.RemovePOU(existing.Name)
+		delete(r.std, strings.ToUpper(existing.Name))
+	}
+}
