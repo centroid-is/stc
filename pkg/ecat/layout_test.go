@@ -94,7 +94,14 @@ func TestLayoutPackedAndPadding(t *testing.T) {
 		{Name: "Value", Index: "#x6010", SubIndex: 2, BitLen: 16, DataType: "INT"},
 	}})
 	m := &Master{Name: "M", Slaves: []*Slave{s}}
-	buildLayout(m, nil)
+	// Outputs are packed by the ProcessImage (as TwinCAT does for EP2338);
+	// inputs fall back to the byte-aligned per-PDO layout.
+	pi := &processImage{Outputs: &piArea{ByteSize: 1}}
+	for i := 9; i <= 16; i++ {
+		pi.Outputs.Variables = append(pi.Outputs.Variables, piVariable{
+			Name: s.Name + ".Channel " + itoa(i) + ".Output", DataType: "BIT", BitSize: 1, BitOffs: i - 9})
+	}
+	buildLayout(m, pi)
 	topo := &Topology{Masters: []*Master{m}}
 	reg := NewRegistry()
 	reg.RegisterModel(2, regexp.MustCompile(`^EP2338`), func() Device { return &recDev{} })
@@ -116,8 +123,10 @@ func TestLayoutPackedAndPadding(t *testing.T) {
 			t.Errorf("out %d = %+v", i, f)
 		}
 	}
-	// Each PDO is byte-aligned in the Phase 24 layout, so packed bits of
-	// one PDO share a byte while separate PDOs start a new byte.
+	if n.Topo.Masters[0].OutBytes != 1 {
+		t.Errorf("packed outputs use %d bytes", n.Topo.Masters[0].OutBytes)
+	}
+	// Without a ProcessImage each PDO starts a new byte.
 	for i := 0; i < 8; i++ {
 		if ins[i].Bit != i*8 {
 			t.Errorf("in %d bit = %d", i, ins[i].Bit)
