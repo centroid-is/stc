@@ -12,8 +12,8 @@ import (
 
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/diag"
-	"github.com/centroid-is/stc/pkg/ecat"
 	"github.com/centroid-is/stc/pkg/interp"
+	"github.com/centroid-is/stc/pkg/projectload"
 	"github.com/spf13/cobra"
 )
 
@@ -127,36 +127,13 @@ func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, 
 	return r, nil
 }
 
-// attachECat loads the EtherCAT exports, resolves the TcLinkTo links of the
-// project files against them and attaches the network to p. Resolve errors
-// (unresolved links, size or direction mismatches) fail with every
-// diagnostic returned; warnings are returned with a nil error.
+// attachECat attaches the --io network to p; see projectload.AttachECat.
 func attachECat(p *interp.Project, spec interp.ProjectSpec, ioFiles []string) (*interp.IOBinder, []diag.Diagnostic, error) {
-	topo, err := ecat.LoadProject(ioFiles...)
+	e, ds, err := projectload.AttachECat(p, spec, ioFiles)
 	if err != nil {
-		return nil, nil, fmt.Errorf("--io: %w", err)
+		return nil, ds, err
 	}
-	vars, ds := ecat.CollectLinksWithLibraries(spec.Files, spec.LibraryFiles)
-	bindings, rds := ecat.Resolve(topo, vars)
-	ds = append(ds, rds...)
-	ecat.SortDiagnostics(ds)
-	if n := countErrors(ds); n > 0 {
-		return nil, ds, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", n)
-	}
-	b := interp.NewIOBinder(bindings, ecat.NewNetwork(topo, nil))
-	p.SetIOBinder(b)
-	return b, ds, nil
-}
-
-// countErrors counts the error-severity diagnostics of ds.
-func countErrors(ds []diag.Diagnostic) int {
-	n := 0
-	for _, d := range ds {
-		if d.Severity == diag.Error {
-			n++
-		}
-	}
-	return n
+	return e.Binder, ds, nil
 }
 
 // ticks runs n deterministic Ticks; the first Tick error stops the run.
