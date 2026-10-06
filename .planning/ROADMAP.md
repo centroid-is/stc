@@ -407,10 +407,10 @@ Plans:
 **Depends on**: Phase 20
 **Requirements**: IMPT-01, IMPT-02, IMPT-03, IMPT-04, IMPT-05
 **Success Criteria** (what must be TRUE):
-  1. `stc vendor import ST301.tsproj` loads every TcPOU (declaration, implementation, methods, actions, properties), TcGVL and TcDUT listed in the plcproj, and `stc check` on the result reports zero errors for ST301 + SVNCoreComponents
+  1. `stc vendor import ST301.tsproj` loads every TcPOU (declaration, implementation, methods, actions, properties), TcGVL and TcDUT listed in the plcproj, and `stc check` on the result reports zero Phase-21-owned errors for ST301 + SVNCoreComponents (remaining errors are explicitly allow-listed as Phase 22 literal typing or genuine sildarvinnsla drift)
   2. A reference to an SVNCoreComponents FB resolves from the sibling library plcproj, a Tc2_EtherCAT FB resolves from shipped stubs, and a deliberately missing library reference is reported as a diagnostic with its plcproj position
   3. The imported project model carries the `.tsproj` task cycle time (1 ms for ST301) and PLC project name, visible in `--format json` output
-  4. ST101, ST201, ST301 and the Baader project type-check against the shipped Tc2_EtherCAT, Tc2_System, Tc2_ModbusSrv, Tc3_Module and Tc2_SerialCom stubs
+  4. ST101, ST201, ST301 and the Baader project import and type-check against the shipped Tc2_EtherCAT, Tc2_System, Tc2_ModbusSrv, Tc3_Module and Tc2_SerialCom stubs with only allow-listed residuals (Phase 22 literal typing, genuine drift, Baader Phase 24 I/O types)
   5. `stc vendor extract` output for the sildarvinnsla plcproj parses with `stc parse` and includes methods, GVLs and DUTs
 **Plans**: 6 plans
 
