@@ -213,3 +213,164 @@ func TestCloneMetadata(t *testing.T) {
 	cs.Struct["A"] = Value{Kind: ValInt, Int: 3}
 	assert.Equal(t, int64(0), st.Struct["A"].Int)
 }
+
+func TestInitArrays(t *testing.T) {
+	eng := initEngine(t, initSource{"P.st", `
+TYPE ST_A : STRUCT a : INT; s : STRING := 'x'; END_STRUCT END_TYPE
+PROGRAM P
+VAR
+    arr : ARRAY[1..3] OF INT := [1, 2, 3];
+    rep : ARRAY[1..4] OF INT := [3(0), 7];
+    tail : ARRAY[0..3] OF INT := [9];
+    nested : ARRAY[1..2] OF ARRAY[1..2] OF INT := [[1, 2], [3, 4]];
+    sa : ARRAY[1..2] OF ST_A := [(a := 1, s := 'y'), (a := 2)];
+    empty : ARRAY[1..2] OF INT := [2()];
+END_VAR
+END_PROGRAM`})
+	require.Empty(t, eng.interp.InitErrors())
+	arr := initVar(t, eng, "arr")
+	assert.Equal(t, int64(2), arr.Array[2].Int)
+	assert.Equal(t, types.KindINT, arr.Array[2].IECType)
+	rep := initVar(t, eng, "rep")
+	assert.Equal(t, []int64{0, 0, 0, 7}, []int64{rep.Array[1].Int, rep.Array[2].Int, rep.Array[3].Int, rep.Array[4].Int})
+	tail := initVar(t, eng, "tail")
+	assert.Equal(t, []int64{9, 0, 0, 0}, []int64{tail.Array[0].Int, tail.Array[1].Int, tail.Array[2].Int, tail.Array[3].Int})
+	nested := initVar(t, eng, "nested")
+	assert.Equal(t, int64(3), nested.Array[2].Array[1].Int)
+	assert.Equal(t, int64(2), nested.Array[1].Array[2].Int)
+	sa := initVar(t, eng, "sa")
+	assert.Equal(t, "y", sa.Array[1].Struct["S"].Str)
+	assert.Equal(t, int64(2), sa.Array[2].Struct["A"].Int)
+	assert.Equal(t, "x", sa.Array[2].Struct["S"].Str)
+	assert.Equal(t, []string{"a", "s"}, sa.Array[2].Fields)
+}
+
+func TestInitErrors(t *testing.T) {
+	cases := map[string]struct{ decl, want string }{
+		"too many elements":   {"a : ARRAY[1..2] OF INT := [1, 2, 3];", "more elements"},
+		"repetition overflow": {"a : ARRAY[1..2] OF INT := [5(1)];", "more elements"},
+		"bad repetition":      {"a : ARRAY[1..2] OF INT := [K(1)];", "repetition count"},
+		"unknown field":       {"s : ST_A := (zz := 1);", "no member 'zz'"},
+		"array init on INT":   {"i : INT := [1, 2];", "array initialiser"},
+		"struct init on INT":  {"i : INT := (a := 1);", "structure initialiser"},
+		"bad element":         {"a : ARRAY[1..2] OF INT := [nope];", "undefined variable: nope"},
+		"bad scalar":          {"i : INT := nope;", "undefined variable: nope"},
+		"bad field value":     {"s : ST_A := (a := nope);", "undefined variable: nope"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			eng := initEngine(t, initSource{"P.st", `
+TYPE ST_A : STRUCT a : INT; END_STRUCT END_TYPE
+PROGRAM P
+VAR ` + c.decl + ` END_VAR
+END_PROGRAM`})
+			assert.Contains(t, initErrText(eng), c.want)
+		})
+	}
+}
+
+func TestInitScalarsKeepType(t *testing.T) {
+	eng := initEngine(t, initSource{"P.st", `
+TYPE E_State : (Idle, Run) END_TYPE
+TYPE T_Speed : INT := 50; END_TYPE
+PROGRAM P
+VAR
+    w : WORD := 16#9;
+    e : E_State := E_State.Run;
+    v : T_Speed;
+    v2 : T_Speed := 7;
+END_VAR
+END_PROGRAM`})
+	require.Empty(t, eng.interp.InitErrors())
+	assert.Equal(t, types.KindWORD, initVar(t, eng, "w").IECType)
+	e := initVar(t, eng, "e")
+	assert.Equal(t, int64(1), e.Int)
+	assert.Equal(t, "E_STATE", e.Enum)
+	assert.Equal(t, int64(50), initVar(t, eng, "v").Int)
+	assert.Equal(t, int64(7), initVar(t, eng, "v2").Int)
+}
+
+func TestInitFBInstances(t *testing.T) {
+	eng := initEngine(t, initSource{"P.st", `
+TYPE ST_HMI : STRUCT p_cfg_ManualFreq : REAL; on : BOOL; END_STRUCT END_TYPE
+FUNCTION_BLOCK FB_Base
+VAR base_x : INT := 3; tbl : ARRAY[1..2] OF INT := [4, 5]; END_VAR
+END_FUNCTION_BLOCK
+FUNCTION_BLOCK FB_Drive EXTENDS FB_Base
+VAR_INPUT speed : INT; END_VAR
+VAR HMI : ST_HMI := (p_cfg_ManualFreq := 20.0); END_VAR
+END_FUNCTION_BLOCK
+PROGRAM P
+VAR
+    d1, d2 : FB_Drive;
+    d3 : FB_Drive := (speed := 9);
+END_VAR
+END_PROGRAM`})
+	require.Empty(t, eng.interp.InitErrors())
+	d1 := initVar(t, eng, "d1").FBRef.Env
+	d2 := initVar(t, eng, "d2").FBRef.Env
+	for _, env := range []*Env{d1, d2} {
+		x, _ := env.Get("base_x")
+		assert.Equal(t, int64(3), x.Int)
+		tbl, _ := env.Get("tbl")
+		assert.Equal(t, int64(5), tbl.Array[2].Int)
+		hmi, _ := env.Get("HMI")
+		assert.InDelta(t, 20.0, hmi.Struct["P_CFG_MANUALFREQ"].Real, 1e-9)
+	}
+	hmi, _ := d1.Get("HMI")
+	hmi.Struct["P_CFG_MANUALFREQ"] = Value{Kind: ValReal, Real: 1}
+	other, _ := d2.Get("HMI")
+	assert.InDelta(t, 20.0, other.Struct["P_CFG_MANUALFREQ"].Real, 1e-9)
+	speed, _ := initVar(t, eng, "d3").FBRef.Env.Get("speed")
+	assert.Equal(t, int64(9), speed.Int)
+	assert.Equal(t, []string{"SPEED"}, initVar(t, eng, "d1").FBRef.inputNames)
+
+	t.Run("FB initialiser errors are reported", func(t *testing.T) {
+		eng := initEngine(t, initSource{"P.st", `
+FUNCTION_BLOCK FB_A
+VAR_INPUT a : INT; END_VAR
+END_FUNCTION_BLOCK
+PROGRAM P
+VAR
+    f1 : FB_A := (zz := 1);
+    f2 : FB_A := (a := nope);
+    f3 : FB_A := 5;
+    t1 : TON := (PT := T#1S);
+END_VAR
+END_PROGRAM`})
+		txt := initErrText(eng)
+		assert.Contains(t, txt, "no member 'zz'")
+		assert.Contains(t, txt, "undefined variable: nope")
+		assert.Contains(t, txt, "structure initialiser")
+		ton := initVar(t, eng, "t1").FBRef.FB.GetInput("PT")
+		assert.Equal(t, int64(1000), ton.Time.Milliseconds())
+	})
+}
+
+func TestInitFunctionLocals(t *testing.T) {
+	res := parser.Parse("F.st", `
+FUNCTION F : INT
+VAR tbl : ARRAY[1..3] OF INT := [10, 20, 30]; END_VAR
+F := tbl[2];
+END_FUNCTION
+PROGRAM P
+VAR r : INT; END_VAR
+r := F();
+END_PROGRAM`)
+	require.Empty(t, res.Diags)
+	var prog *ast.ProgramDecl
+	eng := (*ScanCycleEngine)(nil)
+	for _, d := range res.File.Declarations {
+		if p, ok := d.(*ast.ProgramDecl); ok {
+			prog = p
+		}
+	}
+	eng = NewScanCycleEngine(prog)
+	for _, d := range res.File.Declarations {
+		if f, ok := d.(*ast.FunctionDecl); ok {
+			eng.interp.RegisterFunctionDecl(f)
+		}
+	}
+	require.NoError(t, eng.Tick(0))
+	assert.Equal(t, int64(20), initVar(t, eng, "r").Int)
+}
