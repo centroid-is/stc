@@ -335,13 +335,11 @@ func (interp *Interpreter) evalIdent(env *Env, id *ast.Ident) (Value, error) {
 		}
 	}
 	// Auto-dereference REFERENCE TO values
-	if v.Kind == ValReference && v.PtrEnv != nil && v.PtrVar != "" {
-		target, found := v.PtrEnv.Get(v.PtrVar)
-		if !found {
-			return Value{}, &RuntimeError{
-				Msg: fmt.Sprintf("dangling reference: variable '%s' no longer exists", v.PtrVar),
-				Pos: id.Span().Start,
-			}
+	if p, bound := refPathOf(v); bound {
+		target, err := readRef(p)
+		if err != nil {
+			err.(*RuntimeError).Pos = id.Span().Start
+			return Value{}, err
 		}
 		return target, nil
 	}
@@ -609,6 +607,8 @@ func (interp *Interpreter) execStmt(env *Env, stmt ast.Statement) error {
 		return nil
 	case *ast.CallStmt:
 		return interp.execCallStmt(env, s)
+	case *ast.RefAssignStmt:
+		return interp.execRefAssign(env, s)
 	case *ast.ErrorNode:
 		return &RuntimeError{Msg: fmt.Sprintf("cannot execute error node: %s", s.Message)}
 	default:
@@ -650,16 +650,21 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 	switch target := targetExpr.(type) {
 	case *ast.Ident:
 		// Check if this variable is a REFERENCE TO — if so, write through
-		if existing, ok := env.Get(target.Name); ok && existing.Kind == ValReference && existing.PtrEnv != nil && existing.PtrVar != "" {
-			// Check if the RHS is also a reference (REF assignment)
-			if val.Kind == ValReference {
-				// Assigning a new reference target
-				env.Set(target.Name, val)
-			} else {
-				// Write through the reference to the target variable
-				existing.PtrEnv.Set(existing.PtrVar, val)
+		if existing, ok := env.Get(target.Name); ok {
+			if p, bound := refPathOf(existing); bound {
+				// Check if the RHS is also a reference (REF assignment)
+				if val.Kind == ValReference {
+					// Assigning a new reference target
+					env.Set(target.Name, val)
+					return nil
+				}
+				// Write through the reference to its target
+				if err := writeRef(p, val); err != nil {
+					err.(*RuntimeError).Pos = target.Span().Start
+					return err
+				}
+				return nil
 			}
-			return nil
 		}
 		// Check subrange constraints
 		if msg := env.CheckSubrange(target.Name, val); msg != "" {
@@ -728,7 +733,9 @@ func (interp *Interpreter) execAssignIndex(env *Env, target *ast.IndexExpr, val 
 	}
 	arr.Array[i] = val
 	if id, ok := target.Object.(*ast.Ident); ok {
-		env.Set(id.Name, arr)
+		// Through assignToTarget, so a reference variable writes its target
+		// instead of being replaced by a copy of the array.
+		return interp.assignToTarget(env, id, arr)
 	}
 	return nil
 }
@@ -1163,9 +1170,10 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 		if obj.Struct != nil {
 			key := strings.ToUpper(memberName)
 			obj.Struct[key] = val
-			// Write back the struct to the env
+			// Write back the struct to the env; a reference variable
+			// writes its target instead of being replaced by a copy.
 			if objIdent, ok := target.Object.(*ast.Ident); ok {
-				env.Set(objIdent.Name, obj)
+				return interp.assignToTarget(env, objIdent, obj)
 			}
 			return nil
 		}
@@ -1287,19 +1295,8 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		if len(e.Args) != 1 {
 			return Value{}, &RuntimeError{Msg: "REF requires exactly 1 argument"}
 		}
-		argIdent, ok := e.Args[0].(*ast.Ident)
-		if !ok {
-			return Value{}, &RuntimeError{Msg: "REF argument must be a variable name"}
-		}
-		targetEnv := env.FindOwner(argIdent.Name)
-		if targetEnv == nil {
-			return Value{}, &RuntimeError{Msg: fmt.Sprintf("REF: undefined variable '%s'", argIdent.Name)}
-		}
-		return Value{
-			Kind:   ValReference,
-			PtrEnv: targetEnv,
-			PtrVar: strings.ToUpper(argIdent.Name),
-		}, nil
+		// REF(x), REF(s.m), REF(arr[i]): the same path reference as REF=.
+		return interp.refTo(env, e.Args[0])
 	}
 
 	// Check LocalFunctions first (per-instance overrides for test assertions, etc.)
@@ -1556,22 +1553,18 @@ func (interp *Interpreter) evalThis(env *Env, e *ast.ThisExpr) (Value, error) {
 // evalSuper evaluates SUPER: a pointer to the current FB instance viewed as
 // the FB that the running code's declaring FB EXTENDS.
 func (interp *Interpreter) evalSuper(env *Env, e *ast.SuperExpr) (Value, error) {
-	inst := env.CurrentFB()
-	if inst == nil {
+	cur := env.currentFBDecl()
+	if cur == nil {
 		return Value{}, &RuntimeError{Msg: "SUPER used outside a function block", Pos: e.Span().Start}
 	}
-	cur := env.currentFBDecl()
+	inst := env.CurrentFB()
 	chain := fbDeclChain(inst, interp)
 	for i, d := range chain {
 		if d == cur && i+1 < len(chain) {
 			return Value{Kind: ValPointer, FBRef: inst, superDecl: chain[i+1]}, nil
 		}
 	}
-	name := inst.TypeName
-	if cur != nil && cur.Name != nil {
-		name = cur.Name.Name
-	}
-	return Value{}, &RuntimeError{Msg: fmt.Sprintf("SUPER used in %s, which does not EXTEND another function block", name), Pos: e.Span().Start}
+	return Value{}, &RuntimeError{Msg: fmt.Sprintf("SUPER used in %s, which does not EXTEND another function block", inst.TypeName), Pos: e.Span().Start}
 }
 
 // findMethod looks up a method by name in the FB declaration hierarchy: the

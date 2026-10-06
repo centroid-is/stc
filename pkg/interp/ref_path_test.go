@@ -88,18 +88,18 @@ END_PROGRAM
 	t.Run("REF= to a GVL member path", func(t *testing.T) {
 		eng := semRun(t, `
 TYPE ST_Cfg : STRUCT limit : INT; END_STRUCT END_TYPE
-VAR_GLOBAL cfg : ST_Cfg; g : INT; END_VAR
+VAR_GLOBAL cfg : ST_Cfg; gi : INT; END_VAR
 PROGRAM P
 VAR r, rg : REFERENCE TO INT; k : INT; END_VAR
 r REF= G.cfg.limit;
 r := 50;
 k := r;
-rg REF= G.g;
+rg REF= G.gi;
 rg := 2;
 END_PROGRAM
 `)
 		assert.Equal(t, int64(50), gvlVar(t, eng, "G", "cfg").Struct["LIMIT"].Int)
-		assert.Equal(t, int64(2), gvlVar(t, eng, "G", "g").Int)
+		assert.Equal(t, int64(2), gvlVar(t, eng, "G", "gi").Int)
 		assert.Equal(t, int64(50), progVar(t, eng, "k").Int)
 	})
 
@@ -170,25 +170,28 @@ END_PROGRAM
 	})
 
 	bad := map[string]string{
-		"non-lvalue":            "r REF= n + 1;",
-		"bit access":            "r REF= w.3;",
-		"undefined target":      "r REF= nope;",
-		"undefined ref var":     "nope REF= n;",
-		"missing member":        "r REF= s.nope;",
-		"index out of range":    "r REF= arr[9];",
-		"non-integer index":     "r REF= arr[TRUE];",
-		"index of scalar":       "r REF= n[0];",
-		"deref of non-pointer":  "r REF= n^;",
-		"index error":           "r REF= arr[nope];",
-		"base error":            "r REF= nope.x;",
-		"GVL member missing":    "r REF= G.nope;",
-		"stdlib FB member":      "r REF= t.Q;",
-		"missing FB member":     "r REF= fb.nope;",
-		"REF() of a non-lvalue": "r := REF(1);",
+		"non-lvalue":             "r REF= n + 1;",
+		"bit access":             "r REF= w.3;",
+		"undefined target":       "r REF= nope;",
+		"undefined ref var":      "nope REF= n;",
+		"missing member":         "r REF= s.nope;",
+		"index out of range":     "r REF= arr[9];",
+		"non-integer index":      "r REF= arr[TRUE];",
+		"index of scalar":        "r REF= n[0];",
+		"deref of non-pointer":   "r REF= n^;",
+		"index error":            "r REF= arr[nope];",
+		"base error":             "r REF= nope.x;",
+		"GVL member missing":     "r REF= G.nope;",
+		"stdlib FB member":       "r REF= t.Q;",
+		"missing FB member":      "r REF= fb.nope;",
+		"REF() of a non-lvalue":  "r := REF(1);",
+		"missing element member": "r REF= s.p_stat_Batches[9].x;",
+		"index base error":       "r REF= nope[0];",
+		"deref operand error":    "r REF= nope^;",
 	}
 	for name, stmt := range bad {
 		t.Run(name, func(t *testing.T) {
-			semRunErr(t, refTypes+`
+			err := semRunErr(t, refTypes+`
 FUNCTION_BLOCK FB_E
 VAR_OUTPUT v : INT; END_VAR
 END_FUNCTION_BLOCK
@@ -198,6 +201,7 @@ VAR n : INT; w : WORD; s : ST_Set; arr : ARRAY[0..3] OF INT; r : REFERENCE TO IN
 `+stmt+`
 END_PROGRAM
 `)
+			t.Log(err)
 		})
 	}
 
@@ -208,9 +212,11 @@ VAR n : INT; p : POINTER TO INT; r : REFERENCE TO INT; END_VAR
 p := ADR(n);
 r REF= p^;
 r := 6;
+r REF= (n);
+r := r + 1;
 END_PROGRAM
 `)
-		assert.Equal(t, int64(6), progVar(t, eng, "n").Int)
+		assert.Equal(t, int64(7), progVar(t, eng, "n").Int)
 	})
 }
 

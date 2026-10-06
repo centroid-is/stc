@@ -75,6 +75,10 @@ type Value struct {
 	// of SUPER^ (a ValFBInstance): methods and the body then come from this
 	// base declaration instead of the instance's own type.
 	superDecl *ast.FunctionBlockDecl
+
+	// Ref is the target path of a ValReference bound with REF= or REF() to
+	// a member or element; a plain variable uses PtrEnv/PtrVar.
+	Ref *RefPath
 }
 
 // String returns a debug representation of the Value.
@@ -102,6 +106,9 @@ func (v Value) String() string {
 	case ValPointer:
 		return fmt.Sprintf("PTR(%s)", v.PtrVar)
 	case ValReference:
+		if v.Ref != nil {
+			return fmt.Sprintf("REF(%s)", v.Ref)
+		}
 		return fmt.Sprintf("REF(%s)", v.PtrVar)
 	default:
 		return fmt.Sprintf("Value(%v)", v.Kind)

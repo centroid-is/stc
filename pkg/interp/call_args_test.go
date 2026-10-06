@@ -226,3 +226,209 @@ END_PROGRAM
 	})
 
 }
+
+// TestCallEdgeCases covers the aggregate, write-back and error branches of
+// the shared binder, METHOD and SUPER^ call paths.
+func TestCallEdgeCases(t *testing.T) {
+	const types = `
+TYPE ST_W : STRUCT w : INT; END_STRUCT END_TYPE
+VAR_GLOBAL defS : ST_W; idx : INT := 2; END_VAR
+FUNCTION F_Next : INT
+F_Next := idx;
+idx := idx + 2;
+END_FUNCTION
+`
+	t.Run("aggregate inputs, initialisers and outputs are copies", func(t *testing.T) {
+		eng := semRun(t, types+`
+FUNCTION F_Agg : INT
+VAR_INPUT s : ST_W; END_VAR
+VAR_OUTPUT o : ST_W; END_VAR
+VAR loc : ST_W := defS; END_VAR
+s.w := s.w + 1;
+loc.w := 9;
+o := s;
+F_Agg := s.w + loc.w;
+END_FUNCTION
+FUNCTION_BLOCK FB_Agg
+VAR_OUTPUT o : ST_W; END_VAR
+o.w := 4;
+END_FUNCTION_BLOCK
+PROGRAM P
+VAR a, b, c : ST_W; n : INT; fb : FB_Agg; END_VAR
+a.w := 1;
+n := F_Agg(s := a, o => b);
+fb(o => c);
+c.w := c.w + 1;
+END_PROGRAM
+`)
+		assert.Equal(t, int64(1), progVar(t, eng, "a").Struct["W"].Int)
+		assert.Equal(t, int64(2), progVar(t, eng, "b").Struct["W"].Int)
+		assert.Equal(t, int64(11), progVar(t, eng, "n").Int)
+		assert.Equal(t, int64(0), gvlVar(t, eng, "G", "defS").Struct["W"].Int)
+		assert.Equal(t, int64(5), progVar(t, eng, "c").Struct["W"].Int)
+		assert.Equal(t, int64(4), progVar(t, eng, "fb").FBRef.GetMember("o").Struct["W"].Int)
+	})
+
+	errs := map[string]string{
+		"duplicate output binding": `
+FUNCTION F_O : INT
+VAR_OUTPUT q : INT; END_VAR
+END_FUNCTION
+PROGRAM P
+VAR a, b : INT; END_VAR
+a := F_O(q => a, q => b);
+END_PROGRAM
+`,
+		"in-out write-back target re-evaluates out of range": `
+FUNCTION F_IO : INT
+VAR_IN_OUT io : INT; END_VAR
+io := 50;
+END_FUNCTION
+PROGRAM P
+VAR arr : ARRAY[0..3] OF INT; n : INT; END_VAR
+n := F_IO(io := arr[F_Next()]);
+END_PROGRAM
+`,
+		"method in-out write-back target re-evaluates out of range": `
+FUNCTION_BLOCK FB_M
+METHOD M : INT
+VAR_IN_OUT io : INT; END_VAR
+io := 50;
+END_METHOD
+END_FUNCTION_BLOCK
+PROGRAM P
+VAR arr : ARRAY[0..3] OF INT; n : INT; m : FB_M; END_VAR
+n := m.M(io := arr[F_Next()]);
+END_PROGRAM
+`,
+		"built-in argument error": `
+PROGRAM P
+VAR n : INT; END_VAR
+n := ABS(nope);
+END_PROGRAM
+`,
+		"SUPER outside an FB": `
+PROGRAM P
+VAR n : INT; END_VAR
+n := SUPER^.M();
+END_PROGRAM
+`,
+	}
+	for name, src := range errs {
+		t.Run(name, func(t *testing.T) {
+			semRunErr(t, types+src)
+		})
+	}
+
+	t.Run("RegisterFunctionDecl ignores a declaration without a name", func(t *testing.T) {
+		in := New()
+		in.RegisterFunctionDecl(nil)
+		in.RegisterFunctionDecl(&ast.FunctionDecl{})
+		assert.Empty(t, in.FuncDecls)
+	})
+
+	t.Run("SUPER^() past the call depth limit", func(t *testing.T) {
+		in := New()
+		base := &ast.FunctionBlockDecl{Name: &ast.Ident{Name: "FB_A"}}
+		inst := NewUserFBInstance("FB_A", base, in, nil)
+		in.callDepth = MaxCallDepth
+		err := in.runBaseBody(inst, base, ast.Pos{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "maximum call depth")
+	})
+}
+
+// TestFBCallStmtEdges covers FB call statement branches that only hand-built
+// ASTs or aggregate in-outs reach.
+func TestFBCallStmtEdges(t *testing.T) {
+	const fb = `
+TYPE ST_W : STRUCT w : INT; END_STRUCT END_TYPE
+FUNCTION_BLOCK FB_IO
+VAR_INPUT a : INT; END_VAR
+VAR_IN_OUT io : ST_W; END_VAR
+io.w := io.w + a;
+END_FUNCTION_BLOCK
+`
+	t.Run("aggregate in-out is copied back", func(t *testing.T) {
+		eng := semRun(t, fb+`
+PROGRAM P
+VAR f : FB_IO; s : ST_W; END_VAR
+f(a := 2, io := s);
+END_PROGRAM
+`)
+		assert.Equal(t, int64(2), progVar(t, eng, "s").Struct["W"].Int)
+	})
+
+	t.Run("input argument error", func(t *testing.T) {
+		semRunErr(t, fb+`
+PROGRAM P
+VAR f : FB_IO; s : ST_W; END_VAR
+f(a := nope, io := s);
+END_PROGRAM
+`)
+	})
+
+	t.Run("in-out write-back error", func(t *testing.T) {
+		semRunErr(t, fb+`
+VAR_GLOBAL idx : INT := 2; END_VAR
+FUNCTION F_Next : INT
+F_Next := idx;
+idx := idx + 2;
+END_FUNCTION
+PROGRAM P
+VAR f : FB_IO; arr : ARRAY[0..3] OF ST_W; END_VAR
+f(a := 1, io := arr[F_Next()]);
+END_PROGRAM
+`)
+	})
+
+	t.Run("positional entry in a hand-built FB call is ignored", func(t *testing.T) {
+		in := New()
+		env := NewEnv(nil)
+		env.Define("t", MakeFBInstanceValue("TON", StdlibFBFactory["TON"]()))
+		err := in.execCallStmt(env, &ast.CallStmt{
+			Callee: &ast.Ident{Name: "t"},
+			Args:   []*ast.CallArg{{Value: &ast.Literal{LitKind: ast.LitBool, Value: "TRUE"}}},
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("struct member holding an FB instance runs on s.fb()", func(t *testing.T) {
+		in := New()
+		env := NewEnv(nil)
+		ton := MakeFBInstanceValue("TON", StdlibFBFactory["TON"]())
+		env.Define("s", Value{Kind: ValStruct, Struct: map[string]Value{"FB": ton}})
+		_, err := in.evalMethodCall(env, &ast.MemberAccessExpr{Object: &ast.Ident{Name: "s"}, Member: &ast.Ident{Name: "fb"}}, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, ton.FBRef.hasRun)
+	})
+
+	t.Run("element of a member array is assigned in place", func(t *testing.T) {
+		eng := semRun(t, `
+TYPE ST_A : STRUCT a : ARRAY[0..2] OF INT; END_STRUCT END_TYPE
+PROGRAM P
+VAR s : ST_A; END_VAR
+s.a[1] := 5;
+END_PROGRAM
+`)
+		assert.Equal(t, int64(5), progVar(t, eng, "s").Struct["A"].Array[1].Int)
+	})
+
+	t.Run("LocalFunctions reject named arguments", func(t *testing.T) {
+		in := New()
+		in.RegisterFunction("MY_FN", func(args []Value, pos ast.Pos) (Value, error) { return IntValue(1), nil })
+		_, err := in.evalCall(NewEnv(nil), &ast.CallExpr{
+			Callee:    &ast.Ident{Name: "MY_FN"},
+			NamedArgs: []*ast.CallArg{{Name: &ast.Ident{Name: "x"}, Value: &ast.Literal{LitKind: ast.LitInt, Value: "1"}}},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "named arguments")
+	})
+
+	t.Run("DefineAction ignores a nil or unnamed action", func(t *testing.T) {
+		env := NewEnv(nil)
+		env.DefineAction(nil)
+		env.DefineAction(&ast.ActionDecl{})
+		assert.Nil(t, env.actions)
+	})
+}
