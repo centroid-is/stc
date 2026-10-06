@@ -42,11 +42,20 @@ type projectRunner struct {
 	PersistEvery time.Duration
 }
 
+// projectSetupOpts are the per-command inputs of projectSetup.
+type projectSetupOpts struct {
+	Sets []simSet
+	// Cycle, when positive, replaces the cycle of the project's only task
+	// (or of the default MAIN task); several tasks keep their own cycles
+	// and make it an error.
+	Cycle time.Duration
+}
+
 // projectSetup loads inputs (one .tsproj/.plcproj or .st files) as a
-// project, attaches --io, restores --persist and applies sets in that order,
-// so --set overrides persisted values. Errors are returned; load
+// project, attaches --io, restores --persist and applies opts.Sets in that
+// order, so --set overrides persisted values. Errors are returned; load
 // diagnostics that fail the load are printed to errOut first.
-func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, sets []simSet, errOut io.Writer) (*projectRunner, error) {
+func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, opts projectSetupOpts, errOut io.Writer) (*projectRunner, error) {
 	spec, ds, err := loadProjectSpec(inputs, defines)
 	if err != nil {
 		for _, d := range ds {
@@ -55,6 +64,16 @@ func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, 
 			}
 		}
 		return nil, err
+	}
+	if opts.Cycle > 0 {
+		switch len(spec.Tasks) {
+		case 0:
+			spec.Tasks = []interp.TaskSpec{{Name: interp.DefaultTaskName, Cycle: opts.Cycle, Programs: []string{"MAIN"}}}
+		case 1:
+			spec.Tasks[0].Cycle = opts.Cycle
+		default:
+			return nil, fmt.Errorf("--cycle cannot override the %d task cycles of the project", len(spec.Tasks))
+		}
 	}
 	p, err := interp.LoadProject(spec)
 	if err != nil {
@@ -95,7 +114,7 @@ func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, 
 			r.Warnings = append(r.Warnings, "persist: "+w)
 		}
 	}
-	for _, s := range sets {
+	for _, s := range opts.Sets {
 		if err := p.Runtime().Set(s.path, s.value); err != nil {
 			return nil, fmt.Errorf("--set %s: %w", s.path, err)
 		}

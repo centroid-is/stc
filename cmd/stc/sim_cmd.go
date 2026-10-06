@@ -207,7 +207,7 @@ func runSimProject(cmd *cobra.Command, args []string, defines map[string]bool, f
 	}
 	cmd.SilenceUsage = true
 	errOut := cmd.ErrOrStderr()
-	r, err := projectSetup(cmd, inputs, defines, sets, errOut)
+	r, err := projectSetup(cmd, inputs, defines, projectSetupOpts{Sets: sets}, errOut)
 	if err != nil {
 		return err
 	}
