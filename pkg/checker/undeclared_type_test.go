@@ -118,3 +118,18 @@ func TestUndeclaredType(t *testing.T) {
 		assert.ElementsMatch(t, []string{CodeUndeclaredType, CodeUndeclared}, codesOf(ds))
 	})
 }
+
+// TestNonTypeNameAsType covers review LO-03: an enum value, a FUNCTION, a
+// PROGRAM and a GVL variable are not types.
+func TestNonTypeNameAsType(t *testing.T) {
+	src := "TYPE E_Col : (red, green); END_TYPE\n" +
+		"VAR_GLOBAL\n\tgv : INT;\nEND_VAR\n" +
+		"FUNCTION F_One : INT\nF_One := 1;\nEND_FUNCTION\n" +
+		"FUNCTION_BLOCK FB_Ok\nEND_FUNCTION_BLOCK\n" +
+		"PROGRAM P\nVAR\n\tb : red;\n\tc : F_One;\n\td : P;\n\tg : gv;\n\tok1 : E_Col;\n\tok2 : FB_Ok;\n\tok3 : TON;\nEND_VAR\nEND_PROGRAM\n"
+	got := sema037(runAction(t, src))
+	require.Len(t, got, 4, "%v", got)
+	for i, name := range []string{"red", "F_One", "P", "gv"} {
+		assert.Equal(t, "undeclared type '"+name+"'", got[i].Message)
+	}
+}

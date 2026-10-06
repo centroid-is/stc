@@ -51,6 +51,9 @@ type Resolver struct {
 	// that ends up owning the name: the first user or mock declaration,
 	// otherwise the first library declaration.
 	forward map[string]types.Type
+	// notTypes marks forward names owned by a PROGRAM or FUNCTION: they
+	// have a shell for call checking but are not variable types.
+	notTypes map[string]bool
 
 	// probing makes resolveTypeSpec record an unknown name in missed instead
 	// of reporting it. Used by the alias fixpoint sweep.
@@ -167,6 +170,7 @@ func (r *Resolver) preRegister(groups []fileGroup) {
 	r.shells = make(map[ast.Declaration]types.Type)
 	r.aliases = make(map[ast.Declaration]types.Type)
 	r.forward = make(map[string]types.Type)
+	r.notTypes = make(map[string]bool)
 
 	type owner struct {
 		decl      ast.Declaration
@@ -202,6 +206,10 @@ func (r *Resolver) preRegister(groups []fileGroup) {
 		o := owners[key]
 		if shell, ok := r.shells[o.decl]; ok {
 			r.forward[key] = shell
+			switch o.decl.(type) {
+			case *ast.ProgramDecl, *ast.FunctionDecl:
+				r.notTypes[key] = true
+			}
 		} else if td, ok := o.decl.(*ast.TypeDecl); ok {
 			pending = append(pending, td)
 			library[td] = o.isLibrary
@@ -1191,15 +1199,28 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 // final, filled type), else any global symbol with a type (library symbols
 // registered outside the pre-pass, such as the standard FBs).
 func (r *Resolver) lookupTypeName(name string) (types.Type, bool) {
-	if typ, ok := r.forward[strings.ToUpper(name)]; ok {
+	key := strings.ToUpper(name)
+	if typ, ok := r.forward[key]; ok && !r.notTypes[key] {
 		return typ, true
 	}
-	if sym := r.table.GlobalScope().Lookup(name); sym != nil {
+	if sym := r.table.GlobalScope().Lookup(name); sym != nil && isTypeKind(sym.Kind) {
 		if typ, ok := sym.Type.(types.Type); ok {
 			return typ, true
 		}
 	}
 	return nil, false
+}
+
+// isTypeKind reports whether a global symbol of kind k names a type a
+// variable may be declared with: a TYPE, a FUNCTION_BLOCK (the standard FBs
+// included) or an INTERFACE. Enum values, FUNCTIONs, PROGRAMs, GVLs and
+// variables do not.
+func isTypeKind(k symbols.SymbolKind) bool {
+	switch k {
+	case symbols.KindType, symbols.KindFunctionBlock, symbols.KindInterface:
+		return true
+	}
+	return false
 }
 
 // reportUndeclaredType reports SEMA037 once per type reference. Names inside
