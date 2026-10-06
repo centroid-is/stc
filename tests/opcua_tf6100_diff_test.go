@@ -74,7 +74,7 @@ func TestTF6100Diff(t *testing.T) {
 	t.Logf("real capture: %d nodes, %d data types", len(real.Nodes), len(real.DataTypes))
 
 	t.Run("subset st301_shape", func(t *testing.T) {
-		emu := takePLC1(t, serveInProcess(t, analyzeSTDir(t, st301Fixture)))
+		emu := takePLC1(t, dialAnonymous(t, execServe(t, st301Fixture)))
 		if msg := fidelityFailure(emu, real, opcuatest.Subset); msg != "" {
 			t.Fatal(msg)
 		}
@@ -89,7 +89,7 @@ func TestTF6100Diff(t *testing.T) {
 		if _, err := os.Stat(proj); err != nil {
 			t.Skipf("ST301 project unavailable: %v", err)
 		}
-		emu := takePLC1(t, serveInProcess(t, analyzeTwinCAT(t, proj)))
+		emu := takePLC1(t, dialAnonymous(t, execServe(t, proj)))
 		if msg := fidelityFailure(emu, real, opcuatest.Full); msg != "" {
 			t.Fatal(msg)
 		}
@@ -99,7 +99,7 @@ func TestTF6100Diff(t *testing.T) {
 // TestTF6100DiffDetects drives the failure path without a real capture: a
 // synthetic "real" copy of the golden with one access level changed.
 func TestTF6100DiffDetects(t *testing.T) {
-	emu := takePLC1(t, serveInProcess(t, analyzeSTDir(t, st301Fixture)))
+	emu := takePLC1(t, dialAnonymous(t, execServe(t, st301Fixture)))
 	real, err := opcuatest.Load(filepath.Join(opcuaGolden, "st301_shape.json"))
 	if err != nil {
 		t.Fatal(err)

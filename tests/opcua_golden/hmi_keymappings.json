@@ -1,0 +1,236 @@
+{
+  "nodes": {
+    "Line1.Motor1": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Drives_Line1[1].HMI",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": {
+        "key": "Line1.Motor1",
+        "name": "Line1.Motor1",
+        "retention": {
+          "drop_after_min": 525600,
+          "schedule_interval_min": null
+        },
+        "sample_interval_us": 5000000,
+        "sample_expression": null
+      }
+    },
+    "Line1.Motor1.Error": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Drives_Line1[1].HMI.p_stat_Error",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "Line1.Motor1.State": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Drives_Line1[1].HMI.p_stat_State",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "Line1.Motor1.Frequency": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Drives_Line1[1].HMI.p_stat_Frequency",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": {
+        "key": "Line1.Motor1.Frequency",
+        "name": "Line1.Motor1.Frequency",
+        "retention": {
+          "drop_after_min": 525600,
+          "schedule_interval_min": null
+        },
+        "sample_interval_us": 5000000,
+        "sample_expression": null
+      }
+    },
+    "Line1.Motor1.JogFwd": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Drives_Line1[1].HMI.p_cmd_JogFwd",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "Line1.Motor2": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Drives_Line1[2].HMI",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": {
+        "key": "Line1.Motor2",
+        "name": "Line1.Motor2",
+        "retention": {
+          "drop_after_min": 525600,
+          "schedule_interval_min": null
+        },
+        "sample_interval_us": 5000000,
+        "sample_expression": null
+      }
+    },
+    "Conveyor.Speed": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Conveyor.rSpeed",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "Conveyor.Mode": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.Conveyor.Cfg.eMode",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "BatchCount": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_BatchLines.nBatchCount",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": {
+        "key": "BatchCount",
+        "name": "BatchCount",
+        "retention": {
+          "drop_after_min": 525600,
+          "schedule_interval_min": null
+        },
+        "sample_interval_us": 5000000,
+        "sample_expression": null
+      }
+    },
+    "Roe": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "GVL_Roe.aRoe",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "Sensor.IS11": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "sensors.EPW01_WA01_IS11.HMI",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "Sensor.IS11.Raw": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "sensors.EPW01_WA01_IS11.HMI.p_stat_xRaw",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": true,
+      "collect": null
+    },
+    "Sensor.IS12.Raw": {
+      "opcua_node": {
+        "namespace": 4,
+        "identifier": "sensors.EPW01_WA01_IS12.HMI.p_stat_xRaw",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": true,
+      "collect": null
+    },
+    "Server.State": {
+      "opcua_node": {
+        "namespace": 0,
+        "identifier": "2259",
+        "array_index": null,
+        "server_alias": null
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "SB1.Checkweigher1.CurrentWeight": {
+      "opcua_node": {
+        "namespace": 2,
+        "identifier": "Checkweigher1.CurrentWeight",
+        "array_index": null,
+        "server_alias": "speedbatcher1"
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": {
+        "key": "SB1.Checkweigher1.CurrentWeight",
+        "name": "SB1.Checkweigher1.CurrentWeight",
+        "retention": {
+          "drop_after_min": 525600,
+          "schedule_interval_min": null
+        },
+        "sample_interval_us": 5000000,
+        "sample_expression": null
+      }
+    },
+    "__agg_default_connected": {
+      "opcua_node": {
+        "namespace": 1,
+        "identifier": "Servers/Status/OpcUa/default/connected",
+        "array_index": null,
+        "server_alias": "__aggregate"
+      },
+      "m2400_node": null,
+      "io": null,
+      "collect": null
+    },
+    "weigher1v.weight": {
+      "opcua_node": null,
+      "m2400_node": {
+        "record_type": "recStat",
+        "field": "weight",
+        "server_alias": "weigher1v",
+        "status_filter": null
+      },
+      "io": null,
+      "collect": null
+    }
+  }
+}

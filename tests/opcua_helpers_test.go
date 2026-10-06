@@ -19,14 +19,6 @@ import (
 
 	"github.com/awcullen/opcua/client"
 	"github.com/awcullen/opcua/ua"
-	"github.com/centroid-is/stc/pkg/analyzer"
-	"github.com/centroid-is/stc/pkg/ast"
-	"github.com/centroid-is/stc/pkg/interp"
-	"github.com/centroid-is/stc/pkg/opcua"
-	"github.com/centroid-is/stc/pkg/opcua/bind"
-	"github.com/centroid-is/stc/pkg/pipeline"
-	"github.com/centroid-is/stc/pkg/symtree"
-	"github.com/centroid-is/stc/pkg/twincat"
 )
 
 const uaTimeout = 30 * time.Second
@@ -157,73 +149,10 @@ func dialAnonymous(t *testing.T, endpoint string) *client.Client {
 	return c
 }
 
-// analyzeSTDir parses and analyses every .st file of dir.
-func analyzeSTDir(t *testing.T, dir string) analyzer.AnalysisResult {
-	t.Helper()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var files []*ast.SourceFile
-	for _, e := range entries {
-		if !strings.EqualFold(filepath.Ext(e.Name()), ".st") {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		files = append(files, pipeline.Parse(e.Name(), string(b), map[string]bool{"STC_SIM": true}).File)
-	}
-	return analyzer.Analyze(files, nil, analyzer.AnalyzeOpts{})
-}
-
-// analyzeTwinCAT imports and analyses a .tsproj or .plcproj.
-func analyzeTwinCAT(t *testing.T, path string) analyzer.AnalysisResult {
-	t.Helper()
-	defines := map[string]bool{"STC_SIM": true}
-	m, _, err := twincat.Import(path, twincat.Options{Defines: defines})
-	if err != nil {
-		t.Fatalf("import %s: %v", filepath.Base(path), err)
-	}
-	return analyzer.AnalyzeProject(m, nil, defines)
-}
-
-// serveInProcess serves res over OPC UA on a free loopback port, like
-// stc serve without the scan loop, and returns an anonymous client.
-func serveInProcess(t *testing.T, res analyzer.AnalysisResult) *client.Client {
-	t.Helper()
-	rt, err := interp.NewRuntime(res.Files, interp.RuntimeOpts{LibraryFiles: res.LibraryFiles})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tree, err := symtree.Build(res)
-	if err != nil {
-		t.Fatal(err)
-	}
-	src := bind.NewRuntimeSource(rt)
-	space, _ := opcua.Build(bind.Root(tree), src)
-	for attempt := 0; ; attempt++ {
-		cfg := opcua.DefaultConfig()
-		cfg.Endpoint = freeLoopback(t)
-		cfg.PKIDir = t.TempDir()
-		srv, err := opcua.New(cfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := srv.Publish(space, src); err != nil {
-			t.Fatal(err)
-		}
-		if err = srv.Start(); err == nil {
-			t.Cleanup(func() { _ = srv.Stop() })
-			return dialAnonymous(t, srv.Endpoint())
-		}
-		_ = srv.Stop()
-		if attempt == 2 {
-			t.Fatal(err)
-		}
-	}
-}
+// The tests in this package talk to an exec'd stc serve, never to an
+// in-process opcua.Server: the server registers Go types for its DataType
+// encodings in awcullen's global registry, which would collide with the
+// definition-driven types uaReader registers for the same encoding ids.
 
 // uaReader reads values and decodes structs and enums the way the tfc HMI
 // does: struct fields by name from the served StructureDefinition, enums
