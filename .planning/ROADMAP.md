@@ -412,7 +412,15 @@ Plans:
   3. The imported project model carries the `.tsproj` task cycle time (1 ms for ST301) and PLC project name, visible in `--format json` output
   4. ST101, ST201, ST301 and the Baader project type-check against the shipped Tc2_EtherCAT, Tc2_System, Tc2_ModbusSrv, Tc3_Module and Tc2_SerialCom stubs
   5. `stc vendor extract` output for the sildarvinnsla plcproj parses with `stc parse` and includes methods, GVLs and DUTs
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 21-01-PLAN.md -- Parser/checker fixes: PROPERTY access modifiers, statement-level `fb();` checked as FB call, double-quoted attributes ignored with SEMA039
+- [ ] 21-02-PLAN.md -- Embedded Beckhoff stubs (Tc2_EtherCAT, Tc2_System, Tc2_Utilities, Tc2_ModbusSrv, Tc2_SerialCom, Tc3_Module, Tc3_IPCDiag) with dependency closure and check-clean tests
+- [ ] 21-03-PLAN.md -- pkg/vendor/twincat model, tsproj/xti/plcproj/TcTTO readers, line-preserving TcPOU converter, synthetic fixtures
+- [ ] 21-04-PLAN.md -- Ordered library resolver (sibling, library_paths, stubs, VEND020), Import + analyzer.AnalyzeProject, vendor extract on the shared converter
+- [ ] 21-05-PLAN.md -- CLI: `stc vendor import [--out]`, `stc check <project>`, `stc test --project` (RunOpts.ProjectFiles), `stc sim <project>`, extract JSON
+- [ ] 21-06-PLAN.md -- STC_SILD_DIR oracle gate on ST301/ST101/ST201/Baader/SVNCore with owner buckets, docs, VALIDATION sign-off, coverage gate
 
 ### Phase 22: Symbol Tree & Value Semantics
 **Goal**: Every live variable in a running project is addressable by dotted path with correct IEC value semantics, giving tests, servers and agents one shared view of PLC state
