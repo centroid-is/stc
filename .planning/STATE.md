@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: Completed 20-06-PLAN.md
-last_updated: "2026-10-06T02:53:33.982Z"
+last_updated: "2026-10-06T03:15:09.233Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 15
   total_plans: 57
-  completed_plans: 54
+  completed_plans: 55
   percent: 52
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 20 (TwinCAT Expression Semantics) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-10-06
 
-Progress: [██████████] 95%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -112,6 +112,10 @@ Recent decisions affecting current work:
 - [Phase 20]: 20-06: all-positional calls must supply every parameter; once any argument is named, omitted inputs take defaults; positional args bind by slot index (ruling A1)
 - [Phase 20]: 20-06: REFERENCE TO T inputs bind a value of exactly T without widening
 - [Phase 20]: 20-06: POU-scope methods and actions bind before same-named built-ins; global functions still lose to built-ins
+- [Phase 20]: Positional arguments bind by index in the full argument list at runtime; omitted and empty inputs take their declared default
+- [Phase 20]: SUPER resolves relative to the declaring FB of the running code (Env.selfDecl); unqualified and THIS^ method calls are virtual
+- [Phase 20]: REF= and REF() build path references (RefPath) with indices evaluated at bind time; a path that stops resolving is a dangling-reference RuntimeError
+- [Phase 20]: Built-in functions reject named arguments at runtime instead of dropping them
 
 ### Pending Todos
 
@@ -125,7 +129,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T02:53:33.978Z
+Last session: 2026-10-06T03:14:48.869Z
 Stopped at: Completed 20-06-PLAN.md
 Resume file: None
 

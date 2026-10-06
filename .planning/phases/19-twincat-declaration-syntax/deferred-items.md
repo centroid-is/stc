@@ -34,8 +34,8 @@
 ## From 19-08 (ACTION runtime)
 
 - **Resolved: zero-argument FB instance calls (from 19-06).** `b();`, `G.f();`, `outer.inner();` and `s.fb();` now run the instance in evalCall/evalMethodCall.
-- **Unqualified METHOD calls inside an FB fail at runtime.** `Inc();` in an FB body or in one of its actions reports `undefined function: INC`. Only `inst.Inc()` works. The 19-07 checker accepts the unqualified form, so an action that calls its FB's method checks clean and then fails when run. Pre-existing for FB bodies; fixing it means resolving methods through the env like actions.
-- **Action lookup walks past the FB boundary.** `Env.LookupAction` follows the parent chain, and an FB instance env's parent is the env that declared the instance. An FB body calling an action name that only the enclosing PROGRAM defines would run the PROGRAM's action. The checker reports SEMA010 for that call, so only unchecked code reaches it.
+- **Unqualified METHOD calls inside an FB fail at runtime.** RESOLVED in 20-07 (commit ab8e88a): evalCall resolves a METHOD of `Env.CurrentFB()`, inherited ones included, after actions. `Inc();` in an FB body or in one of its actions reports `undefined function: INC`. Only `inst.Inc()` works. The 19-07 checker accepts the unqualified form, so an action that calls its FB's method checks clean and then fails when run. Pre-existing for FB bodies; fixing it means resolving methods through the env like actions.
+- **Action lookup walks past the FB boundary.** RESOLVED in 20-07 (commit ab8e88a): `LookupAction` stops at the FB instance env. `Env.LookupAction` follows the parent chain, and an FB instance env's parent is the env that declared the instance. An FB body calling an action name that only the enclosing PROGRAM defines would run the PROGRAM's action. The checker reports SEMA010 for that call, so only unchecked code reaches it.
 - **ErrExit/ErrContinue leaking out of an action body are not caught.** Same as METHOD bodies today: `EXIT;` at the top level of an action propagates to the caller's loop.
 
 ## From the Phase 19 code review (19-REVIEW.md)
