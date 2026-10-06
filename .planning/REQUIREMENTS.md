@@ -61,8 +61,8 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 - [x] **OPCUA-04**: `OPC.UA.DA.Access` 1/2/3 maps to AccessLevel (missing = read/write) and `OPC.UA.DA.Description` to the Description attribute
 - [x] **OPCUA-05**: Structs with `OPC.UA.DA.StructuredType` (on the variable or on the TYPE/FB header) are readable as ExtensionObjects with a served DataTypeDefinition, while members remain individually addressable; enums are Int32 with EnumStrings/EnumValues; arrays are single nodes with ValueRank/ArrayDimensions
 - [x] **OPCUA-06**: Data types map per PLCopen OPC 30000 (BOOL Boolean, INT Int16, UINT/WORD UInt16, DINT Int32, UDINT/DWORD UInt32, REAL Float, LREAL Double, STRING String, TIME Int64 ms, DT DateTime, TOD UInt32, BYTE Byte)
-- [ ] **OPCUA-07**: Writes go through the symbol tree with coercion so the `p_cmd_*` set-TRUE / FB-clears handshake works while the scan runs
-- [ ] **OPCUA-08**: Subscriptions and monitored items deliver data changes sampled from the running scan
+- [x] **OPCUA-07**: Writes go through the symbol tree with coercion so the `p_cmd_*` set-TRUE / FB-clears handshake works while the scan runs
+- [x] **OPCUA-08**: Subscriptions and monitored items deliver data changes sampled from the running scan
 - [x] **OPCUA-09**: The emulated address space for ST301 is diffed in CI against a stored browse fixture of the real TF6100 server (node ids, data types, access levels, struct definitions)
 - [x] **OPCUA-10**: The sildarvinnsla Flutter HMI (tfc-hmi / open62541_dart) connects to `stc serve` running ST301 and shows live sensor, conveyor and drive HMI structs
 
@@ -150,8 +150,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPCUA-04 | Phase 28 | Complete |
 | OPCUA-05 | Phase 28 | Complete |
 | OPCUA-06 | Phase 28 | Complete |
-| OPCUA-07 | Phase 29 | Pending |
-| OPCUA-08 | Phase 29 | Pending |
+| OPCUA-07 | Phase 29 | Complete |
+| OPCUA-08 | Phase 29 | Complete |
 | OPCUA-09 | Phase 29 | Complete |
 | OPCUA-10 | Phase 29 | Complete |
 | DEVX-01 | Phase 27 | Pending |

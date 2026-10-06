@@ -536,7 +536,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 29-01-PLAN.md -- Live p_cmd write handshake, subscriptions on the running scan, stc serve --io --scenario
+- [x] 29-01-PLAN.md -- Live p_cmd write handshake, subscriptions on the running scan, stc serve --io --scenario (scenario wiring pending Phase 27 merge)
 - [x] 29-02-PLAN.md -- stc opcua snapshot, TF6100 browse diff (skips without capture), HMI keymappings stand-in
 - [x] 29-03-PLAN.md -- MCP tools stc_sim_step/read/write and stc_opcua_browse over one long-lived session
 - [x] 29-04-PLAN.md -- TwinCAT import, EtherCAT and OPC UA guides, stale-claim fixes, docs-CLI test, coverage gate
@@ -576,4 +576,4 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
 | 28. OPC UA Address Space | v1.2 | 4/4 | Complete    | 2026-10-06 |
-| 29. Live HMI & Agent Integration | v1.2 | 3/4 | In Progress|  |
+| 29. Live HMI & Agent Integration | v1.2 | 4/4 | Complete   | 2026-10-06 |

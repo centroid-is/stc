@@ -12,3 +12,8 @@
   a golden update); confirm the TF6100 shape with `stc opcua snapshot` first.
   Found by TestHMIKeymappingsReal with STC_HMI_PROJECT=skammtalinur-legacy/sildarvinnsla.tsproj:
   319 good, 1 bad (this id), 108 skipped.
+
+## From 29-01
+
+- `gofmt -l` lists `pkg/opcua/model.go` and `cmd/stc/main.go`. Plan 29-01 did not touch either file, so they were left unformatted.
+- Scenario wiring for `stc serve --scenario` and `stc-mcp --scenario` waits for the Phase 27 merge. `pkg/scenario` does not exist on main yet. See 29-01-SUMMARY "Pending".
