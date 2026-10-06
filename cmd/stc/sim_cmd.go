@@ -3,12 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/sim"
 	"github.com/spf13/cobra"
@@ -30,6 +32,10 @@ scan cycle for a specified number of iterations at a fixed time step.`,
 	cmd.Flags().StringSlice("wave", nil, `Waveform bindings: INPUT_NAME:KIND:AMPLITUDE:FREQUENCY
   KIND: step, ramp, sine, square
   Example: --wave "SENSOR:sine:100.0:0.5"`)
+	cmd.Flags().StringArray("set", nil, `Set a variable before cycle 1: PATH=VALUE (repeatable).
+  VALUE is JSON when valid (5, true, "Run", [1,2], {"x":1}), else a raw string
+  such as T#5s or 16#FF. Example: --set MAIN.limit=5 --set GVL.x.p_cmd_Start=true`)
+	cmd.Flags().StringArray("get", nil, "Print a variable after the last cycle: PATH (repeatable)")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
 
 	return cmd
@@ -55,21 +61,35 @@ func runSim(cmd *cobra.Command, args []string) error {
 
 	result := pipeline.Parse(filename, string(content), defines)
 
-	// Find the first ProgramDecl and collect the file's GVLs
+	// Find the first ProgramDecl
 	var prog *ast.ProgramDecl
-	var gvls []*ast.GVLDecl
 	for _, d := range result.File.Declarations {
-		switch d := d.(type) {
-		case *ast.ProgramDecl:
-			if prog == nil {
-				prog = d
-			}
-		case *ast.GVLDecl:
-			gvls = append(gvls, d)
+		if p, ok := d.(*ast.ProgramDecl); ok {
+			prog = p
+			break
 		}
 	}
 	if prog == nil {
 		return fmt.Errorf("no PROGRAM declaration found in %s", filename)
+	}
+
+	setFlags, _ := cmd.Flags().GetStringArray("set")
+	getFlags, _ := cmd.Flags().GetStringArray("get")
+	sets, err := parseSetFlags(setFlags)
+	if err != nil {
+		return err
+	}
+
+	// All TYPEs, FBs, FUNCTIONs, GVLs and PROGRAMs of the file live on one
+	// runtime; the simulation drives the first PROGRAM.
+	rt, err := interp.NewRuntime([]*ast.SourceFile{result.File})
+	if err != nil {
+		return fmt.Errorf("initialisation error: %w", err)
+	}
+	for _, s := range sets {
+		if err := rt.Set(s.path, s.value); err != nil {
+			return fmt.Errorf("--set %s: %w", s.path, err)
+		}
 	}
 
 	// Parse flags
@@ -90,24 +110,83 @@ func runSim(cmd *cobra.Command, args []string) error {
 
 	cfg := sim.SimConfig{
 		Program:   prog,
-		GVLs:      gvls,
 		NumCycles: cycles,
 		CycleDt:   dt,
 		Waveforms: waveforms,
 	}
 
-	engine := sim.NewSimulationEngine(cfg)
+	engine := sim.NewSimulationEngineWith(cfg, rt.Engine(prog.Name.Name))
 	simResult, err := engine.Run()
 	if err != nil {
 		return fmt.Errorf("simulation error: %w", err)
+	}
+	if len(getFlags) > 0 {
+		simResult.Get = make(map[string]any, len(getFlags))
+		for _, p := range getFlags {
+			v, err := rt.Get(p)
+			if err != nil {
+				return fmt.Errorf("--get %s: %w", p, err)
+			}
+			simResult.Get[p] = rt.ToJSON(v)
+		}
 	}
 
 	switch format {
 	case "json":
 		return outputJSON(simResult)
 	default:
-		return outputText(simResult)
+		if err := outputText(simResult); err != nil {
+			return err
+		}
+		return outputGets(simResult, getFlags)
 	}
+}
+
+// simSet is one parsed --set flag.
+type simSet struct {
+	path  string
+	value any
+}
+
+// parseSetFlags splits PATH=VALUE flags. VALUE is decoded as JSON (numbers
+// as json.Number) when it is valid JSON, otherwise kept as a raw string.
+func parseSetFlags(flags []string) ([]simSet, error) {
+	out := make([]simSet, 0, len(flags))
+	for _, f := range flags {
+		path, raw, ok := strings.Cut(f, "=")
+		if !ok || strings.TrimSpace(path) == "" {
+			return nil, fmt.Errorf("invalid --set %q: expected PATH=VALUE", f)
+		}
+		out = append(out, simSet{path: strings.TrimSpace(path), value: parseSetValue(raw)})
+	}
+	return out, nil
+}
+
+func parseSetValue(raw string) any {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err == nil && v != nil {
+		if _, err := dec.Token(); err == io.EOF {
+			return v
+		}
+	}
+	return raw
+}
+
+// outputGets prints the --get values as "PATH = JSON" lines in flag order.
+func outputGets(result *sim.SimResult, paths []string) error {
+	if len(paths) > 0 {
+		fmt.Println()
+	}
+	for _, p := range paths {
+		b, err := json.Marshal(result.Get[p])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s = %s\n", p, b)
+	}
+	return nil
 }
 
 // parseWaveFlags parses --wave flag values into WaveformBinding objects.
