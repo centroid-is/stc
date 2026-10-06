@@ -851,6 +851,9 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 
 	// Check built-in functions first
 	upperName := strings.ToUpper(calleeName)
+	if upperName == "SIZEOF" && c.sizeofOfTypeName(e) {
+		return types.TypeUDINT
+	}
 	if fnType, ok := types.BuiltinFunctions[upperName]; ok {
 		return c.checkBuiltinCall(e, fnType)
 	}
@@ -1136,4 +1139,22 @@ func isLiteralExpr(e ast.Expr) bool {
 		return ok
 	}
 	return false
+}
+
+// sizeofOfTypeName reports whether e is SIZEOF(T) for a declared TYPE or
+// FUNCTION_BLOCK T. Elementary type names are keywords the parser does not
+// accept as expressions.
+func (c *Checker) sizeofOfTypeName(e *ast.CallExpr) bool {
+	if len(e.Args) != 1 || len(e.NamedArgs) != 0 {
+		return false
+	}
+	id, ok := e.Args[0].(*ast.Ident)
+	if !ok {
+		return false
+	}
+	if c.currentScope == nil {
+		return false
+	}
+	sym := c.currentScope.Lookup(id.Name)
+	return sym != nil && (sym.Kind == symbols.KindType || sym.Kind == symbols.KindFunctionBlock)
 }

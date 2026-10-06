@@ -193,6 +193,9 @@ func (interp *Interpreter) buildRefPath(env *Env, e ast.Expr) (*RefPath, error) 
 		if err != nil {
 			return nil, err
 		}
+		if ptr.Kind == ValPointer && ptr.Ref != nil {
+			return ptr.Ref, nil
+		}
 		if ptr.Kind != ValPointer || ptr.PtrEnv == nil || ptr.PtrVar == "" {
 			return nil, &RuntimeError{Msg: fmt.Sprintf("cannot dereference %s", ptr.Kind), Pos: x.Span().Start}
 		}

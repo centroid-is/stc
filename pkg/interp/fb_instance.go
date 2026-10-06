@@ -397,8 +397,11 @@ func zeroFromType(ts ast.TypeSpec, ctx typeCtx, depth int) Value {
 	case *ast.NamedType:
 		if t.Name != nil {
 			name := strings.ToUpper(t.Name.Name)
-			if name == "STRING" || name == "WSTRING" {
+			if name == "STRING" {
 				return Value{Kind: ValString, Str: ""}
+			}
+			if name == "WSTRING" {
+				return Value{Kind: ValString, Str: "", IECType: types.KindWSTRING}
 			}
 			if typ, found := types.LookupElementaryType(name); found {
 				return Zero(typ.Kind())
@@ -428,6 +431,9 @@ func zeroFromType(ts ast.TypeSpec, ctx typeCtx, depth int) Value {
 	case *ast.StructType:
 		return zeroStructCtx(t, ctx, depth)
 	case *ast.StringType:
+		if t.IsWide {
+			return Value{Kind: ValString, Str: "", IECType: types.KindWSTRING}
+		}
 		return Value{Kind: ValString, Str: ""}
 	case *ast.SubrangeType:
 		// Use the base type's zero

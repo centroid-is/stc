@@ -292,4 +292,5 @@ func init() {
 		ReturnType: TypeINT,
 		Params:     []Parameter{strParam("IN1"), strParam("IN2")},
 	}
+	registerSystemBuiltins()
 }

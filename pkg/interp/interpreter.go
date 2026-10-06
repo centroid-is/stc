@@ -1280,6 +1280,13 @@ func (interp *Interpreter) execAssignDeref(env *Env, target *ast.DerefExpr, val 
 	if ptr.Kind != ValPointer {
 		return &RuntimeError{Msg: fmt.Sprintf("cannot dereference non-pointer value of type %s", ptr.Kind)}
 	}
+	if ptr.Ref != nil {
+		cur, err := readRef(ptr.Ref)
+		if err != nil {
+			return err
+		}
+		return writeRef(ptr.Ref, storeAs(cur, val))
+	}
 	if ptr.PtrEnv == nil || ptr.PtrVar == "" {
 		return &RuntimeError{Msg: "nil pointer dereference"}
 	}
@@ -1303,6 +1310,9 @@ func (interp *Interpreter) evalDeref(env *Env, e *ast.DerefExpr) (Value, error) 
 	if ptr.FBRef != nil {
 		// THIS^ or SUPER^: the FB instance itself.
 		return Value{Kind: ValFBInstance, FBRef: ptr.FBRef, superDecl: ptr.superDecl}, nil
+	}
+	if ptr.Ref != nil {
+		return readRef(ptr.Ref)
 	}
 	if ptr.PtrEnv == nil || ptr.PtrVar == "" {
 		return Value{}, &RuntimeError{Msg: "nil pointer dereference"}
@@ -1350,25 +1360,12 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		}
 	}
 
-	// Handle ADR() specially: it needs the variable reference, not its value
+	// ADR() and SIZEOF() need the argument expression, not its value.
 	if calleeName == "ADR" {
-		if len(e.Args) != 1 {
-			return Value{}, &RuntimeError{Msg: "ADR requires exactly 1 argument"}
-		}
-		argIdent, ok := e.Args[0].(*ast.Ident)
-		if !ok {
-			return Value{}, &RuntimeError{Msg: "ADR argument must be a variable name"}
-		}
-		// Find the env that owns this variable
-		targetEnv := env.FindOwner(argIdent.Name)
-		if targetEnv == nil {
-			return Value{}, &RuntimeError{Msg: fmt.Sprintf("ADR: undefined variable '%s'", argIdent.Name)}
-		}
-		return Value{
-			Kind:   ValPointer,
-			PtrEnv: targetEnv,
-			PtrVar: strings.ToUpper(argIdent.Name),
-		}, nil
+		return interp.evalAdr(env, e)
+	}
+	if calleeName == "SIZEOF" {
+		return interp.evalSizeof(env, e)
 	}
 
 	// Handle REF() similarly to ADR() but returns a Reference value
