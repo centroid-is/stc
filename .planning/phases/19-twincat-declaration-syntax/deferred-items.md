@@ -30,3 +30,10 @@
 - **Inherited methods (EXTENDS) are not in the derived FB's scope.** 19-07 inserts only the FB's own methods, so calling a base-class method unqualified still reports SEMA010.
 - **Named arguments in expression position still fail to parse** (Phase 20). `u := find_order(prio := x);` parses as `u := find_order` plus a parse error. Since 19-07 registers methods, the checker now says `cannot assign find_order to UINT` there instead of `undeclared identifier "find_order"`. That is 2 lines in st301 and 4 in svncorecomponents. The error count is unchanged.
 - **pkg/symbols/scope.go is not gofmt-clean.** Pre-existing; not touched by 19-07.
+
+## From 19-08 (ACTION runtime)
+
+- **Resolved: zero-argument FB instance calls (from 19-06).** `b();`, `G.f();`, `outer.inner();` and `s.fb();` now run the instance in evalCall/evalMethodCall.
+- **Unqualified METHOD calls inside an FB fail at runtime.** `Inc();` in an FB body or in one of its actions reports `undefined function: INC`. Only `inst.Inc()` works. The 19-07 checker accepts the unqualified form, so an action that calls its FB's method checks clean and then fails when run. Pre-existing for FB bodies; fixing it means resolving methods through the env like actions.
+- **Action lookup walks past the FB boundary.** `Env.LookupAction` follows the parent chain, and an FB instance env's parent is the env that declared the instance. An FB body calling an action name that only the enclosing PROGRAM defines would run the PROGRAM's action. The checker reports SEMA010 for that call, so only unchecked code reaches it.
+- **ErrExit/ErrContinue leaking out of an action body are not caught.** Same as METHOD bodies today: `EXIT;` at the top level of an action propagates to the caller's loop.
