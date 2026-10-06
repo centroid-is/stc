@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,6 +42,10 @@ FUNCTION Twice : INT
 VAR_INPUT a : INT; END_VAR
 Twice := a * 2;
 END_FUNCTION
+FUNCTION_BLOCK FB_Cmd
+VAR_INPUT p_cmd_Start : BOOL; END_VAR
+VAR pt : ST_Pt; inner : FB_Count; END_VAR
+END_FUNCTION_BLOCK
 FUNCTION_BLOCK FB_Count
 VAR_INPUT enable : BOOL; END_VAR
 VAR_OUTPUT n : INT; END_VAR
@@ -55,6 +60,10 @@ VAR_GLOBAL
 	arr : ARRAY[1..Lib.N] OF ST_Pt := [(x := 1), (x := 2), (x := 3)];
 	fb : FB_Count;
 	w : WORD := 16#9;
+	x : FB_Cmd;
+	i : INT; ui : UINT; li : LINT; ul : ULINT; by : BYTE; b : BOOL;
+	re : REAL; lr : LREAL; st : E_State; tm : TIME; str : STRING;
+	ia : ARRAY[1..3] OF INT; da : DATE; tod0 : TOD; dtt : DT;
 END_VAR
 `
 
@@ -313,4 +322,203 @@ func TestToJSON(t *testing.T) {
 		assert.Contains(t, s, `"PA":{"k":2,"limit":10,"C":4}`)
 		assert.Equal(t, s, marshal(t, rt.Snapshot()))
 	})
+}
+
+func TestRuntimeSet(t *testing.T) {
+	rt := newRT(t)
+	set := func(path string, v any) {
+		t.Helper()
+		require.NoError(t, rt.Set(path, v), "%s := %v", path, v)
+	}
+	setErr := func(path string, v any, want string) {
+		t.Helper()
+		err := rt.Set(path, v)
+		if assert.Error(t, err, "%s := %v", path, v) {
+			assert.Contains(t, err.Error(), want, "%s := %v", path, v)
+		}
+	}
+
+	// BOOL
+	set("GVL.x.p_cmd_Start", true)
+	assert.Equal(t, BoolValue(true), mustGet(t, rt, "GVL.x.p_cmd_Start"))
+	set("GVL.b", 1)
+	assert.True(t, mustGet(t, rt, "GVL.b").Bool)
+	set("GVL.b", "false")
+	assert.False(t, mustGet(t, rt, "GVL.b").Bool)
+	set("GVL.b", json.Number("1"))
+	assert.True(t, mustGet(t, rt, "GVL.b").Bool)
+	set("GVL.b", "0")
+	set("GVL.b", "TRUE")
+	setErr("GVL.b", 2, "BOOL")
+	setErr("GVL.b", "yes", "BOOL")
+	setErr("GVL.b", 1.5, "BOOL")
+
+	// Integers
+	for _, in := range []any{json.Number("42"), float64(42), int8(42), "INT#42", "16#2A", "4_2", int64(42), uint16(42), float32(42), int(42), int16(42), int32(42), uint(42), uint8(42), uint32(42), uint64(42), "+42", "2#101010", "8#52"} {
+		set("GVL.i", 0)
+		set("GVL.i", in)
+		v := mustGet(t, rt, "GVL.i")
+		assert.Equal(t, int64(42), v.Int, "%T %v", in, in)
+		assert.Equal(t, types.KindINT, v.IECType)
+	}
+	set("GVL.i", -32768)
+	setErr("GVL.i", 40000, "out of range for INT")
+	setErr("GVL.i", float64(1.5), "not an integer")
+	setErr("GVL.i", json.Number("1.5"), "not an integer")
+	setErr("GVL.i", json.Number("1e3x"), "not a number")
+	setErr("GVL.i", "abc", "invalid integer")
+	setErr("GVL.i", "16#", "invalid integer")
+	setErr("GVL.i", "99#1", "invalid integer")
+	setErr("GVL.i", true, "cannot use bool")
+	setErr("GVL.i", math.Inf(1), "not an integer")
+	setErr("GVL.ui", -1, "out of range for UINT")
+	set("GVL.ul", "18446744073709551615")
+	assert.Equal(t, "18446744073709551615", marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.ul"))))
+	setErr("GVL.ul", "18446744073709551616", "out of range for ULINT")
+	set("GVL.li", json.Number("-9223372036854775808"))
+	set("GVL.by", "BYTE#16#FF")
+	assert.Equal(t, int64(255), mustGet(t, rt, "GVL.by").Int)
+	set("GVL.li", json.Number("1e3"))
+	assert.Equal(t, int64(1000), mustGet(t, rt, "GVL.li").Int)
+
+	// REAL
+	for _, in := range []any{1.5, float32(1.5), json.Number("1.5"), "1.5", "REAL#1.5", "LREAL#1_.5"} {
+		set("GVL.re", 0)
+		set("GVL.re", in)
+		v := mustGet(t, rt, "GVL.re")
+		assert.Equal(t, 1.5, v.Real, "%T %v", in, in)
+		assert.Equal(t, types.KindREAL, v.IECType)
+	}
+	set("GVL.re", 3)
+	assert.Equal(t, 3.0, mustGet(t, rt, "GVL.re").Real)
+	set("GVL.lr", 1e300)
+	setErr("GVL.re", 1e39, "out of range for REAL")
+	setErr("GVL.re", math.NaN(), "NaN")
+	setErr("GVL.lr", math.Inf(-1), "infinite")
+	setErr("GVL.re", "x1", "invalid real")
+	setErr("GVL.re", true, "cannot use bool")
+	setErr("GVL.re", json.Number("zz"), "invalid real")
+
+	// Enums
+	for in, want := range map[any]int64{"Run": 5, "e_state.stop": 6, "E_State#Idle": 0, "RUN": 5, 6: 6, json.Number("5"): 5} {
+		set("GVL.st", in)
+		v := mustGet(t, rt, "GVL.st")
+		assert.Equal(t, want, v.Int, "%v", in)
+		assert.Equal(t, "E_STATE", v.Enum)
+	}
+	setErr("GVL.st", "Walk", "unknown value")
+	setErr("GVL.st", 3, "unknown value")
+	setErr("GVL.st", 1.5, "not an integer")
+	set("GVL.x.pt.State", "Run")
+	assert.Equal(t, `"Run"`, marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.x.pt.State"))))
+
+	// TIME, STRING, DATE/TOD/DT
+	set("GVL.tm", "T#5s")
+	assert.Equal(t, 5*time.Second, mustGet(t, rt, "GVL.tm").Time)
+	set("GVL.tm", 250)
+	assert.Equal(t, 250*time.Millisecond, mustGet(t, rt, "GVL.tm").Time)
+	set("GVL.tm", json.Number("1.5"))
+	assert.Equal(t, 1500*time.Microsecond, mustGet(t, rt, "GVL.tm").Time)
+	setErr("GVL.tm", "soon", "invalid time")
+	setErr("GVL.tm", true, "cannot use bool")
+	setErr("GVL.tm", json.Number("x"), "not a number")
+	set("GVL.str", "'it''s $24 $'ok$' $N$L$R$T$P$$'")
+	assert.Equal(t, "it's $ 'ok' \n\n\r\t\f$", mustGet(t, rt, "GVL.str").Str)
+	set("GVL.str", "plain")
+	assert.Equal(t, "plain", mustGet(t, rt, "GVL.str").Str)
+	setErr("GVL.str", "'bad $Z'", "invalid escape")
+	setErr("GVL.str", "'bad $4'", "invalid escape")
+	setErr("GVL.str", 5, "cannot use int")
+	set("GVL.da", "D#2026-01-02")
+	assert.Equal(t, `"D#2026-01-02"`, marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.da"))))
+	set("GVL.da", "DATE#1970-01-03")
+	set("GVL.tod0", "TOD#12:30:01.250")
+	assert.Equal(t, `"TOD#12:30:01.250"`, marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.tod0"))))
+	set("GVL.tod0", "TIME_OF_DAY#01:00:00")
+	set("GVL.dtt", "DT#2026-01-02-03:04:05")
+	assert.Equal(t, `"DT#2026-01-02-03:04:05"`, marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.dtt"))))
+	set("GVL.dtt", "DATE_AND_TIME#2026-01-02-03:04:05.5")
+	setErr("GVL.da", "D#2026-13-01", "invalid DATE")
+	setErr("GVL.da", 5, "cannot use int")
+
+	// Arrays, structs and FB maps
+	set("GVL.ia", []any{1, json.Number("2")})
+	assert.Equal(t, `[1,2,0]`, marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.ia"))))
+	setErr("GVL.ia", []any{1, 2, 3, 4}, "4 elements")
+	setErr("GVL.ia", []any{1, "x"}, "invalid integer")
+	setErr("GVL.ia", 5, "cannot use int")
+	set("GVL.arr[2]", map[string]any{"X": 9, "state": "Stop"})
+	assert.Equal(t, `{"x":9,"y":0,"State":"Stop"}`, marshal(t, rt.ToJSON(mustGet(t, rt, "GVL.arr[2]"))))
+	set("GVL.arr", []any{map[string]any{"y": 2.5}})
+	assert.Equal(t, 2.5, mustGet(t, rt, "GVL.arr[1].y").Real)
+	assert.Equal(t, int64(9), mustGet(t, rt, "GVL.arr[2].x").Int)
+	setErr("GVL.arr[2]", map[string]any{"nope": 1}, "no member")
+	setErr("GVL.arr[2]", map[string]any{"x": "q"}, "invalid integer")
+	setErr("GVL.arr[2]", 1, "cannot use int")
+	set("GVL.x", map[string]any{"p_cmd_start": false, "pt": map[string]any{"x": 3}, "inner": map[string]any{"enable": true}})
+	assert.False(t, mustGet(t, rt, "GVL.x.p_cmd_Start").Bool)
+	assert.Equal(t, int64(3), mustGet(t, rt, "GVL.x.pt.x").Int)
+	assert.True(t, mustGet(t, rt, "GVL.x.inner.enable").Bool)
+	// All-or-nothing: a bad key leaves the FB untouched.
+	setErr("GVL.x", map[string]any{"inner": map[string]any{"enable": false}, "zz": 1}, "no member")
+	assert.True(t, mustGet(t, rt, "GVL.x.inner.enable").Bool)
+	setErr("GVL.x", map[string]any{"inner": map[string]any{"enable": "maybe"}}, "BOOL")
+	setErr("GVL.x", 1, "cannot use int")
+	set("PB.t", map[string]any{"PT": "T#1s", "in": true})
+	assert.Equal(t, time.Second, mustGet(t, rt, "PB.t.PT").Time)
+	setErr("PB.t", map[string]any{"Q": true}, "read-only output")
+	setErr("PB.t", map[string]any{"zz": true}, "no member")
+	setErr("PB.t", map[string]any{"PT": true}, "cannot use bool")
+	set("PB.t.IN", false)
+	assert.False(t, mustGet(t, rt, "PB.t.IN").Bool)
+	setErr("PB.t.IN", "x", "BOOL")
+
+	// Bits
+	set("GVL.w.3", false)
+	set("GVL.w.15", true)
+	assert.Equal(t, int64(0x8001), mustGet(t, rt, "GVL.w").Int)
+	setErr("GVL.w.2", "x", "BOOL")
+
+	// Access rules
+	setErr("GVL.nope", 1, "unknown variable")
+	setErr("PA.C", 1, "constant")
+	setErr("Lib.N", 1, "constant")
+	setErr("PB.p", 1, "pointer not writable by path")
+	setErr("PB.t.Q", true, "read-only output")
+	setErr("PB.t.ET", 5, "read-only output")
+	setErr("PB.r", 1, "unbound reference")
+	setErr("GVL.i", nil, "nil")
+	require.NoError(t, rt.Tick(time.Millisecond))
+	set("PB.r", 77)
+	assert.Equal(t, int64(77), mustGet(t, rt, "PB.seen").Int, "write through reference")
+
+	// Values set take effect at the next Tick.
+	set("PA.k", 10)
+	require.NoError(t, rt.Tick(time.Millisecond))
+	assert.Equal(t, int64(20), mustGet(t, rt, "GVL.shared").Int)
+}
+
+func TestRuntimeConcurrent(t *testing.T) {
+	rt := newRT(t)
+	var wg sync.WaitGroup
+	for g := 0; g < 4; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < 50; i++ {
+				switch g {
+				case 0:
+					assert.NoError(t, rt.Tick(time.Millisecond))
+				case 1:
+					assert.NoError(t, rt.Set("PA.k", i%100))
+				case 2:
+					_, err := rt.Get("GVL.shared")
+					assert.NoError(t, err)
+				default:
+					_ = rt.Snapshot()
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
 }
