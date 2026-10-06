@@ -96,7 +96,6 @@ func TestWriteOutRejectsTraversal(t *testing.T) {
 		{Sources: []Source{{Path: motor, RelPath: "/abs/evil.TcPOU", Kind: KindPOU, Name: "FB_Motor"}}},
 		{Sources: []Source{{Path: motor, RelPath: `C:\abs\evil.TcPOU`, Kind: KindPOU, Name: "FB_Motor"}}},
 		{LibrarySources: []Source{{Path: motor, RelPath: "FB_Motor.TcPOU", Kind: KindPOU, Name: "FB_Motor", Library: "../../evil"}}},
-		{Sources: []Source{{Path: motor, RelPath: "POUs/ok.TcPOU", Kind: KindGVL, Name: "../../../evil"}}},
 	}
 	for i, m := range cases {
 		// The first source is valid so a guard that writes before validating
@@ -115,6 +114,16 @@ func TestWriteOutRejectsTraversal(t *testing.T) {
 	})
 	if len(found) != 0 {
 		t.Errorf("files written: %v", found)
+	}
+
+	// A GVL name is sanitised to an identifier, so it cannot escape.
+	gvl := filepath.Join(root, "gvl")
+	m := &Model{Sources: []Source{{Path: motor, RelPath: "GVLs/x.TcGVL", Kind: KindGVL, Name: "../../evil"}}}
+	if err := WriteOut(m, gvl); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(gvl, "GVLs", "______evil.st")); err != nil {
+		t.Errorf("sanitised GVL file: %v", err)
 	}
 }
 

@@ -11,10 +11,10 @@ import (
 
 // ExtractedStub is one TwinCAT object rendered as a declaration-only stub.
 type ExtractedStub struct {
-	Name    string
-	RelPath string
-	Kind    twincat.Kind
-	Text    string
+	Name    string       `json:"name"`
+	RelPath string       `json:"rel_path"`
+	Kind    twincat.Kind `json:"kind"`
+	Text    string       `json:"text"`
 }
 
 // ExtractProject reads a .plcproj and renders every POU, GVL, DUT and

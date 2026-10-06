@@ -1,0 +1,158 @@
+package twincat
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
+	"github.com/BurntSushi/toml"
+	"github.com/centroid-is/stc/pkg/ast"
+)
+
+// stubLibKey is the library_paths key and libs/ subdirectory for the
+// embedded Beckhoff stub files used by a written project.
+const stubLibKey = "stubs"
+
+// outFile is one file WriteOut will create, relative to the output dir.
+type outFile struct {
+	rel  string // slash-separated, relative to outDir
+	text string
+}
+
+// WriteOut writes the model as a plain stc project under outDir:
+//
+//   - every user source as compact ST at its plcproj path with a .st extension
+//   - sibling and library_path library sources under libs/<Library>/ (flat,
+//     because vendor.LoadLibraries reads library directories non-recursively)
+//   - the embedded stub files the project uses under libs/stubs/
+//   - an stc.toml whose [build.library_paths] point at those directories
+//
+// Every target path is validated before anything is written: a plcproj
+// Include, library name or GVL name that is absolute or escapes outDir after
+// cleaning is an error and no file is created (threat T-21-11).
+func WriteOut(m *Model, outDir string) error {
+	root, err := filepath.Abs(outDir)
+	if err != nil {
+		return err
+	}
+	var files []outFile
+	libDirs := map[string]string{}
+
+	for _, s := range m.Sources {
+		text, err := compactText(s)
+		if err != nil {
+			return err
+		}
+		dir := path.Dir(slashPath(s.RelPath))
+		files = append(files, outFile{rel: path.Join(dir, outName(s)), text: text})
+	}
+	for _, s := range m.LibrarySources {
+		if strings.HasPrefix(s.Path, stubDisplayDir+"/") {
+			libDirs[stubLibKey] = "libs/" + stubLibKey
+			files = append(files, outFile{rel: path.Join("libs", stubLibKey, path.Base(s.Path)), text: s.Text})
+			continue
+		}
+		dir := "libs/" + s.Library
+		libDirs[s.Library] = dir
+		text := s.Text
+		if !strings.EqualFold(filepath.Ext(s.Path), ".st") {
+			if text, err = compactText(s); err != nil {
+				return err
+			}
+		}
+		files = append(files, outFile{rel: path.Join(dir, outName(s)), text: text})
+	}
+
+	cfg, err := stcToml(m, libDirs)
+	if err != nil {
+		return err
+	}
+	files = append(files, outFile{rel: "stc.toml", text: cfg})
+
+	targets := make([]string, len(files))
+	seen := map[string]string{}
+	for i, f := range files {
+		t, err := safeJoin(root, f.rel)
+		if err != nil {
+			return err
+		}
+		key := strings.ToLower(t) // TwinCAT and two of three host OSes are case-insensitive
+		if prev, ok := seen[key]; ok {
+			return fmt.Errorf("%s and %s map to the same output file", prev, f.rel)
+		}
+		seen[key] = f.rel
+		targets[i] = t
+	}
+
+	for i, f := range files {
+		if err := os.MkdirAll(filepath.Dir(targets[i]), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(targets[i], []byte(f.text), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// compactText re-converts a TwinCAT object in compact mode.
+func compactText(s Source) (string, error) {
+	c, _, err := ConvertFile(s.Path, slashPath(s.RelPath), ModeCompact)
+	if err != nil {
+		return "", fmt.Errorf("converting %s: %w", s.Path, err)
+	}
+	return c.Text, nil
+}
+
+// outName is the .st file name for a source. A GVL is written as <Name>.st:
+// the compact header cannot carry the TcGVL Name= attribute, and stc derives
+// a GVL's name from the file basename, so naming the file after the object
+// keeps qualified references such as GVL_Main.x resolving.
+func outName(s Source) string {
+	if s.Kind == KindGVL && s.Name != "" {
+		return ast.SanitizeGVLName(s.Name) + ".st"
+	}
+	base := path.Base(slashPath(s.RelPath))
+	return strings.TrimSuffix(base, path.Ext(base)) + ".st"
+}
+
+// safeJoin joins rel onto root and rejects absolute paths (including
+// Windows drive and UNC forms on any OS) and anything that escapes root.
+func safeJoin(root, rel string) (string, error) {
+	r := slashPath(rel)
+	if path.IsAbs(r) || filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" ||
+		(len(r) >= 2 && r[1] == ':') {
+		return "", fmt.Errorf("refusing to write absolute path %q", rel)
+	}
+	target := filepath.Join(root, filepath.FromSlash(path.Clean(r)))
+	back, err := filepath.Rel(root, target)
+	if err != nil || back == ".." || strings.HasPrefix(back, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("refusing to write %q outside %s", rel, root)
+	}
+	return target, nil
+}
+
+// stcToml renders the generated project config with library_paths in
+// sorted key order (the toml encoder sorts map keys).
+func stcToml(m *Model, libDirs map[string]string) (string, error) {
+	type build struct {
+		VendorTarget string            `toml:"vendor_target"`
+		LibraryPaths map[string]string `toml:"library_paths,omitempty"`
+	}
+	type project struct {
+		Name string `toml:"name"`
+	}
+	cfg := struct {
+		Project project `toml:"project"`
+		Build   build   `toml:"build"`
+	}{project{m.PlcName}, build{"beckhoff", libDirs}}
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "# Generated by stc vendor import from %s\n", filepath.Base(m.ProjectPath))
+	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
+		return "", err // unreachable: plain string fields always encode
+	}
+	return buf.String(), nil
+}

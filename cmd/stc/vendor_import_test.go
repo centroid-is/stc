@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -14,26 +13,6 @@ const (
 	demoTsproj  = "../../pkg/twincat/testdata/sln/Demo/Demo solution.tsproj"
 	demoPlcproj = "../../pkg/twincat/testdata/sln/Demo/Demo/Demo.plcproj"
 )
-
-// runStcIn runs the stc binary with dir as its working directory.
-func runStcIn(t *testing.T, dir string, args ...string) (stdout, stderr string, exitCode int) {
-	t.Helper()
-	cmd := exec.Command(stcBinary, args...)
-	cmd.Dir = dir
-	var so, se strings.Builder
-	cmd.Stdout, cmd.Stderr = &so, &se
-	if coverDir != "" {
-		cmd.Env = append(os.Environ(), "GOCOVERDIR="+coverDir)
-	}
-	if err := cmd.Run(); err != nil {
-		ee, ok := err.(*exec.ExitError)
-		if !ok {
-			t.Fatalf("running stc: %v", err)
-		}
-		exitCode = ee.ExitCode()
-	}
-	return so.String(), se.String(), exitCode
-}
 
 type importJSON struct {
 	PlcName string `json:"plc_name"`
