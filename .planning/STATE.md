@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: ready_to_plan
-stopped_at: Phase 23 complete (4/4) — ready to discuss Phase 24
-last_updated: 2026-10-06T08:24:05.594Z
+status: executing
+stopped_at: Completed 29-02-PLAN.md
+last_updated: "2026-10-06T08:26:45.643Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
-  completed_phases: 23
+  completed_phases: 22
   total_plans: 88
-  completed_plans: 88
-  percent: 79
+  completed_plans: 85
+  percent: 76
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 24 — ethercat topology link binding
+**Current focus:** Phase 29 — live hmi & agent integration
 
 ## Current Position
 
-Phase: 24
-Plan: Not started
-Status: Ready to plan
+Phase: 29 of 4 (live hmi & agent integration)
+Plan: 29-02 complete (29-01, 29-03, 29-04 pending)
+Status: In progress
 Last activity: 2026-10-06
 
-Progress: [██████████] 100%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 82 (v1.0) + 10 (v1.1) = 42
+- Total plans completed: 78 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 
@@ -137,8 +137,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T08:23:39.796Z
-Stopped at: Completed 23-01-PLAN.md
+Last session: 2026-10-06T08:26:45.639Z
+Stopped at: Completed 29-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

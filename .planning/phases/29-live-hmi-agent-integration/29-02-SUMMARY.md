@@ -35,7 +35,7 @@ key-decisions:
   - "Diff ignores Description, Root, Parent, Reference and BrowseName"
   - "Tests in ./tests use an exec'd stc serve for both the diff and the HMI reads"
   - "STC_HMI_PROJECT selects the project for the real-keymappings run; hmi/keymappings.json targets the legacy project, not ST301"
-requirements-completed: [OPCUA-09, OPCUA-10]
+requirements-completed: [OPCUA-09]  # OPCUA-10 automated half only; manual HMI procedure is 29-04
 duration: 40min
 completed: 2026-10-06
 ---
