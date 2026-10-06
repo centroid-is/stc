@@ -128,6 +128,23 @@ func (interp *Interpreter) RegisterAssertions(collector *AssertionCollector) {
 	}
 }
 
+// RegisterTestFunction adds a function callable only from statements run
+// in the environment given to SetTestEnv (a TEST_CASE body). Project POUs
+// never see it, and in the test body it wins over a project FUNCTION of the
+// same name.
+func (interp *Interpreter) RegisterTestFunction(name string, fn func(args []Value, pos ast.Pos) (Value, error)) {
+	if interp.testFunctions == nil {
+		interp.testFunctions = make(map[string]func(args []Value, pos ast.Pos) (Value, error))
+	}
+	interp.testFunctions[name] = fn
+}
+
+// SetTestEnv names the environment in which RegisterTestFunction functions
+// resolve; nil disables them.
+func (interp *Interpreter) SetTestEnv(env *Env) {
+	interp.testEnv = env
+}
+
 // RegisterFunction adds a named function to LocalFunctions.
 // This is used by the test runner to register user-defined functions.
 func (interp *Interpreter) RegisterFunction(name string, fn func(args []Value, pos ast.Pos) (Value, error)) {

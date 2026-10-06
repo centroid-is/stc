@@ -104,6 +104,7 @@ func executeProjectTestCase(tc *ast.TestCaseDecl, filePath string, spec *scenari
 	scenario.RegisterBuiltins(in, plant)
 
 	env := interp.NewEnv(in.GlobalParent())
+	in.SetTestEnv(env)
 	in.RegisterInlineEnums(tc.Name, tc.VarBlocks)
 	initializeTestEnv(in, env, tc.VarBlocks)
 

@@ -202,6 +202,8 @@ func (p *Project) Clock() time.Duration {
 func (p *Project) Tick() error {
 	p.rt.mu.Lock()
 	defer p.rt.mu.Unlock()
+	p.rt.ticking.Store(true)
+	defer p.rt.ticking.Store(false)
 	now := p.clock + p.base
 	var errs []error
 	ran := false

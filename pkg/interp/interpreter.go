@@ -32,6 +32,12 @@ type Interpreter struct {
 	// global state mutation between test cases.
 	LocalFunctions map[string]func(args []Value, pos ast.Pos) (Value, error)
 
+	// testFunctions are functions callable only from the statements run
+	// in testEnv (a TEST_CASE body), never from project POUs; see
+	// RegisterTestFunction. They win over FuncDecls and LocalFunctions there.
+	testFunctions map[string]func(args []Value, pos ast.Pos) (Value, error)
+	testEnv       *Env
+
 	// Collector gathers assertion results during test execution.
 	// Each test case gets its own collector via RegisterAssertions.
 	Collector *AssertionCollector
@@ -1402,6 +1408,19 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		}
 		// REF(x), REF(s.m), REF(arr[i]): the same path reference as REF=.
 		return interp.refTo(env, e.Args[0])
+	}
+
+	// Test-body built-ins (scenario SET, GET, RUN_CYCLES, ...) resolve only
+	// in the TEST_CASE body's own environment, so a project POU calling its
+	// own FUNCTION GET never reaches them.
+	if env != nil && env == interp.testEnv {
+		if fn, ok := interp.testFunctions[calleeName]; ok {
+			args, err := interp.localArgs(env, e, calleeName)
+			if err != nil {
+				return Value{}, err
+			}
+			return fn(args, e.Span().Start)
+		}
 	}
 
 	// Check LocalFunctions first (per-instance overrides for test assertions, etc.)

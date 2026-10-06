@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -37,8 +38,16 @@ type programRun struct {
 // with Set are seen by the program bodies on the next Tick. The engines
 // returned by Engine bypass the mutex and are for single-goroutine callers
 // such as `stc sim`.
+// InTick reports whether a scan (Tick or Project.Tick) is running and holds
+// the Runtime mutex. Code called from ST during a scan, such as an injected
+// built-in, checks it to fail instead of deadlocking on Get or Set.
+func (r *Runtime) InTick() bool { return r.ticking.Load() }
+
 type Runtime struct {
-	mu       sync.Mutex
+	mu sync.Mutex
+	// ticking is true while Tick or Project.Tick runs ST code under mu;
+	// see InTick.
+	ticking  atomic.Bool
 	interp   *Interpreter
 	programs []*programRun
 	// consts holds the upper-case ROOT.NAME of every member of a CONSTANT
@@ -131,6 +140,8 @@ func (r *Runtime) addConsts(root string, blocks []*ast.VarBlock) {
 func (r *Runtime) Tick(dt time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.ticking.Store(true)
+	defer r.ticking.Store(false)
 	r.interp.SetDt(dt)
 	r.preScan(dt)
 	for _, p := range r.programs {

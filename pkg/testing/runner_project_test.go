@@ -161,3 +161,68 @@ func TestRunProjectFileReadError(t *testing.T) {
 		t.Fatal("expected a read error for a directory")
 	}
 }
+
+// A project FUNCTION named like a scenario built-in (GET, SET) is called
+// from project code; the built-ins resolve only in the TEST_CASE body, so
+// the scan neither picks the built-in nor deadlocks on the Runtime mutex
+// (review 2 HI-01).
+func TestRunProjectModeUserFunctionNamedLikeBuiltin(t *testing.T) {
+	src := `
+{attribute 'qualified_only'}
+VAR_GLOBAL
+	nCnt : DINT;
+END_VAR
+FUNCTION GET : INT
+VAR_INPUT
+	x : STRING;
+END_VAR
+GET := 42;
+END_FUNCTION
+FUNCTION SET : INT
+VAR_INPUT
+	x : INT;
+END_VAR
+SET := x + 1;
+END_FUNCTION
+PROGRAM MAIN
+VAR
+	y : INT;
+	z : INT;
+END_VAR
+y := GET('MAIN.y');
+z := SET(4);
+GVL.nCnt := GVL.nCnt + 1;
+END_PROGRAM
+`
+	dir := t.TempDir()
+	writeProjectTest(t, dir, "shadow_test.st", `
+TEST_CASE 'project GET and SET'
+RUN_CYCLES(2);
+ASSERT_EQ(GET('MAIN.y'), 42);
+ASSERT_EQ(GET('MAIN.z'), 5);
+ASSERT_EQ(GVL.nCnt, 2);
+SET('GVL.nCnt', 7);
+ASSERT_EQ(GVL.nCnt, 7);
+END_TEST_CASE
+`)
+	done := make(chan *RunResult, 1)
+	go func() {
+		res, err := RunWithOpts(dir, RunOpts{Plant: plantSpec(t, src)})
+		if err != nil {
+			t.Error(err)
+		}
+		done <- res
+	}()
+	select {
+	case res := <-done:
+		if res == nil {
+			return
+		}
+		tc := res.Suites[0].Tests[0]
+		if !tc.Passed {
+			t.Fatalf("test failed: error=%q assertions=%+v", tc.Error, tc.Assertions)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("project FUNCTION GET deadlocked the scan")
+	}
+}

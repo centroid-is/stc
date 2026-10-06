@@ -22,6 +22,7 @@ func runST(t *testing.T, p *Plant, body string) (*interp.Env, error) {
 	prog := f.Declarations[0].(*ast.ProgramDecl)
 	in := p.Runtime().Interpreter()
 	env := interp.NewEnv(in.GlobalParent())
+	in.SetTestEnv(env)
 	env.Define("N", interp.IntValue(0))
 	env.Define("B", interp.BoolValue(false))
 	env.Define("R", interp.RealValue(0))
@@ -261,3 +262,35 @@ func TestBuiltinsAnalogDefaultUnit(t *testing.T) {
 	assert.EqualValues(t, 16384, readVal(t, p, val))
 }
 
+
+// The built-ins resolve only in the test env and refuse to run while a
+// scan holds the Runtime mutex, instead of deadlocking (review 2 HI-01).
+func TestBuiltinsRefuseInsideScan(t *testing.T) {
+	src := "PROGRAM MAIN\nVAR y : INT; END_VAR\nPROBE();\nEND_PROGRAM\n"
+	f := parseST(t, "main.st", src)
+	spec, err := BuildPlantSpec(interp.ProjectSpec{Files: []*ast.SourceFile{f}}, nil)
+	require.NoError(t, err)
+	p, err := spec.New()
+	require.NoError(t, err)
+	in := p.Runtime().Interpreter()
+	s := RegisterBuiltins(in, p)
+	var probeErr error
+	in.RegisterFunction("PROBE", func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
+		require.True(t, p.Runtime().InTick())
+		_, probeErr = s.call(builtins[1], []interp.Value{interp.StringValue("MAIN.y")}, pos)
+		return interp.BoolValue(true), nil
+	})
+	require.NoError(t, p.Tick())
+	require.Error(t, probeErr)
+	require.Contains(t, probeErr.Error(), "cannot run inside a scan")
+	require.False(t, p.Runtime().InTick())
+
+	// Outside the test env the built-ins are unknown.
+	env := interp.NewEnv(in.GlobalParent())
+	body := parseST(t, "b.st", "PROGRAM B\nRUN_CYCLES(1);\nEND_PROGRAM\n").Declarations[0].(*ast.ProgramDecl).Body
+	err = in.ExecStatements(env, body)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "undefined function: RUN_CYCLES")
+	in.SetTestEnv(env)
+	require.NoError(t, in.ExecStatements(env, body))
+}

@@ -52,23 +52,35 @@ var builtins = []builtin{
 // SIM_SLAVE_STATE, SIM_ANALOG, SIM_DRIVE_FAULT, SIM_SERIAL_PEER, SIM_RAMP
 // and RUN_CYCLES on in, and replaces ADVANCE_TIME with whole Plant Ticks
 // (d must be a multiple of BaseTick). in is normally the Plant's own
-// interpreter (p.Runtime().Interpreter()).
+// interpreter (p.Runtime().Interpreter()). The built-ins are test
+// functions: they resolve only in the environment passed to
+// in.SetTestEnv (the TEST_CASE body), never in project POUs, and fail
+// with a runtime error if called while a scan holds the Runtime mutex.
 func RegisterBuiltins(in *interp.Interpreter, p *Plant) *Session {
 	s := &Session{p: p, in: in}
 	for _, b := range builtins {
 		b := b
-		in.RegisterFunction(b.name, func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
-			if len(args) < b.min || len(args) > b.max {
-				return interp.Value{}, s.errf(pos, b, "got %d argument(s)", len(args))
-			}
-			v, err := b.fn(s, args)
-			if err != nil {
-				return interp.Value{}, s.errf(pos, b, "%v", err)
-			}
-			return v, nil
+		in.RegisterTestFunction(b.name, func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
+			return s.call(b, args, pos)
 		})
 	}
 	return s
+}
+
+// call runs built-in b, checking the argument count and refusing to run
+// while a scan holds the Runtime mutex (Get, Set and Tick would deadlock).
+func (s *Session) call(b builtin, args []interp.Value, pos ast.Pos) (interp.Value, error) {
+	if s.p.Runtime().InTick() {
+		return interp.Value{}, s.errf(pos, b, "cannot run inside a scan; call it from the TEST_CASE body")
+	}
+	if len(args) < b.min || len(args) > b.max {
+		return interp.Value{}, s.errf(pos, b, "got %d argument(s)", len(args))
+	}
+	v, err := b.fn(s, args)
+	if err != nil {
+		return interp.Value{}, s.errf(pos, b, "%v", err)
+	}
+	return v, nil
 }
 
 func (s *Session) errf(pos ast.Pos, b builtin, format string, args ...any) error {
