@@ -132,8 +132,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 	r.BeforeTick = append(r.BeforeTick, func() { cycles++ })
 
 	var srv *opcua.Server
+	var src *bind.RuntimeSource
 	if cfg.Endpoint != "" {
-		if srv, err = startOPCUA(r, cfg, out, errOut, format); err != nil {
+		if srv, src, err = startOPCUA(r, cfg, out, errOut, format); err != nil {
 			return err
 		}
 		defer func() { _ = srv.Stop() }()
@@ -150,6 +151,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 		if srv == nil {
 			return fmt.Errorf("serve: %w", err)
 		}
+		// Writes would never be applied: refuse them from now on.
+		src.Stop(err)
 		reportServe(errOut, format, "scan_stopped", err)
 		<-ctx.Done() // keep serving the last image
 	}
@@ -170,22 +173,22 @@ func runServe(cmd *cobra.Command, args []string) error {
 // startOPCUA builds the TF6100 address space of r's analysed project over
 // its Runtime, starts the server and prints the start-up report. Queued
 // OPC UA writes are applied between Ticks through r.BeforeTick.
-func startOPCUA(r *projectRunner, cfg opcua.Config, out, errOut io.Writer, format string) (*opcua.Server, error) {
+func startOPCUA(r *projectRunner, cfg opcua.Config, out, errOut io.Writer, format string) (*opcua.Server, *bind.RuntimeSource, error) {
 	tree, err := symtree.Build(r.Analysis)
 	if err != nil {
-		return nil, fmt.Errorf("symbol tree: %w", err)
+		return nil, nil, fmt.Errorf("symbol tree: %w", err)
 	}
 	src := bind.NewRuntimeSource(r.P.Runtime())
 	space, odiags := opcua.Build(bind.Root(tree), src)
 	srv, err := opcua.New(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("opc ua server: %w", err)
+		return nil, nil, fmt.Errorf("opc ua server: %w", err)
 	}
 	if err := srv.Publish(space, src); err != nil {
-		return nil, fmt.Errorf("publishing address space: %w", err)
+		return nil, nil, fmt.Errorf("publishing address space: %w", err)
 	}
 	if err := srv.Start(); err != nil {
-		return nil, fmt.Errorf("starting opc ua server: %w", err)
+		return nil, nil, fmt.Errorf("starting opc ua server: %w", err)
 	}
 	r.BeforeTick = append(r.BeforeTick, func() {
 		if err := src.ApplyPending(); err != nil {
@@ -209,7 +212,7 @@ func startOPCUA(r *projectRunner, cfg opcua.Config, out, errOut io.Writer, forma
 		NamespaceIndex: srv.NamespaceIndex(), NodeCount: len(space.Nodes),
 		Cycle: r.P.BaseTick().String(), Listen: srv.ListenAddr(), AnonymousWrite: anonWrite,
 		Diagnostics: diags})
-	return srv, nil
+	return srv, src, nil
 }
 
 // serveConfig builds the OPC UA server configuration from the flags. The

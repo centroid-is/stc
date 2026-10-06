@@ -339,6 +339,8 @@ END_PROGRAM
 	assert.Contains(t, s.stderr.String(), "division by zero")
 	c := dialServe(t, "opc.tcp://"+addr)
 	assert.Equal(t, int16(5), readNode(t, c, s4("GVL.x")).Value)
+	// ME-02: a write after the scan stopped is refused, not answered Good.
+	assert.Equal(t, ua.BadNotWritable, writeNode(t, c, s4("GVL.x"), int16(9)))
 }
 
 // TestServeAnalysisErrorFailsStart: analysis errors fail serve before the

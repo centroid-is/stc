@@ -276,3 +276,23 @@ func TestRuntimeSourceWriteBatch(t *testing.T) {
 	assert.Equal(t, 1, src.Pending())
 	require.NoError(t, src.ApplyPending())
 }
+
+// TestRuntimeSourceStop is the ME-02 regression: once the scan has
+// stopped, writes fail with ErrNotWritable instead of queueing forever.
+func TestRuntimeSourceStop(t *testing.T) {
+	_, src := newSource(t)
+	require.NoError(t, src.Write("V.i", int64(5)))
+	src.Stop(errors.New("division by zero"))
+	assert.Zero(t, src.Pending(), "queued writes are dropped")
+	err := src.Write("V.i", int64(6))
+	assert.ErrorIs(t, err, opcua.ErrNotWritable)
+	assert.ErrorContains(t, err, "division by zero")
+	assert.ErrorIs(t, src.WriteBatch(nil), opcua.ErrNotWritable)
+	got, err := src.Read("V.i")
+	require.NoError(t, err)
+	assert.Equal(t, int64(-3), got, "reads keep serving")
+
+	_, src2 := newSource(t)
+	src2.Stop(nil)
+	assert.ErrorContains(t, src2.Write("V.i", int64(1)), "stopped")
+}

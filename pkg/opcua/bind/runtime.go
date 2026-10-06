@@ -38,6 +38,7 @@ type RuntimeSource struct {
 	rt      *interp.Runtime
 	mu      sync.Mutex
 	pending []pendingBatch
+	stopped error // set by Stop: later writes fail
 }
 
 var (
@@ -87,6 +88,9 @@ func (s *RuntimeSource) Write(path string, v any) error {
 // within one Runtime critical section before a Tick, so a scan never sees
 // part of it, and a rejected request queues nothing.
 func (s *RuntimeSource) WriteBatch(ws []opcua.PathWrite) error {
+	if err := s.stoppedErr(); err != nil {
+		return err
+	}
 	if len(ws) == 0 {
 		return nil
 	}
@@ -106,11 +110,43 @@ func (s *RuntimeSource) WriteBatch(ws []opcua.PathWrite) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopped != nil {
+		return s.notWritable()
+	}
 	if len(s.pending) >= MaxPending {
 		return errQueueFull
 	}
 	s.pending = append(s.pending, b)
 	return nil
+}
+
+// Stop marks the scan that drains the queue as stopped, for the reason
+// given: queued writes are dropped and every later write fails with
+// ErrNotWritable (BadNotWritable), so clients are not told Good for a
+// write that will never be applied. Reads keep serving the last image.
+func (s *RuntimeSource) Stop(reason error) {
+	if reason == nil {
+		reason = errors.New("stopped")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopped = reason
+	s.pending = nil
+}
+
+// stoppedErr is the error a write gets after Stop, else nil.
+func (s *RuntimeSource) stoppedErr() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped == nil {
+		return nil
+	}
+	return s.notWritable()
+}
+
+// notWritable wraps the stop reason; the caller holds s.mu.
+func (s *RuntimeSource) notWritable() error {
+	return fmt.Errorf("%w: the scan has stopped: %v", opcua.ErrNotWritable, s.stopped)
 }
 
 // Pending returns the number of queued write requests.
