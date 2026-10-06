@@ -3,6 +3,7 @@ package interp
 import (
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,7 +18,7 @@ END_STRUCT
 END_TYPE
 PROGRAM P
 VAR_INPUT
-	gow, gor, gom, gox, gmw, gew, gou : BOOL;
+	gow, gor, gom, gox, gmw, gew, gou, gob : BOOL;
 	net  : STRING;
 	addr : UINT;
 	idx  : WORD;
@@ -33,6 +34,8 @@ VAR
 	we   : FB_EcCoESdoWrite;
 	ru   : FB_EcCoESdoRead;
 	u    : UINT;
+	rb   : FB_EcCoESdoRead;
+	aBuf : ARRAY[1..4] OF BYTE;
 	aSrc : ARRAY[1..2] OF BYTE := [16#34, 16#12];
 	aDst : ARRAY[1..2] OF BYTE;
 	st   : ST_Sdo;
@@ -54,6 +57,8 @@ we(sNetId := net, nSlaveAddr := addr, nIndex := idx, nSubIndex := sub,
 	pSrcBuf := ADR(awW[1]), cbBufLen := cb, bExecute := gew);
 ru(sNetId := net, nSlaveAddr := addr, nIndex := idx, nSubIndex := sub,
 	pDstBuf := ADR(u), cbBufLen := cb, bExecute := gou);
+rb(sNetId := net, nSlaveAddr := addr, nIndex := idx, nSubIndex := sub,
+	pDstBuf := ADR(aBuf[1]), cbBufLen := cb, bExecute := gob);
 END_PROGRAM
 `
 
@@ -84,4 +89,47 @@ func TestCoESdoOneBasedBuffers(t *testing.T) {
 	r.pulseOn("gou", 3)
 	r.done("ru", 0)
 	assert.Equal(t, int64(0x1234), envVal(t, r.e, "u").Int)
+}
+
+// TestCoESdoAdrMemberAndElement is the HI-02 regression: ADR() of a struct
+// member or array element is a valid SDO buffer, as on a real PLC.
+func TestCoESdoAdrMemberAndElement(t *testing.T) {
+	r := newSdoBufRig(t)
+	r.pulseOn("gmw", 3)
+	r.done("wm", 0)
+	r.pulseOn("gom", 3)
+	r.done("rm", 0)
+	st := envVal(t, r.e, "st").Struct
+	assert.Equal(t, int64(0x0BAD), st["NVALUE"].Int)
+	assert.Equal(t, int64(0), st["NHDR"].Int, "only the addressed member changes")
+
+	r.pulseOn("gew", 3)
+	r.done("we", 0)
+	r.pulseOn("gox", 3)
+	r.done("rx", 0)
+	aw := envVal(t, r.e, "aw").Array
+	assert.Equal(t, int64(0x0F00), aw[2].Int)
+	assert.Equal(t, int64(0), aw[1].Int)
+	assert.Equal(t, int64(0), aw[3].Int)
+
+	// ADR(aBuf[1]) addresses the buffer from element 1 onwards.
+	r.pulseOn("gow", 3)
+	r.done("wr", 0)
+	r.pulseOn("gob", 3)
+	r.done("rb", 0)
+	b := envVal(t, r.e, "aBuf").Array
+	assert.Equal(t, []int64{0x34, 0x12, 0, 0}, []int64{b[1].Int, b[2].Int, b[3].Int, b[4].Int})
+}
+
+func TestEcatPtrRefErrors(t *testing.T) {
+	s := &ecatServices{interp: New()}
+	gone := Value{Kind: ValPointer, Ref: &RefPath{Env: NewEnv(nil), Var: "GONE", Steps: []RefStep{{Member: "M"}}}}
+	_, err := s.readPtrBytes(gone, 1)
+	assert.Error(t, err)
+	assert.Error(t, s.writePtrBytes(gone, []byte{1}))
+	// An element index outside the array falls back to the element path.
+	env := NewEnv(nil)
+	env.Define("ARR", Value{Kind: ValArray, Array: []Value{{Kind: ValInt, IECType: types.KindBYTE}}})
+	bad := Value{Kind: ValPointer, Ref: &RefPath{Env: env, Var: "ARR", Steps: []RefStep{{Index: 5, IsIndex: true}}}}
+	assert.Error(t, s.writePtrBytes(bad, []byte{1}))
 }

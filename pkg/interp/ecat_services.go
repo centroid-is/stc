@@ -250,29 +250,64 @@ func (a *asyncReq) finish(code uint32) {
 
 // ----- pointer buffers -----
 
-// ptrTarget reads the variable a pointer refers to.
-func ptrTarget(v Value) (Value, error) {
+// ptrWindow is the memory a pointer buffer covers: the value seen through
+// it and how to store a rebuilt value back.
+type ptrWindow struct {
+	cur   Value
+	store func(Value) error
+}
+
+// ptrTarget resolves the memory a pointer refers to: a whole variable
+// (PtrEnv/PtrVar), or a struct member or array element (Ref). ADR(arr[i])
+// covers elements i to the end of the array, as on a PLC where the
+// elements are contiguous, so ADR(aBuf[0]) addresses the whole buffer.
+func ptrTarget(v Value) (ptrWindow, error) {
 	if v.Kind != ValPointer {
-		return Value{}, fmt.Errorf("not a pointer")
+		return ptrWindow{}, fmt.Errorf("not a pointer")
+	}
+	if p := v.Ref; p != nil {
+		if n := len(p.Steps); n > 0 && p.Steps[n-1].IsIndex {
+			parent := &RefPath{Env: p.Env, Var: p.Var, Steps: p.Steps[:n-1]}
+			idx := p.Steps[n-1].Index
+			if arr, err := readRef(parent); err == nil && arr.Kind == ValArray &&
+				idx >= arr.ArrayLow && idx < len(arr.Array) {
+				return ptrWindow{
+					cur: Value{Kind: ValArray, Array: arr.Array[idx:]},
+					store: func(out Value) error {
+						full := arr.Clone()
+						copy(full.Array[idx:], out.Array)
+						return writeRef(parent, full)
+					},
+				}, nil
+			}
+		}
+		cur, err := readRef(p)
+		if err != nil {
+			return ptrWindow{}, err
+		}
+		return ptrWindow{cur: cur, store: func(out Value) error { return writeRef(p, out) }}, nil
 	}
 	if v.PtrEnv == nil || v.PtrVar == "" {
-		return Value{}, fmt.Errorf("null pointer")
+		return ptrWindow{}, fmt.Errorf("null pointer")
 	}
 	cur, ok := v.PtrEnv.Get(v.PtrVar)
 	if !ok {
-		return Value{}, fmt.Errorf("dangling pointer to %s", v.PtrVar)
+		return ptrWindow{}, fmt.Errorf("dangling pointer to %s", v.PtrVar)
 	}
-	return cur, nil
+	return ptrWindow{cur: cur, store: func(out Value) error {
+		v.PtrEnv.Set(v.PtrVar, out)
+		return nil
+	}}, nil
 }
 
-// readPtrBytes returns up to n bytes of the variable v points to, in
+// readPtrBytes returns up to n bytes of the memory v points to, in
 // little-endian packed layout (no alignment padding).
 func (s *ecatServices) readPtrBytes(v Value, n int) ([]byte, error) {
-	cur, err := ptrTarget(v)
+	w, err := ptrTarget(v)
 	if err != nil {
 		return nil, err
 	}
-	img, err := s.encodeValue(nil, cur)
+	img, err := s.encodeValue(nil, w.cur)
 	if err != nil {
 		return nil, err
 	}
@@ -285,22 +320,20 @@ func (s *ecatServices) readPtrBytes(v Value, n int) ([]byte, error) {
 	return img, nil
 }
 
-// writePtrBytes overlays data onto the variable v points to: the copy stops
-// at the end of data or of the variable, whichever comes first.
+// writePtrBytes overlays data onto the memory v points to: the copy stops
+// at the end of data or of the target, whichever comes first.
 func (s *ecatServices) writePtrBytes(v Value, data []byte) error {
-	cur, err := ptrTarget(v)
+	w, err := ptrTarget(v)
 	if err != nil {
 		return err
 	}
-	img, err := s.encodeValue(nil, cur)
+	img, err := s.encodeValue(nil, w.cur)
 	if err != nil {
 		return err
 	}
 	copy(img, data)
 	pos := 0
-	out := s.decodeValue(cur.Clone(), img, &pos)
-	v.PtrEnv.Set(v.PtrVar, out)
-	return nil
+	return w.store(s.decodeValue(w.cur.Clone(), img, &pos))
 }
 
 // scalarBytes is the in-memory width of a scalar value.
