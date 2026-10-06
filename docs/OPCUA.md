@@ -40,19 +40,26 @@ REFERENCE symbols are never published (diagnostic OPCUA002).
 
 ## Scan and consistency
 
-- Every PROGRAM runs once per cycle in source order, paced by the wall
-  clock. `--cycle` overrides the cycle; otherwise the project's first task
-  cycle is used, else 10 ms.
+- The scan is the Phase 23 project runtime: every task's PROGRAMs run at
+  their task cycles (priority order within a tick), paced by the monotonic
+  wall clock. `--cycle` overrides the cycle of a single-task project or of
+  the default 10 ms MAIN task; projects with several tasks keep theirs.
+- `--io` attaches the EtherCAT network (`Device N.xml` exports) to the
+  project's TcLinkTo links, and `--persist` restores and saves
+  PERSISTENT/RETAIN variables, exactly as in `stc sim`.
 - OPC UA reads come from one scan image: a struct Variable is composed from
   a single consistent snapshot.
 - OPC UA writes are validated when submitted (unknown symbol, CONSTANT,
   read-only, type and range errors return Bad status codes) and applied
-  between two scans, so a program never sees a value change mid-cycle.
-- `--realtime` runs the scan on a dedicated OS thread with absolute
-  deadlines and reports cycles and overruns on exit.
+  between two Ticks, so a program never sees a value change mid-cycle.
+- `--realtime` pins the scan to a dedicated OS thread and prints
+  `scan: N cycles, M overruns` on exit (text format). Overruns are also
+  counted per task in the final status.
 
-Analysis errors are reported but do not stop the server. A runtime error
-stops the scan; the address space keeps serving the last values and the
+Analysis errors stop serve before the server starts; undeclared library
+types and members are tolerated as warnings and run as zero-output
+auto-stubs. A runtime error stops the scan; the address space keeps
+serving the last values until SIGINT/SIGTERM or `--duration`, and the
 error is printed (`error: scan stopped: ...`).
 
 ## Flags
@@ -60,23 +67,26 @@ error is printed (`error: scan stopped: ...`).
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--project` | | Project or ST sources (alternative to arguments) |
-| `--opcua` | `:4840` | Listen address; the listener binds all interfaces |
+| `--opcua` | empty | Listen address such as `:4840`; the listener binds all interfaces. Empty starts no server |
 | `--security` | `none` | `none` (SecurityPolicy None, Anonymous) or `basic256sha256` (secure only) |
 | `--cert`, `--key` | generated | Server key pair; a self-signed pair is created once in the PKI dir |
 | `--pki-dir` | user cache dir | Where generated certificates live |
-| `--cycle` | task cycle or 10ms | Scan cycle |
-| `--realtime` | false | Dedicated OS thread, deadline pacing, overrun count |
-| `--run-for` | 0 | Stop after a duration; 0 runs until SIGINT/SIGTERM |
+| `--cycle` | task cycles, else 10ms | Override the single task cycle |
+| `--realtime` | false | Dedicated OS thread, cycle and overrun report |
+| `--duration`, `--run-for` | 0 | Stop after a wall-clock duration; 0 runs until SIGINT/SIGTERM |
+| `--io` | | EtherCAT exports to attach (repeatable) |
+| `--persist`, `--persist-interval` | | State file for PERSISTENT/RETAIN, saved every interval (default 10s) and on stop |
 | `-D` | | Preprocessor defines (`STC_SIM` is always defined) |
 
 With `--format json` one line is printed once the server listens:
 
 ```json
-{"endpoint":"opc.tcp://127.0.0.1:4840","namespace_index":4,"node_count":39,"cycle":"10ms","diagnostics":[...]}
+{"endpoint":"opc.tcp://127.0.0.1:4840","namespace_index":4,"node_count":39,"cycle":"1ms","diagnostics":[...]}
 ```
 
-Runtime events (`scan_stopped`, `write_error`) are then printed to stderr
-as `{"event": "...", "error": "..."}`.
+`cycle` is the project's base tick. Runtime events (`scan_stopped`,
+`write_error`) are then printed to stderr as `{"event": "...", "error": "..."}`,
+and on stop the final project status object follows on stdout.
 
 ## Security
 

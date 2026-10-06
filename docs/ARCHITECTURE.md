@@ -182,6 +182,33 @@ The codec decodes by declared type and slot width and never reads past a slot. B
 
 Device models for specific terminals and drives arrive in Phases 25 and 26 through the `Registry`. Scenario scripting on top of the fault API arrives in Phase 27.
 
+### Project runtime (pkg/interp)
+
+`LoadProject(ProjectSpec)` builds one `Runtime` (one interpreter, all
+files and libraries instantiated once) and binds every task of the spec to
+the engines of its PROGRAMs. A spec comes from `cmd/stc`'s loader: a
+`.tsproj`/`.plcproj` gives its tasks (cycle, priority, programs); `.st`
+files get one 10 ms MAIN task.
+
+- **Scheduling.** The base tick is the GCD of the task cycles. `Tick`
+  advances the virtual clock by one base tick and runs every due task in
+  priority order (lower number first, then task name), under the
+  Runtime mutex, so it is serialised with `Get`/`Set` (OPC UA, `--get`).
+  `Advance(d)` runs whole base ticks.
+- **I/O.** `AT %I*/%Q*` wildcards get slots in a flat process image after
+  the explicit addresses; `SetIOBinder` attaches an EtherCAT network. Values
+  are decoded and encoded by declared type.
+- **Free-running.** `Run(ctx, RunOpts)` ticks once per base tick of a
+  monotonic `WallClock`, sleeping (never busy-waiting) until each tick is
+  due. A late tick counts one overrun per task due in the missed window and
+  realigns instead of bursting catch-up ticks. `OnTick` runs on the scan
+  goroutine after each tick; `stc serve` applies queued OPC UA writes and
+  periodic `--persist` saves there.
+- **State file.** `SaveState`/`LoadState` persist PERSISTENT and RETAIN
+  variables as `{"version": 1, "values": {"<GVL>.<path>": <json>}}` with
+  sorted keys. Unknown or mistyped entries are warnings; another version
+  is an error and nothing is applied.
+
 ### Config (pkg/project)
 
 Project configuration loaded from `stc.toml`:

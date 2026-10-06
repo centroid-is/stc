@@ -32,6 +32,27 @@ engine.Tick(10 * time.Millisecond)
 
 On every `Tick`, the network steps first and linked inputs are copied into their variables before the program body runs. Linked outputs are copied into the output image after it runs. Tests read and write the images through `net.Images().Get(master)` and `topo.Slot(path)`.
 
+## Run a whole project with `--io`
+
+`stc sim` and `stc serve` attach the network to a project from the command
+line. The TcLinkTo links of the project's GVLs and PROGRAMs are resolved
+against the exports, with member links resolved through struct types
+declared in the project or in its resolved libraries (ST301's ECT terminal
+structs live in SVNCoreComponents). Any unresolved link fails the load
+with every diagnostic printed.
+
+```bash
+stc sim "ST301 solution.tsproj" --io "Device 1.xml" --io "Device 2.xml" \
+    --io "Device 3.xml" --io "Device 4.xml" --cycles 1000 --format json
+stc serve "ST301 solution.tsproj" --io "Device 1.xml" ... --opcua :4840 --realtime
+```
+
+Linked and AT-bound variables are decoded by their declared type, not by
+the slot width alone: an `AT %I*` INT whose two slot bytes are `FB FF`
+reads -5 (0xFFFB), a REAL slot is IEEE 754 single precision, an enum uses
+its base type, and AT members of a struct get their own slots. Outputs are
+encoded the same way, so -5 written to an INT output becomes `FB FF`.
+
 ## Healthy defaults and faults
 
 Without any device model, the network reports a healthy bus. Every slave is in OP with a clear working counter, `SlaveCount` matches the export, and `AmsNetId` and each slave's `AdsAddr` are filled in. `SetMasterNetID` changes a master's AmsNetId.

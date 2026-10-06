@@ -189,7 +189,27 @@ Cycle    Time         OUTPUT1
 
 **Exit codes**: 0 on success, 1 on error.
 
-**TwinCAT projects**: `stc sim <x.tsproj|x.plcproj>` runs the program called by the first task (falling back to the first PROGRAM). `--dt` defaults to that task's cycle time. User FBs and methods from other project files are not registered yet (Phase 23).
+**Project mode**: `stc sim <x.tsproj|x.plcproj|files.st...>` (or `--project`) loads the whole project and runs every task's PROGRAMs at their task cycles; `.st` files without tasks get a 10 ms MAIN task. Project mode flags:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--project` | | Project or ST sources (alternative to arguments) |
+| `--cycles` | `100` | Deterministic mode: run N base ticks of virtual time |
+| `--realtime` | false | Free-running mode paced by the monotonic wall clock |
+| `--duration` | | Wall time for `--realtime` (0 = until SIGINT/SIGTERM) |
+| `--io` | | `Device N.xml` EtherCAT export attached to the TcLinkTo links (repeatable) |
+| `--persist` | | JSON state file for PERSISTENT/RETAIN variables: loaded at start, saved periodically and on stop |
+| `--persist-interval` | `10s` | Wall time between `--persist` saves in free-running mode |
+| `--set PATH=JSON` | | Set a variable after loading (overrides persisted values) |
+| `--get PATH` | | Print a variable after the run |
+
+Deterministic vs realtime: without `--realtime` the run is a pure function of the inputs (virtual clock, no wall-clock reads), so two runs print identical JSON. `--realtime` sleeps to the wall clock and counts a task overrun whenever a tick finishes after the next one was due.
+
+**Output (JSON, project mode)**: `cycles`, `sim_time_ns`, `tasks[{name, cycle_ns, priority, programs, runs, overruns}]`, `get`, `diagnostics`, `warnings`.
+
+```bash
+stc sim "ST301 solution.tsproj" --io "Device 1.xml" --io "Device 2.xml" --cycles 1000 --get ECT_Diag.Device_1_SlaveCount --format json
+```
 
 ---
 
@@ -515,17 +535,26 @@ A load or read failure prints `{"error": "..."}` in JSON mode and exits 1.
 
 ### `stc serve`
 
-Run a project's scan and serve its OPC.UA.DA symbols over OPC UA with the
-TwinCAT TF6100 address space. See [OPCUA.md](OPCUA.md).
+Run a whole project free-running against the wall clock (the `stc sim`
+project runtime) and, with `--opcua`, serve its OPC.UA.DA symbols over
+OPC UA with the TwinCAT TF6100 address space. See [OPCUA.md](OPCUA.md).
 
 ```bash
-stc serve <project.tsproj|project.plcproj|file.st|dir ...> [--opcua :4840] [--security none|basic256sha256]
-          [--cert FILE --key FILE] [--pki-dir DIR] [--cycle 10ms] [--realtime] [--run-for 0] [-D SYM]
+stc serve <project.tsproj|project.plcproj|file.st|dir ...> [--io Device1.xml ...] [--persist state.json]
+          [--persist-interval 10s] [--cycle 10ms] [--realtime] [--duration 0 | --run-for 0]
+          [--opcua :4840] [--security none|basic256sha256] [--cert FILE --key FILE] [--pki-dir DIR] [-D SYM]
 ```
 
-Exits 0 on SIGINT/SIGTERM or after `--run-for`; exits 1 when the project
-cannot be loaded or instantiated, a flag is invalid, or the listener cannot
-start (for example, the port is in use).
+Without `--opcua` no server is started. Overruns are counted per task. On
+stop the final status (tasks, runs, overruns, `sim_time_ns`, diagnostics,
+warnings) is printed; `--format json` prints it as one object, preceded by
+the OPC UA start-up object when `--opcua` is given.
+
+Exits 0 on SIGINT/SIGTERM or after `--duration`; exits 1 when the project
+cannot be loaded or instantiated, has analysis errors, `--io` links do not
+resolve, a flag is invalid, the listener cannot start, or (without
+`--opcua`) the scan fails. With `--opcua` a scan error is reported and the
+server keeps serving the last values until stopped.
 
 ## Exit Code Summary
 
