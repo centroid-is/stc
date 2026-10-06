@@ -9,7 +9,6 @@ import (
 	"github.com/centroid-is/stc/pkg/diag"
 )
 
-
 func readInfo(t *testing.T, path string) *PlcprojInfo {
 	t.Helper()
 	info, _, err := ReadPlcproj(path)
