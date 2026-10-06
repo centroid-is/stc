@@ -29,11 +29,32 @@ VAR_INPUT
 END_VAR
 F_Int := i;
 END_FUNCTION
+FUNCTION F_W : INT
+VAR_INPUT
+	w : WORD;
+END_VAR
+VAR_OUTPUT
+	o : E_T;
+END_VAR
+F_W := 0;
+END_FUNCTION
+FUNCTION_BLOCK FB_E
+VAR_INPUT
+	i : INT;
+	w : WORD;
+END_VAR
+VAR_OUTPUT
+	o : E_T;
+END_VAR
+END_FUNCTION_BLOCK
+{attribute 'qualified_only'}
+TYPE E_Q2 : (q1, q9); END_TYPE
 `
 
 const enumVars = `VAR
 	x : E_X; q : E_Q; e : E_S; e2 : E_S2; f : E_T; g : E_U;
 	n : INT; d : DINT; u : UINT; b : BOOL; s : STRING; r : REAL;
+	fbe : FB_E;
 END_VAR
 `
 
@@ -173,7 +194,7 @@ END_PROGRAM
 		require.Len(t, errs, 1)
 		assert.Equal(t, CodeTypeMismatch, errs[0].Code)
 		// Arithmetic between a non-strict enum and REAL follows INT.
-		assert.Empty(t, enumErrors(t, "r := f * 2.0;"))
+		assert.Empty(t, enumErrors(t, "r := f * r;"))
 	})
 
 	t.Run("TO_STRING", func(t *testing.T) {
@@ -196,6 +217,51 @@ END_PROGRAM
 			{"main.st", "PROGRAM P\nVAR\n\te : E_S := E_S.sb;\n\tq : E_Q := E_Q.q2;\nEND_VAR\ne := e; q := q;\nEND_PROGRAM\n"},
 		})
 		assert.Empty(t, errorsOf(ds))
+	})
+
+	t.Run("enum arguments and outputs", func(t *testing.T) {
+		codes := func(body string) []string {
+			var out []string
+			for _, d := range enumErrors(t, body) {
+				out = append(out, d.Code)
+			}
+			return out
+		}
+		// FB call statements
+		assert.Empty(t, codes("fbe(i := f, o => n);"))
+		assert.Equal(t, []string{CodeEnumRule}, codes("fbe(i := e);"))
+		assert.Equal(t, []string{CodeWrongArgType}, codes("fbe(w := f);"))
+		assert.Equal(t, []string{CodeEnumRule}, codes("fbe(o => e);"))
+		// FUNCTION inputs and outputs
+		assert.Empty(t, codes("n := F_W(w := WORD#1, o => d);"))
+		assert.Equal(t, []string{CodeWrongArgType}, codes("n := F_W(f);"))
+		assert.Equal(t, []string{CodeEnumRule}, codes("n := F_W(w := WORD#1, o => e);"))
+		assert.Equal(t, []string{CodeWrongArgType}, codes("n := F_W(w := WORD#1, o => s);"))
+		// Built-ins: a non-strict enum is its base type, a strict enum only
+		// fits an ANY parameter.
+		assert.Empty(t, codes("d := LIMIT(0, f, 10);"))
+		assert.Equal(t, []string{CodeEnumRule}, codes("d := LIMIT(0, e, 10);"))
+		assert.Empty(t, codes("e := SEL(b, e, E_S.sa);"))
+	})
+
+	t.Run("qualified_only value in two enums", func(t *testing.T) {
+		errs := enumErrors(t, "q := q1;")
+		require.Len(t, errs, 1)
+		assert.Contains(t, errs[0].Message, "E_Q.q1")
+		errs = enumErrors(t, "n := q9;")
+		require.Len(t, errs, 1)
+		assert.Contains(t, errs[0].Message, "E_Q2.q9")
+	})
+
+	t.Run("invalid case label", func(t *testing.T) {
+		errs := enumErrors(t, "CASE x OF nothing: n := 1; END_CASE")
+		require.Len(t, errs, 1)
+		assert.Equal(t, CodeUndeclared, errs[0].Code)
+	})
+
+	t.Run("enum base default", func(t *testing.T) {
+		assert.Equal(t, types.TypeINT, enumBase(&types.EnumType{Name: "E"}))
+		assert.Equal(t, types.KindUINT, enumBase(&types.EnumType{Name: "E", BaseType: types.KindUINT}).Kind())
 	})
 
 	t.Run("isConversionBuiltin", func(t *testing.T) {

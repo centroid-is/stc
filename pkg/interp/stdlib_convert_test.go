@@ -327,3 +327,46 @@ func TestTIME_TO_LREAL(t *testing.T) {
 		}
 	}
 }
+
+func TestTO_TypeConversions(t *testing.T) {
+	cases := []struct {
+		name string
+		in   Value
+		want Value
+	}{
+		{"TO_INT", IntValue(7), Value{Kind: ValInt, Int: 7, IECType: types.KindINT}},
+		{"TO_UINT", BoolValue(true), Value{Kind: ValInt, Int: 1, IECType: types.KindUINT}},
+		{"TO_DINT", BoolValue(false), Value{Kind: ValInt, Int: 0, IECType: types.KindDINT}},
+		{"TO_DINT", RealValue(2.5), Value{Kind: ValInt, Int: 2, IECType: types.KindDINT}},
+		{"TO_WORD", TimeValue(1500 * time.Millisecond), Value{Kind: ValInt, Int: 1500, IECType: types.KindWORD}},
+		{"TO_LINT", StringValue(" 42 "), Value{Kind: ValInt, Int: 42, IECType: types.KindLINT}},
+		{"TO_REAL", IntValue(3), Value{Kind: ValReal, Real: 3, IECType: types.KindREAL}},
+		{"TO_LREAL", TimeValue(250 * time.Millisecond), Value{Kind: ValReal, Real: 250, IECType: types.KindLREAL}},
+		{"TO_LREAL", StringValue("1.5"), Value{Kind: ValReal, Real: 1.5, IECType: types.KindLREAL}},
+		{"TO_INT", Value{Kind: ValInt, Int: 2, IECType: types.KindUINT, Enum: "E_S"}, Value{Kind: ValInt, Int: 2, IECType: types.KindINT}},
+	}
+	for _, c := range cases {
+		got, err := StdlibFunctions[c.name]([]Value{c.in})
+		if err != nil {
+			t.Fatalf("%s(%v): %v", c.name, c.in, err)
+		}
+		if got.Kind != c.want.Kind || got.Int != c.want.Int || got.Real != c.want.Real || got.IECType != c.want.IECType || got.Enum != "" {
+			t.Errorf("%s(%v) = %#v, want %#v", c.name, c.in, got, c.want)
+		}
+	}
+
+	for _, bad := range []struct {
+		name string
+		args []Value
+	}{
+		{"TO_INT", nil},
+		{"TO_INT", []Value{StringValue("x")}},
+		{"TO_REAL", []Value{StringValue("x")}},
+		{"TO_INT", []Value{{Kind: ValArray}}},
+		{"TO_REAL", []Value{{Kind: ValArray}}},
+	} {
+		if _, err := StdlibFunctions[bad.name](bad.args); err == nil {
+			t.Errorf("%s(%v): expected an error", bad.name, bad.args)
+		}
+	}
+}

@@ -107,6 +107,10 @@ func (c *Checker) checkInputArg(p types.Parameter, a *ast.CallArg, index int) {
 	if argType == types.Invalid || p.Type == nil || p.Type == types.Invalid {
 		return
 	}
+	if involvesEnum(argType, derefRef(p.Type)) {
+		c.checkEnumArg(a.Value, argType, derefRef(p.Type), func() { c.reportInputArg(p, a, index, argType) })
+		return
+	}
 	if ref, isRef := p.Type.(*types.ReferenceType); isRef {
 		// A REFERENCE TO T input binds a T variable (or another reference
 		// to T) implicitly; no widening applies.
@@ -119,6 +123,11 @@ func (c *Checker) checkInputArg(p types.Parameter, a *ast.CallArg, index int) {
 	if isLiteralExpr(a.Value) && isLiteralCompatible(argType.Kind(), p.Type.Kind()) {
 		return
 	}
+	c.reportInputArg(p, a, index, argType)
+}
+
+// reportInputArg reports SEMA021 for an input argument of the wrong type.
+func (c *Checker) reportInputArg(p types.Parameter, a *ast.CallArg, index int, argType types.Type) {
 	pos := astPosToSource(a.Value.Span().Start)
 	if a.Name == nil {
 		c.diags.Errorf(pos, CodeWrongArgType,
@@ -145,9 +154,17 @@ func (c *Checker) checkOutputBinding(p types.Parameter, target ast.Expr) {
 	if t == types.Invalid || p.Type == nil || p.Type == types.Invalid {
 		return
 	}
+	if involvesEnum(p.Type, t) {
+		c.checkEnumArg(target, p.Type, t, func() { c.reportOutputBinding(p, target, t) })
+		return
+	}
 	if t.Equal(p.Type) || types.CanWiden(p.Type.Kind(), t.Kind()) {
 		return
 	}
+	c.reportOutputBinding(p, target, t)
+}
+
+func (c *Checker) reportOutputBinding(p types.Parameter, target ast.Expr, t types.Type) {
 	c.diags.Errorf(astPosToSource(target.Span().Start), CodeWrongArgType,
 		"cannot bind output %q (%s) to %s", p.Name, p.Type, t)
 }

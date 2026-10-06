@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/centroid-is/stc/pkg/types"
@@ -218,6 +219,24 @@ func registerConvertFunctions() {
 		return Value{Kind: ValString, Str: anyToString(args[0]), IECType: types.KindSTRING}, nil
 	}
 
+	// TO_<int>, TO_<bits>, TO_REAL, TO_LREAL: overloaded conversions of one
+	// argument (enum values arrive as their ordinal).
+	for _, k := range []types.TypeKind{
+		types.KindSINT, types.KindINT, types.KindDINT, types.KindLINT,
+		types.KindUSINT, types.KindUINT, types.KindUDINT, types.KindULINT,
+		types.KindBYTE, types.KindWORD, types.KindDWORD, types.KindLWORD,
+		types.KindREAL, types.KindLREAL,
+	} {
+		kind := k
+		name := "TO_" + kind.String()
+		StdlibFunctions[name] = func(args []Value) (Value, error) {
+			if len(args) != 1 {
+				return Value{}, &RuntimeError{Msg: name + " requires 1 argument"}
+			}
+			return convertTo(name, kind, args[0])
+		}
+	}
+
 	// STRING_TO_REAL
 	StdlibFunctions["STRING_TO_REAL"] = func(args []Value) (Value, error) {
 		if len(args) < 1 {
@@ -271,4 +290,47 @@ func anyToString(v Value) string {
 	default:
 		return v.String()
 	}
+}
+
+// convertTo converts v to the integer, bit-string or real kind for the
+// TO_<type> functions. Reals round half to even into integers, BOOL gives
+// 0 or 1, TIME gives milliseconds and a STRING must hold a number.
+func convertTo(name string, kind types.TypeKind, v Value) (Value, error) {
+	if types.IsAnyReal(kind) {
+		switch v.Kind {
+		case ValInt, ValReal, ValBool:
+			return Value{Kind: ValReal, Real: toFloat(v), IECType: kind}, nil
+		case ValTime:
+			return Value{Kind: ValReal, Real: float64(v.Time) / float64(time.Millisecond), IECType: kind}, nil
+		case ValString:
+			f, err := strconv.ParseFloat(strings.TrimSpace(v.Str), 64)
+			if err != nil {
+				return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: invalid number %q", name, v.Str)}
+			}
+			return Value{Kind: ValReal, Real: f, IECType: kind}, nil
+		}
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: cannot convert %s", name, v.Kind)}
+	}
+	var n int64
+	switch v.Kind {
+	case ValInt:
+		n = v.Int
+	case ValBool:
+		if v.Bool {
+			n = 1
+		}
+	case ValReal:
+		n = int64(math.RoundToEven(v.Real))
+	case ValTime:
+		n = v.Time.Milliseconds()
+	case ValString:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(v.Str), 10, 64)
+		if err != nil {
+			return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: invalid integer %q", name, v.Str)}
+		}
+		n = parsed
+	default:
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: cannot convert %s", name, v.Kind)}
+	}
+	return Value{Kind: ValInt, Int: n, IECType: kind}, nil
 }

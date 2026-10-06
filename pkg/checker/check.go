@@ -256,6 +256,11 @@ func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
 		return
 	}
 
+	if involvesEnum(valueType, targetType) {
+		c.checkEnumAssign(s, valueType, targetType)
+		return
+	}
+
 	// Check type compatibility: value must widen to target
 	if !targetType.Equal(valueType) {
 		// Integer literals (default DINT) are compatible with any integer type
@@ -371,18 +376,10 @@ func (c *Checker) checkCaseStmt(s *ast.CaseStmt) {
 		for _, label := range branch.Labels {
 			switch l := label.(type) {
 			case *ast.CaseLabelValue:
-				labelType := c.checkExpr(l.Value)
-				if exprType != types.Invalid && labelType != types.Invalid {
-					if _, ok := types.CommonType(exprType.Kind(), labelType.Kind()); !ok {
-						pos := astPosToSource(l.Span().Start)
-						c.diags.Errorf(pos, CodeTypeMismatch,
-							"case label type %s incompatible with selector type %s",
-							labelType, exprType)
-					}
-				}
+				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Value))
 			case *ast.CaseLabelRange:
-				c.checkExpr(l.Low)
-				c.checkExpr(l.High)
+				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Low))
+				c.caseLabelCompatible(l, exprType, c.checkExpr(l.High))
 			}
 		}
 		for _, stmt := range branch.Body {
@@ -468,6 +465,18 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 
 		if arg.Value != nil {
 			argType := c.checkExpr(arg.Value)
+			if argType != types.Invalid && paramType != nil && involvesEnum(argType, paramType) {
+				from, to := argType, paramType
+				if arg.IsOutput {
+					from, to = paramType, argType
+				}
+				c.checkEnumArg(arg.Value, from, to, func() {
+					c.diags.Errorf(astPosToSource(arg.Value.Span().Start), CodeWrongArgType,
+						"cannot pass %s as %s parameter %q (expected %s)",
+						argType, paramDirStr(arg.IsOutput), arg.Name.Name, paramType)
+				})
+				continue
+			}
 			if argType != types.Invalid && paramType != nil {
 				if !paramType.Equal(argType) && !types.CanWiden(argType.Kind(), paramType.Kind()) {
 					// Allow literal compatibility (e.g., integer literal 100 passed as INT param)
@@ -529,7 +538,10 @@ func (c *Checker) checkIdent(e *ast.Ident) types.Type {
 	}
 	sym := c.currentScope.Lookup(e.Name)
 	if sym == nil {
-		c.reportUndeclared(astPosToSource(e.Span().Start), e.Name)
+		pos := astPosToSource(e.Span().Start)
+		if !c.reportQualifiedEnumValue(pos, e.Name) {
+			c.reportUndeclared(pos, e.Name)
+		}
 		return types.Invalid
 	}
 	sym.MarkUsed()
@@ -640,6 +652,13 @@ func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
 	}
 
 	op := strings.ToUpper(e.Op.Text)
+	left, right, result, done, ok := c.checkEnumBinary(e, op, left, right)
+	if !ok {
+		return types.Invalid
+	}
+	if done {
+		return result
+	}
 	switch {
 	case isArithmeticOp(op):
 		common, ok := types.CommonType(left.Kind(), right.Kind())
@@ -763,10 +782,23 @@ func (c *Checker) checkBuiltinCall(e *ast.CallExpr, fnType *types.FunctionType) 
 		return types.Invalid
 	}
 
-	// Type-check arguments
+	// Type-check arguments. A conversion function takes any enum as its
+	// base integer type; other built-ins take only non-strict enums that
+	// way, and a strict enum passed to a typed parameter is SEMA036.
+	conversion := isConversionBuiltin(fnType.Name)
 	argTypes := make([]types.Type, len(e.Args))
 	for i, arg := range e.Args {
 		argTypes[i] = c.checkExpr(arg)
+		if et := asEnum(argTypes[i]); et != nil {
+			switch {
+			case conversion || !et.Strict:
+				argTypes[i] = enumBase(et)
+			case fnType.Params[i].Type != nil:
+				c.diags.Errorf(astPosToSource(arg.Span().Start), CodeEnumRule,
+					"strict enum %s passed to %s; use an explicit conversion", et.Name, fnType.Name)
+				return types.Invalid
+			}
+		}
 	}
 
 	// Use candidate resolution for generic functions
