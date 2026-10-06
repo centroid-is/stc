@@ -1,130 +1,103 @@
 package vendor
 
 import (
+	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/pipeline"
+	"github.com/centroid-is/stc/pkg/twincat"
 )
 
-func TestParseTcPOU(t *testing.T) {
-	xml := `<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
-  <POU Name="FB_MyBlock" Id="{12345}" SpecialFunc="None">
-    <Declaration><![CDATA[
-FUNCTION_BLOCK FB_MyBlock
-VAR_INPUT
-    bExecute : BOOL;
-    nValue   : INT;
-END_VAR
-VAR_OUTPUT
-    bDone  : BOOL;
-    bError : BOOL;
-END_VAR
-    ]]></Declaration>
-    <Implementation>
-      <ST><![CDATA[
-IF bExecute THEN
-    bDone := TRUE;
-END_IF;
-      ]]></ST>
-    </Implementation>
-  </POU>
-</TcPlcObject>`
+const demoPlcproj = "../twincat/testdata/sln/Demo/Demo/Demo.plcproj"
 
-	pou, err := ParseTcPOU(strings.NewReader(xml))
+func TestExtractProjectDemo(t *testing.T) {
+	stubs, ds, err := ExtractProject(demoPlcproj)
 	if err != nil {
-		t.Fatalf("ParseTcPOU failed: %v", err)
+		t.Fatal(err)
 	}
-
-	if pou.Name != "FB_MyBlock" {
-		t.Errorf("expected Name 'FB_MyBlock', got %q", pou.Name)
+	var names []string
+	for _, s := range stubs {
+		names = append(names, s.Name)
 	}
-
-	if !strings.Contains(pou.Declaration, "FUNCTION_BLOCK FB_MyBlock") {
-		t.Errorf("declaration should contain FUNCTION_BLOCK FB_MyBlock, got %q", pou.Declaration)
+	want := []string{"GVL_Main", "GVL_Quoted", "ST_Point", "E_Mode", "MAIN", "FB_Motor", "I_Motor", "F_Add"}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("stubs %v", names)
 	}
-
-	if !strings.Contains(pou.Declaration, "bExecute : BOOL") {
-		t.Errorf("declaration should contain 'bExecute : BOOL', got %q", pou.Declaration)
-	}
-
-	// Implementation should be captured but not used for stubs
-	if !strings.Contains(pou.Implementation.ST, "bDone := TRUE") {
-		t.Errorf("implementation should contain body, got %q", pou.Implementation.ST)
-	}
-}
-
-func TestExtractStub(t *testing.T) {
-	pou := &TcPOU{
-		Name: "FB_Test",
-		Declaration: `FUNCTION_BLOCK FB_Test
-VAR_INPUT
-    x : INT;
-END_VAR
-VAR_OUTPUT
-    y : INT;
-END_VAR`,
-		Implementation: TcImplementation{ST: "y := x * 2;"},
-	}
-
-	stub := ExtractStub(pou)
-	if !strings.Contains(stub, "FUNCTION_BLOCK FB_Test") {
-		t.Errorf("stub should contain declaration, got %q", stub)
-	}
-	if strings.Contains(stub, "y := x * 2") {
-		t.Error("stub should NOT contain implementation body")
-	}
-}
-
-func TestExtractStubEmpty(t *testing.T) {
-	pou := &TcPOU{
-		Name:        "Empty",
-		Declaration: "",
-	}
-	stub := ExtractStub(pou)
-	if stub != "" {
-		t.Errorf("expected empty stub for empty declaration, got %q", stub)
-	}
-}
-
-func TestParsePlcProj(t *testing.T) {
-	xml := `<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <ItemGroup>
-    <Compile Include="POUs\FB_Motor.TcPOU" />
-    <Compile Include="POUs\FB_Conveyor.TcPOU" />
-    <Compile Include="GVLs\GVL_IO.TcGVL" />
-    <Compile Include="DUTs\ST_Config.TcDUT" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="POUs\FB_Safety.TcPOU" />
-  </ItemGroup>
-</Project>`
-
-	pouFiles, err := ParsePlcProj(strings.NewReader(xml))
-	if err != nil {
-		t.Fatalf("ParsePlcProj failed: %v", err)
-	}
-
-	if len(pouFiles) != 3 {
-		t.Fatalf("expected 3 .TcPOU files, got %d: %v", len(pouFiles), pouFiles)
-	}
-
-	expected := []string{
-		`POUs\FB_Motor.TcPOU`,
-		`POUs\FB_Conveyor.TcPOU`,
-		`POUs\FB_Safety.TcPOU`,
-	}
-
-	for i, exp := range expected {
-		if pouFiles[i] != exp {
-			t.Errorf("pouFiles[%d]: expected %q, got %q", i, exp, pouFiles[i])
+	unknown := 0
+	for _, d := range ds {
+		if d.Code == twincat.CodeUnknownItem {
+			unknown++
+			if !strings.Contains(d.Message, "Screen.TcVIS") {
+				t.Errorf("VEND021 %v", d)
+			}
 		}
 	}
+	if unknown != 1 {
+		t.Errorf("want one VEND021, got %v", ds)
+	}
+
+	fb := stubs[5]
+	if fb.Kind != twincat.KindPOU || fb.RelPath != "POUs/FB_Motor.TcPOU" {
+		t.Errorf("FB_Motor %+v", fb.RelPath)
+	}
+	for _, s := range []string{"END_FUNCTION_BLOCK", "PROPERTY PUBLIC Speed : INT", "GET", "SET", "END_PROPERTY"} {
+		if !strings.Contains(fb.Text, s) {
+			t.Errorf("FB_Motor stub lacks %q:\n%s", s, fb.Text)
+		}
+	}
+	methods := regexp.MustCompile(`(?m)^METHOD\b`).FindAllStringIndex(fb.Text, -1)
+	ends := regexp.MustCompile(`(?m)^END_METHOD\b`).FindAllStringIndex(fb.Text, -1)
+	if len(methods) != 2 || len(ends) != 2 || methods[0][0] > ends[0][0] || methods[1][0] > ends[1][0] {
+		t.Errorf("method headers %v ends %v:\n%s", methods, ends, fb.Text)
+	}
+	for _, body := range []string{"startCount := startCount + 1", "running := enable", "speedSet := Speed", "wasRunning := running"} {
+		if strings.Contains(fb.Text, body) {
+			t.Errorf("stub keeps body statement %q", body)
+		}
+	}
+
+	if stubs[0].Kind != twincat.KindGVL || !strings.Contains(stubs[0].Text, "VAR_GLOBAL") {
+		t.Errorf("GVL stub %+v", stubs[0])
+	}
+	if stubs[2].Kind != twincat.KindDUT || !strings.Contains(stubs[2].Text, "TYPE ST_Point") {
+		t.Errorf("DUT stub %+v", stubs[2])
+	}
+
+	for _, s := range stubs {
+		r := pipeline.Parse(s.Name+".st", s.Text, nil)
+		for _, d := range r.Diags {
+			if d.Severity == diag.Error {
+				t.Errorf("%s: %v", s.Name, d)
+			}
+		}
+	}
+
+	again, ds2, _ := ExtractProject(demoPlcproj)
+	if !reflect.DeepEqual(stubs, again) || !reflect.DeepEqual(ds, ds2) {
+		t.Error("two extractions differ")
+	}
 }
 
-func TestParseTcPOUInvalid(t *testing.T) {
-	_, err := ParseTcPOU(strings.NewReader("not xml"))
-	if err == nil {
-		t.Error("expected error for invalid XML")
+func TestExtractProjectErrors(t *testing.T) {
+	if _, _, err := ExtractProject("../twincat/testdata/nope.plcproj"); err == nil {
+		t.Error("want error for missing plcproj")
+	}
+	dir := t.TempDir()
+	writeFileT(t, dir+"/P.plcproj", `<Project><ItemGroup><Compile Include="Bad.TcPOU" /></ItemGroup></Project>`)
+	writeFileT(t, dir+"/Bad.TcPOU", "<TcPlcObject><POU")
+	stubs, ds, err := ExtractProject(dir + "/P.plcproj")
+	if err != nil || len(stubs) != 0 || len(ds) != 1 || ds[0].Code != twincat.CodeBadXML {
+		t.Errorf("stubs %v diags %v err %v", stubs, ds, err)
+	}
+}
+
+func writeFileT(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

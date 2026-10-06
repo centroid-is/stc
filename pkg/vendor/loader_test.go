@@ -163,3 +163,26 @@ func TestSymbol_IsLibrary_DefaultsFalse(t *testing.T) {
 	}
 	assert.False(t, sym.IsLibrary)
 }
+
+func TestLoadLibraries_SortedKeys(t *testing.T) {
+	dir := t.TempDir()
+	keys := []string{"zeta", "alpha", "mu", "beta", "omega", "delta", "kappa", "gamma"}
+	paths := map[string]string{}
+	for _, k := range keys {
+		d := filepath.Join(dir, k)
+		require.NoError(t, os.MkdirAll(d, 0o755))
+		src := "FUNCTION_BLOCK FB_" + k + "\nEND_FUNCTION_BLOCK\n"
+		require.NoError(t, os.WriteFile(filepath.Join(d, k+".st"), []byte(src), 0o644))
+		paths[k] = k
+	}
+	cfg := &project.Config{Build: project.BuildConfig{LibraryPaths: paths}}
+	want := []string{"alpha", "beta", "delta", "gamma", "kappa", "mu", "omega", "zeta"}
+	for run := 0; run < 5; run++ {
+		files, err := LoadLibraries(cfg, dir)
+		require.NoError(t, err)
+		require.Len(t, files, len(want))
+		for i, f := range files {
+			assert.Equal(t, want[i]+".st", filepath.Base(f.Span().Start.File))
+		}
+	}
+}
