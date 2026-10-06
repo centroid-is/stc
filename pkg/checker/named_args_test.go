@@ -395,3 +395,14 @@ func TestInOutBinding(t *testing.T) {
 		assert.Contains(t, ds[0].Message, `VAR_IN_OUT "io" of FB_IO must be bound to a variable`)
 	})
 }
+
+// TestPositionalAfterOutput covers review LO-01: a `=>` binding does not
+// take a positional slot, so a positional argument after it binds the next
+// input.
+func TestPositionalAfterOutput(t *testing.T) {
+	assert.Empty(t, runNamed(t, "n := F_Out(a := 1, q => flag, k);"))
+	assert.Empty(t, runNamed(t, "n := F_Out(1, q => flag, k, cnt => big);"))
+	ds := runNamed(t, "n := F_Out(1, q => flag, k, 3);")
+	require.Len(t, ds, 1, "%v", ds)
+	assert.Equal(t, CodeWrongArgCount, ds[0].Code)
+}

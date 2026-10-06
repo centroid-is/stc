@@ -40,9 +40,9 @@ type boundCall struct {
 // callee, in declaration order.
 //
 // pos are the leading positional arguments; named holds the rest in source
-// order. A positional entry (Name nil) binds the slot at its index in the
-// full argument list, counting VAR_INPUT and VAR_IN_OUT parameters in
-// declaration order (ruling A1). `name := v` binds an input or in-out by
+// order. A positional entry (Name nil) binds the slot at its index among
+// the non-output arguments (`=>` bindings do not take a slot), counting
+// VAR_INPUT and VAR_IN_OUT parameters in declaration order (ruling A1). `name := v` binds an input or in-out by
 // case-insensitive name, `name => target` binds an output. An empty argument
 // (`name := ,`) leaves the parameter at its default. Arguments are evaluated
 // in the caller's env; parameters without an argument and all other
@@ -83,7 +83,11 @@ func (interp *Interpreter) bindArgs(env, callee *Env, blocks []*ast.VarBlock, po
 		return nil
 	}
 
-	for i, a := range all {
+	i := -1 // index among the non-output arguments
+	for _, a := range all {
+		if !a.IsOutput {
+			i++
+		}
 		if a.IsOutput {
 			param, ok := outputs[strings.ToUpper(a.Name.Name)]
 			if !ok {

@@ -22,7 +22,7 @@ func (c *Checker) checkCallArgs(e *ast.CallExpr, fn *types.FunctionType) bool {
 
 // bindCallArgs binds a call's argument list in source order (ruling A1):
 //   - a positional argument (no name) binds to the input or in-out at its
-//     index in the full list, wherever it appears;
+//     index among the non-output arguments, wherever it appears;
 //   - name := v binds to the input or in-out called name (case-insensitive);
 //   - name => target binds the VAR_OUTPUT called name to a variable.
 //
@@ -50,7 +50,11 @@ func (c *Checker) bindCallArgs(call ast.Node, fn *types.FunctionType, args []*as
 
 	bound := make(map[string]bool)
 	inOutBound := make(map[string]bool)
-	for i, a := range args {
+	i := -1 // index among the non-output arguments
+	for _, a := range args {
+		if !a.IsOutput {
+			i++
+		}
 		var p types.Parameter
 		var found bool
 		switch {

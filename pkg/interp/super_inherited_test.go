@@ -58,3 +58,21 @@ END_PROGRAM
 	assert.Equal(t, int64(1), progVar(t, eng, "got").Int, "property getter")
 	assert.Equal(t, int64(15), fbOutput(t, eng.env, "c", "viaProp").Int, "property setter")
 }
+
+// TestPositionalAfterOutputRuntime covers review LO-01 at runtime.
+func TestPositionalAfterOutputRuntime(t *testing.T) {
+	eng := semRun(t, `
+FUNCTION F_Sum : INT
+VAR_INPUT a : INT; b : INT; END_VAR
+VAR_OUTPUT q : INT; END_VAR
+q := a * 10;
+F_Sum := a + b;
+END_FUNCTION
+PROGRAM Prog
+VAR r, x : INT; END_VAR
+r := F_Sum(a := 1, q => x, 2);
+END_PROGRAM
+`)
+	assert.Equal(t, int64(3), progVar(t, eng, "r").Int)
+	assert.Equal(t, int64(10), progVar(t, eng, "x").Int)
+}
