@@ -453,6 +453,7 @@ func nodeToMap(n Node) map[string]interface{} {
 			}
 			m["values"] = vals
 		}
+		marshalEndAttrs(m, v.EndAttributes, v.EndPragmas)
 
 	case *EnumValue:
 		m["span"] = v.NodeSpan
@@ -475,6 +476,7 @@ func nodeToMap(n Node) map[string]interface{} {
 			}
 			m["members"] = members
 		}
+		marshalEndAttrs(m, v.EndAttributes, v.EndPragmas)
 
 	case *StructMember:
 		m["span"] = v.NodeSpan
@@ -515,6 +517,7 @@ func nodeToMap(n Node) map[string]interface{} {
 			}
 			m["declarations"] = decls
 		}
+		marshalEndAttrs(m, v.EndAttributes, v.EndPragmas)
 
 	case *VarDecl:
 		m["span"] = v.NodeSpan
@@ -633,6 +636,19 @@ func marshalAttrs(m map[string]interface{}, attrs []*Attribute, pragmas []*Pragm
 			list[i] = nodeToMap(p)
 		}
 		m["pragmas"] = list
+	}
+}
+
+// marshalEndAttrs records the attributes and pragmas that close a block,
+// struct or enum under end_attributes and end_pragmas.
+func marshalEndAttrs(m map[string]interface{}, attrs []*Attribute, pragmas []*PragmaNode) {
+	tail := map[string]interface{}{}
+	marshalAttrs(tail, attrs, pragmas)
+	if a, ok := tail["attributes"]; ok {
+		m["end_attributes"] = a
+	}
+	if p, ok := tail["pragmas"]; ok {
+		m["end_pragmas"] = p
 	}
 }
 

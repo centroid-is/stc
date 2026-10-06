@@ -489,3 +489,24 @@ func TestMarshalPragma(t *testing.T) {
 	assert.Equal(t, "Pragma", m["kind"])
 	assert.Equal(t, "{warning disable C0139}", m["text"])
 }
+
+func TestMarshalEndAttrs(t *testing.T) {
+	attr := &Attribute{NodeBase: NodeBase{NodeKind: KindAttribute}, Name: "tail"}
+	prag := &PragmaNode{NodeBase: NodeBase{NodeKind: KindPragma}, Text: "{endregion}"}
+	for name, n := range map[string]Node{
+		"VarBlock":   &VarBlock{NodeBase: NodeBase{NodeKind: KindVarBlock}, EndAttributes: []*Attribute{attr}, EndPragmas: []*PragmaNode{prag}},
+		"StructType": &StructType{NodeBase: NodeBase{NodeKind: KindStructType}, EndAttributes: []*Attribute{attr}, EndPragmas: []*PragmaNode{prag}},
+		"EnumType":   &EnumType{NodeBase: NodeBase{NodeKind: KindEnumType}, EndAttributes: []*Attribute{attr}, EndPragmas: []*PragmaNode{prag}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := marshalToMap(t, n)
+			assert.Len(t, m["end_attributes"], 1)
+			assert.Len(t, m["end_pragmas"], 1)
+			assert.NotContains(t, m, "attributes")
+			assert.Len(t, n.Children(), 2)
+		})
+	}
+	m := marshalToMap(t, &StructType{NodeBase: NodeBase{NodeKind: KindStructType}})
+	assert.NotContains(t, m, "end_attributes")
+	assert.NotContains(t, m, "end_pragmas")
+}

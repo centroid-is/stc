@@ -174,16 +174,14 @@ func (p *Parser) parseStructType() *ast.StructType {
 	startTok := p.advance() // consume STRUCT
 
 	var members []*ast.StructMember
+	var tailAttrs []*ast.Attribute
+	var tailPragmas []*ast.PragmaNode
 	for !p.atEnd() {
 		// Pragmas may precede an individual struct member.
 		attrs, pragmas := p.collectPragmas()
 		if p.at(lexer.KwEndStruct) || p.atEnd() {
-			// Trailing pragmas before END_STRUCT go to the last member;
-			// in an empty struct they have no owner.
-			if n := len(members); n > 0 {
-				members[n-1].Attributes = append(members[n-1].Attributes, attrs...)
-				members[n-1].Pragmas = append(members[n-1].Pragmas, pragmas...)
-			}
+			// Trailing pragmas before END_STRUCT stay with the struct.
+			tailAttrs, tailPragmas = attrs, pragmas
 			break
 		}
 		savedPos := p.pos
@@ -203,7 +201,9 @@ func (p *Parser) parseStructType() *ast.StructType {
 			NodeKind: ast.KindStructType,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Members: members,
+		Members:       members,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 
@@ -249,11 +249,13 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 	startTok := p.advance() // consume (
 
 	var values []*ast.EnumValue
+	var tailAttrs []*ast.Attribute
+	var tailPragmas []*ast.PragmaNode
 	for !p.atEnd() && !p.at(lexer.RParen) {
 		// Pragmas may precede an enum value.
 		attrs, pragmas := p.collectPragmas()
 		if p.at(lexer.RParen) || p.atEnd() {
-			p.attachTrailingEnumPragmas(values, attrs, pragmas)
+			tailAttrs, tailPragmas = attrs, pragmas
 			break
 		}
 		ev := p.parseEnumValue()
@@ -261,8 +263,7 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 		values = append(values, ev)
 		if !p.match(lexer.Comma) {
 			// A pragma may also sit between the last value and ")".
-			attrs, pragmas = p.collectPragmas()
-			p.attachTrailingEnumPragmas(values, attrs, pragmas)
+			tailAttrs, tailPragmas = p.collectPragmas()
 			break
 		}
 	}
@@ -274,16 +275,9 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 			NodeKind: ast.KindEnumType,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Values: values,
-	}
-}
-
-// attachTrailingEnumPragmas appends pragmas found before the closing ")" of
-// an enum to the last value; in an empty enum they have no owner.
-func (p *Parser) attachTrailingEnumPragmas(values []*ast.EnumValue, attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
-	if n := len(values); n > 0 {
-		values[n-1].Attributes = append(values[n-1].Attributes, attrs...)
-		values[n-1].Pragmas = append(values[n-1].Pragmas, pragmas...)
+		Values:        values,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 

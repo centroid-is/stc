@@ -122,6 +122,10 @@ type EnumType struct {
 	NodeBase
 	BaseType TypeSpec     `json:"base_type,omitempty"`
 	Values   []*EnumValue `json:"values"`
+	// EndAttributes and EndPragmas sit after the last value, just before
+	// the closing parenthesis.
+	EndAttributes []*Attribute  `json:"end_attributes,omitempty"`
+	EndPragmas    []*PragmaNode `json:"end_pragmas,omitempty"`
 }
 
 func (n *EnumType) Children() []Node {
@@ -132,7 +136,7 @@ func (n *EnumType) Children() []Node {
 	for _, v := range n.Values {
 		nodes = append(nodes, v)
 	}
-	return nodes
+	return appendAttrs(nodes, n.EndAttributes, n.EndPragmas)
 }
 func (n *EnumType) typeSpecNode() {}
 
@@ -161,14 +165,18 @@ func (n *EnumValue) Children() []Node {
 type StructType struct {
 	NodeBase
 	Members []*StructMember `json:"members"`
+	// EndAttributes and EndPragmas sit after the last member, just before
+	// END_STRUCT.
+	EndAttributes []*Attribute  `json:"end_attributes,omitempty"`
+	EndPragmas    []*PragmaNode `json:"end_pragmas,omitempty"`
 }
 
 func (n *StructType) Children() []Node {
-	nodes := make([]Node, len(n.Members))
-	for i, m := range n.Members {
-		nodes[i] = m
+	nodes := make([]Node, 0, len(n.Members))
+	for _, m := range n.Members {
+		nodes = append(nodes, m)
 	}
-	return nodes
+	return appendAttrs(nodes, n.EndAttributes, n.EndPragmas)
 }
 func (n *StructType) typeSpecNode() {}
 

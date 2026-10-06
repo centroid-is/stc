@@ -303,37 +303,51 @@ END_FUNCTION_BLOCK
 		require.Equal(t, ast.KindPragma, vd.Pragmas[0].Kind())
 	})
 
-	t.Run("pragma before END_VAR attaches to block", func(t *testing.T) {
+	t.Run("pragma before END_VAR is a block end pragma", func(t *testing.T) {
 		f := parseClean(t, "PROGRAM P\nVAR\n    x : INT;\n    {attribute 'tail'}\n    {region}\nEND_VAR\nEND_PROGRAM\n")
 		vb := f.Declarations[0].(*ast.ProgramDecl).VarBlocks[0]
 		require.Len(t, vb.Declarations, 1)
-		require.Equal(t, []string{"tail"}, attrNames(vb.Attributes))
-		require.Len(t, vb.Pragmas, 1)
+		require.Empty(t, vb.Attributes)
+		require.Empty(t, vb.Pragmas)
+		require.Equal(t, []string{"tail"}, attrNames(vb.EndAttributes))
+		require.Len(t, vb.EndPragmas, 1)
 	})
 
-	t.Run("pragma before END_STRUCT attaches to last member", func(t *testing.T) {
+	t.Run("pragma before END_STRUCT is a struct end pragma", func(t *testing.T) {
 		f := parseClean(t, "TYPE S :\nSTRUCT\n    a : INT;\n    {attribute 'tail'}\nEND_STRUCT\nEND_TYPE\n")
 		st := f.Declarations[0].(*ast.TypeDecl).Type.(*ast.StructType)
 		require.Len(t, st.Members, 1)
-		require.Equal(t, []string{"tail"}, attrNames(st.Members[0].Attributes))
+		require.Empty(t, st.Members[0].Attributes)
+		require.Equal(t, []string{"tail"}, attrNames(st.EndAttributes))
 	})
 
-	t.Run("pragma in empty struct does not crash", func(t *testing.T) {
+	t.Run("pragma in empty struct is kept as an end pragma", func(t *testing.T) {
 		f := parseClean(t, "TYPE S :\nSTRUCT\n    {warning disable C0001}\nEND_STRUCT\nEND_TYPE\n")
 		st := f.Declarations[0].(*ast.TypeDecl).Type.(*ast.StructType)
 		require.Empty(t, st.Members)
+		require.Len(t, st.EndPragmas, 1)
 	})
 
-	t.Run("pragma before closing paren of enum attaches to last value", func(t *testing.T) {
+	t.Run("pragma before closing paren of enum is an enum end pragma", func(t *testing.T) {
 		f := parseClean(t, "TYPE E : (a, b {attribute 'tail'}); END_TYPE\n")
 		et := f.Declarations[0].(*ast.TypeDecl).Type.(*ast.EnumType)
 		require.Len(t, et.Values, 2)
-		require.Equal(t, []string{"tail"}, attrNames(et.Values[1].Attributes))
+		require.Empty(t, et.Values[1].Attributes)
+		require.Equal(t, []string{"tail"}, attrNames(et.EndAttributes))
 	})
 
-	t.Run("pragma in empty enum does not crash", func(t *testing.T) {
+	t.Run("pragma after trailing comma of enum is an enum end pragma", func(t *testing.T) {
+		f := parseClean(t, "TYPE E : (a, {endregion}\n); END_TYPE\n")
+		et := f.Declarations[0].(*ast.TypeDecl).Type.(*ast.EnumType)
+		require.Len(t, et.Values, 1)
+		require.Len(t, et.EndPragmas, 1)
+	})
+
+	t.Run("pragma in empty enum is kept as an end pragma", func(t *testing.T) {
 		r := Parse("t.st", "TYPE E : ({region}); END_TYPE\n")
 		require.NotNil(t, r.File)
+		et := r.File.Declarations[0].(*ast.TypeDecl).Type.(*ast.EnumType)
+		require.Len(t, et.EndPragmas, 1)
 	})
 
 	t.Run("comment above attribute is leading trivia of the attribute", func(t *testing.T) {

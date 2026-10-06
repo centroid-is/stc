@@ -141,6 +141,21 @@ func (f *formatter) emitInlineAttrs(attrs []*ast.Attribute, pragmas []*ast.Pragm
 	}
 }
 
+// emitInlineEndAttrs prints the attributes and pragmas that close an inline
+// enum, in source order, each preceded by a space, just before ")".
+func (f *formatter) emitInlineEndAttrs(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	i, j := 0, 0
+	for i < len(attrs) || j < len(pragmas) {
+		if j == len(pragmas) || (i < len(attrs) && attrs[i].NodeSpan.Start.Offset <= pragmas[j].NodeSpan.Start.Offset) {
+			f.write(" " + attrs[i].String())
+			i++
+		} else {
+			f.write(" " + pragmas[j].Text)
+			j++
+		}
+	}
+}
+
 // emitStructMember prints one struct member, preceded by its attributes.
 func (f *formatter) emitStructMember(m *ast.StructMember) {
 	f.emitAttrs(m.Attributes, m.Pragmas)
@@ -429,6 +444,7 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 		for _, m := range t.Members {
 			f.emitStructMember(m)
 		}
+		f.emitAttrs(t.EndAttributes, t.EndPragmas)
 		f.indent--
 		f.write(f.kw("END_STRUCT"))
 		f.newline()
@@ -449,6 +465,7 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 			}
 			f.newline()
 		}
+		f.emitAttrs(t.EndAttributes, t.EndPragmas)
 		f.indent--
 		f.write(");")
 		f.newline()
@@ -523,6 +540,7 @@ func (f *formatter) emitVarBlock(vb *ast.VarBlock) {
 	for _, vd := range vb.Declarations {
 		f.emitVarDecl(vd)
 	}
+	f.emitAttrs(vb.EndAttributes, vb.EndPragmas)
 	f.indent--
 	f.write(f.kw("END_VAR"))
 	f.newline()
@@ -611,6 +629,7 @@ func (f *formatter) emitTypeSpec(ts ast.TypeSpec) {
 				f.emitExpr(v.Value)
 			}
 		}
+		f.emitInlineEndAttrs(t.EndAttributes, t.EndPragmas)
 		f.write(")")
 	case *ast.StructType:
 		f.write(f.kw("STRUCT"))
@@ -619,6 +638,7 @@ func (f *formatter) emitTypeSpec(ts ast.TypeSpec) {
 		for _, m := range t.Members {
 			f.emitStructMember(m)
 		}
+		f.emitAttrs(t.EndAttributes, t.EndPragmas)
 		f.indent--
 		f.emitIndent()
 		f.write(f.kw("END_STRUCT"))

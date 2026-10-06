@@ -118,13 +118,13 @@ func (p *Parser) parseVarBlock() *ast.VarBlock {
 			NodeKind: ast.KindVarBlock,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Section:      section,
-		IsConstant:   isConstant,
-		IsRetain:     isRetain,
-		IsPersistent: isPersistent,
-		Declarations: decls,
-		Attributes:   tailAttrs,
-		Pragmas:      tailPragmas,
+		Section:       section,
+		IsConstant:    isConstant,
+		IsRetain:      isRetain,
+		IsPersistent:  isPersistent,
+		Declarations:  decls,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 

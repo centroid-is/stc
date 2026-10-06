@@ -128,3 +128,32 @@ END_PROGRAM
 		t.Errorf("schneider output lost FB attribute:\n%s", out)
 	}
 }
+
+// TestEmitEndPragmasKeepTheirAnchor mirrors the format test: pragmas before
+// END_VAR, END_STRUCT and an enum's ")" are emitted in place.
+func TestEmitEndPragmasKeepTheirAnchor(t *testing.T) {
+	cases := []struct {
+		name, src string
+		order     []string
+	}{
+		{"var block", "PROGRAM P\nVAR\n    {warning disable C0195}\n    x : INT;\n    {warning restore C0195}\nEND_VAR\nEND_PROGRAM\n",
+			[]string{"VAR\n", "{warning disable C0195}", "x : INT;", "{warning restore C0195}", "END_VAR"}},
+		{"struct", "TYPE S :\nSTRUCT\n    a : INT;\n    {endregion}\nEND_STRUCT\nEND_TYPE\n",
+			[]string{"STRUCT\n", "a : INT;", "{endregion}", "END_STRUCT"}},
+		{"enum", "TYPE E :\n(\n    a,\n    b\n    {endregion}\n);\nEND_TYPE\n",
+			[]string{"(\n", "a,", "b\n", "{endregion}", ");"}},
+		{"inline struct in a var", "PROGRAM P\nVAR\n    s : STRUCT\n        a : INT;\n        {endregion}\n    END_STRUCT;\nEND_VAR\nEND_PROGRAM\n",
+			[]string{"STRUCT\n", "a : INT;", "{endregion}", "END_STRUCT"}},
+		{"inline enum in a var", "PROGRAM P\nVAR\n    e : (a, b {attribute 'tail'});\nEND_VAR\nEND_PROGRAM\n",
+			[]string{"(a, b {attribute 'tail'})"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := emitClean(t, tc.src, DefaultOptions())
+			assertEmitInOrder(t, out, tc.order...)
+			if again := emitClean(t, out, DefaultOptions()); again != out {
+				t.Fatalf("emit is not idempotent.\nfirst:\n%s\nsecond:\n%s", out, again)
+			}
+		})
+	}
+}

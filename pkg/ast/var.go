@@ -45,6 +45,11 @@ type VarBlock struct {
 	Declarations []*VarDecl    `json:"declarations"`
 	Attributes   []*Attribute  `json:"attributes,omitempty"`
 	Pragmas      []*PragmaNode `json:"pragmas,omitempty"`
+	// EndAttributes and EndPragmas sit after the last declaration, just
+	// before END_VAR, and are printed there so {warning restore} or
+	// {endregion} keeps covering the same lines.
+	EndAttributes []*Attribute  `json:"end_attributes,omitempty"`
+	EndPragmas    []*PragmaNode `json:"end_pragmas,omitempty"`
 }
 
 func (n *VarBlock) Children() []Node {
@@ -53,7 +58,7 @@ func (n *VarBlock) Children() []Node {
 	for _, d := range n.Declarations {
 		nodes = append(nodes, d)
 	}
-	return nodes
+	return appendAttrs(nodes, n.EndAttributes, n.EndPragmas)
 }
 
 // VarDecl represents a single variable declaration (e.g., x, y : INT := 0;).

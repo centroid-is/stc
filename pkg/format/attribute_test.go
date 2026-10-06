@@ -139,7 +139,36 @@ END_PROGRAM
 		"\n{attribute 'p'}\nPROPERTY P : INT\n",
 		"\n{attribute 'f'}\nFUNCTION F : INT\n",
 		"\n{attribute 'i'}\nINTERFACE I\n",
-		"\n{attribute 'prog'}\nPROGRAM PR\n{attribute 'tail'}\nVAR\n",
+		"\n{attribute 'prog'}\nPROGRAM PR\nVAR\n    x : INT;\n    {attribute 'tail'}\nEND_VAR\n",
 	)
 	assertIdempotent(t, out)
+}
+
+// TestFormatEndPragmasKeepTheirAnchor checks that a pragma written just
+// before END_VAR, END_STRUCT or an enum's ")" is printed there again, not
+// before VAR or above the last member: moving {warning restore} or
+// {endregion} changes which lines it covers.
+func TestFormatEndPragmasKeepTheirAnchor(t *testing.T) {
+	cases := []struct {
+		name, src string
+		order     []string
+	}{
+		{"var block", "PROGRAM P\nVAR\n    {warning disable C0195}\n    x : INT;\n    {warning restore C0195}\nEND_VAR\nEND_PROGRAM\n",
+			[]string{"VAR\n", "{warning disable C0195}", "x : INT;", "{warning restore C0195}", "END_VAR"}},
+		{"struct", "TYPE S :\nSTRUCT\n    {region 'r'}\n    a : INT;\n    b : INT;\n    {endregion}\nEND_STRUCT\nEND_TYPE\n",
+			[]string{"STRUCT\n", "{region 'r'}", "a : INT;", "b : INT;", "{endregion}", "END_STRUCT"}},
+		{"enum", "TYPE E :\n(\n    {region}\n    a,\n    b\n    {endregion}\n);\nEND_TYPE\n",
+			[]string{"(\n", "{region}", "a,", "b\n", "{endregion}", ");"}},
+		{"inline struct in a var", "PROGRAM P\nVAR\n    s : STRUCT\n        a : INT;\n        {endregion}\n    END_STRUCT;\nEND_VAR\nEND_PROGRAM\n",
+			[]string{"STRUCT\n", "a : INT;", "{endregion}", "END_STRUCT"}},
+		{"inline enum in a var", "PROGRAM P\nVAR\n    e : (a, b {attribute 'tail'});\nEND_VAR\nEND_PROGRAM\n",
+			[]string{"(a, b {attribute 'tail'})"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := formatClean(t, tc.src)
+			assertInOrder(t, out, tc.order...)
+			assertIdempotent(t, out)
+		})
+	}
 }
