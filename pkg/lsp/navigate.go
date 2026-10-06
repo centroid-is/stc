@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -80,6 +81,46 @@ func findSymbolAtPosition(doc *Document, line, col int) *symbols.Symbol {
 		}
 	}
 
+	return findGVLMember(table, ident)
+}
+
+// findGVLMember resolves a variable of a qualified_only GVL. Such variables
+// are not inserted into any scope; they exist only as members of the GVL
+// symbol's struct type. A GVL declared in the ident's own file wins, then the
+// GVLs in name order, so the result is deterministic.
+func findGVLMember(table *symbols.Table, ident *ast.Ident) *symbols.Symbol {
+	key := strings.ToUpper(ident.Name)
+	var gvls []*symbols.Symbol
+	for _, sym := range table.GlobalScope().Symbols() {
+		if sym.Kind == symbols.KindGVL && sym.GVL != nil && sym.GVL.Vars[key] {
+			gvls = append(gvls, sym)
+		}
+	}
+	file := ident.Span().Start.File
+	sort.SliceStable(gvls, func(i, j int) bool {
+		si, sj := gvls[i].Pos.File == file, gvls[j].Pos.File == file
+		if si != sj {
+			return si
+		}
+		return strings.ToUpper(gvls[i].Name) < strings.ToUpper(gvls[j].Name)
+	})
+	for _, g := range gvls {
+		st, ok := g.Type.(*types.StructType)
+		if !ok {
+			continue
+		}
+		for _, m := range st.Members {
+			if strings.EqualFold(m.Name, ident.Name) {
+				return &symbols.Symbol{
+					Name:     m.Name,
+					Kind:     symbols.KindVariable,
+					Pos:      g.Pos,
+					ParamDir: ast.VarGlobal,
+					Type:     m.Type,
+				}
+			}
+		}
+	}
 	return nil
 }
 
