@@ -2,6 +2,13 @@
 
 Research document -- 2026-03-30
 
+> **Status (2026-10-06).** This is the original design research. The problem
+> statement below describes stc before vendor stubs existed. Library stubs,
+> auto-stubs, behavioural mocks and `stc vendor extract` are now implemented,
+> and `stc vendor import` reads whole TwinCAT projects (see
+> [TWINCAT_IMPORT.md](TWINCAT_IMPORT.md)). `stc vendor init` and recording
+> mocks from section 7 are not implemented.
+
 ## Problem Statement
 
 Production IEC 61131-3 Structured Text code relies heavily on vendor-specific

@@ -92,6 +92,57 @@ stc test .
 # 1 tests, 1 passed, 0 failed
 ```
 
+## Quick start: run a TwinCAT project with simulated EtherCAT and OPC UA
+
+These steps run a TwinCAT 3 project on your machine with its EtherCAT I/O simulated and its symbols served to an HMI. `<sild>` stands for your local checkout of the project. Production sources and exports stay on your machine.
+
+1. Inspect the project. This lists its tasks, sources and how each library resolved.
+
+```bash
+stc vendor import "<sild>/ST301/ST301 solution.tsproj"
+```
+
+2. Type-check it. Diagnostics point at the `.TcPOU` file and line.
+
+```bash
+stc check "<sild>/ST301/ST301 solution.tsproj"
+```
+
+3. Simulate 1000 ticks against the EtherCAT exports. Pass `--io` once per `Device N.xml` export; glob patterns are expanded only by your shell.
+
+```bash
+stc sim "<sild>/ST301/ST301 solution.tsproj" --io "<sild>/IO List from ethercat/ST301/Device 1.xml" --io "<sild>/IO List from ethercat/ST301/Device 2.xml" --io "<sild>/IO List from ethercat/ST301/Device 3.xml" --io "<sild>/IO List from ethercat/ST301/Device 4.xml" --cycles 1000
+```
+
+4. Serve it free-running over OPC UA.
+
+```bash
+stc serve "<sild>/ST301/ST301 solution.tsproj" --io "<sild>/IO List from ethercat/ST301/Device 1.xml" --io "<sild>/IO List from ethercat/ST301/Device 2.xml" --io "<sild>/IO List from ethercat/ST301/Device 3.xml" --io "<sild>/IO List from ethercat/ST301/Device 4.xml" --opcua :4840 --cycle 10ms --realtime
+```
+
+Use `--cycle 10ms`. The project's task runs every 1 ms, but one scan takes about 8 ms in the interpreter, so a 1 ms task overruns every scan.
+
+5. Connect the Flutter HMI or any OPC UA client:
+
+| Setting | Value |
+|---------|-------|
+| Endpoint | `opc.tcp://<host>:4840` |
+| Security | SecurityPolicy None, Anonymous, no client certificate |
+| Namespace index | 4 |
+| Node ids | `ns=4;s=<GVL>.<path>`, for example `ns=4;s=GVL_BatchLines.Drives_Line1[1].HMI` |
+| Server state | `ns=0;i=2259` |
+
+The default security allows any client on the network to write. Use an isolated network or `--security basic256sha256` on shared networks.
+
+To try the workflow without ST301, use the fixtures in this repository:
+
+```bash
+stc sim cmd/stc-mcp/testdata/live --io "tests/ecat_fixtures/Demo Device 1.xml" --cycles 1000
+stc serve cmd/stc-mcp/testdata/live --io "tests/ecat_fixtures/Demo Device 1.xml" --opcua :4840 --realtime
+```
+
+Guides: [TwinCAT import](docs/TWINCAT_IMPORT.md), [EtherCAT simulation](docs/ETHERCAT_SIMULATION.md), [OPC UA and the HMI](docs/OPCUA.md).
+
 ## CLI Reference
 
 | Command | Description |
@@ -99,13 +150,17 @@ stc test .
 | `stc parse <file...>` | Parse ST source files and output AST |
 | `stc check <file...>` | Type-check ST source files with semantic analysis |
 | `stc test [dir]` | Discover and run `*_test.st` unit tests |
-| `stc sim <file>` | Run closed-loop simulation with waveform injection |
+| `stc sim <file \| project>` | Run a single program with waveforms, or a whole project on its task schedule |
 | `stc emit <file...>` | Emit vendor-specific ST (Beckhoff, Schneider, portable) |
 | `stc fmt <file...>` | Format ST source files with consistent style |
 | `stc lint <file...>` | Lint ST source files against PLCopen guidelines |
 | `stc pp <file...>` | Preprocess ST files (evaluate conditional directives) |
 | `stc lsp` | Start the Language Server Protocol server on stdio |
 | `stc vendor extract <.plcproj>` | Extract FB stubs from TwinCAT project files |
+| `stc vendor import <.tsproj>` | Import a TwinCAT project and report tasks, sources and libraries |
+| `stc ecat validate --io <xml> <file...>` | Resolve TcLinkTo links against EtherCAT exports |
+| `stc serve <project>` | Run a project free-running, optionally served over OPC UA |
+| `stc opcua snapshot <endpoint>` | Capture an OPC UA server's address space as JSON |
 
 All commands support `--format json` for machine-readable output. See [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) for full details.
 

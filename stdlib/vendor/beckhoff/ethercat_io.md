@@ -11,8 +11,19 @@ EtherCAT terminals are mapped to the PLC I/O image through Process Data Objects
 ST code accesses I/O through AT-addressed variables that reference byte offsets
 in the process image.
 
-stc does not model specific terminal hardware. It maps AT addresses to a mock
-I/O table for testing. The examples below show the AT address patterns for
+stc supports two levels of I/O simulation:
+
+- **Address level.** Explicit AT addresses such as `%IX0.0` map to a mock I/O
+  table. Unit tests read and write it with SET_IO and GET_IO, as shown below.
+- **Terminal level.** `stc sim --io` and `stc serve --io` load the EtherCAT
+  topology from TwinCAT's `Device N.xml` exports. Each `{attribute 'TcLinkTo'}`
+  link binds a variable, usually declared `AT %I*` or `AT %Q*`, to its slot in
+  the master's process image. The value is decoded by the declared type.
+  Behavioural device models simulate EL1008, EL2008, EL3054, EL3064,
+  EL9222-5500, EL6001, PS2001 and the Schneider ATV320 drive, among others.
+
+See [docs/ETHERCAT_SIMULATION.md](../../../docs/ETHERCAT_SIMULATION.md) for the
+terminal-level workflow. The examples below show the AT address patterns for
 common terminals.
 
 ## EL1008: 8-Channel Digital Input
@@ -112,7 +123,8 @@ END_TEST_CASE
 ## Tips
 
 - AT addresses in stubs should match your TwinCAT System Manager configuration.
-- Use `%I*` or `%Q*` (wildcard) during development; assign specific addresses
-  when the hardware layout is finalized.
+- Use `%I*` or `%Q*` (wildcard) with a `TcLinkTo` attribute to bind a
+  variable to a terminal channel; `stc ecat validate` checks every link
+  against the exports.
 - stc's overlap detection warns if two variables reference the same byte range
   (e.g., `%IW0` and `%IX0.3` overlap).

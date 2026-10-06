@@ -141,6 +141,48 @@ END_VAR
 END_TEST_CASE
 ```
 
+## Project Mode
+
+SET_IO and GET_IO work on explicit addresses. Production TwinCAT code instead declares I/O as `AT %I*` or `AT %Q*` and links it to terminals with `TcLinkTo`. Project mode tests that code against the real project.
+
+### Tests against a TwinCAT project
+
+`stc test --project` imports the project and makes its POUs, GVLs, DUTs and interfaces available to the tests. Sibling library projects are imported from source. Libraries that only have stubs run as zero-output auto-stubs.
+
+```bash
+stc test pkg/twincat/testdata/sln/tests --project "pkg/twincat/testdata/sln/Demo/Demo solution.tsproj"
+```
+
+```text
+ok
+2 tests, 2 passed, 0 failed
+```
+
+See [TWINCAT_IMPORT.md](TWINCAT_IMPORT.md) for what is imported.
+
+### Wildcard addresses
+
+In project mode (`stc sim` and `stc serve` on a project), every `%I*`, `%Q*` and `%M*` variable gets its own slot sized by its declared type. A wildcard that has a `TcLinkTo` link is bound to its EtherCAT slot instead when `--io` is given. The value is decoded by the declared type: an INT is two's complement, a REAL is IEEE 754 single precision and an enum uses its base type. See [ETHERCAT_SIMULATION.md](ETHERCAT_SIMULATION.md).
+
+### Whole-project tests with EtherCAT and scenarios
+
+> **Lands with Phase 27.** The `--io` flag on `stc test` and the built-ins below are specified but not in this build yet.
+
+```bash pending-phase-27
+stc test tests/ --project project.tsproj --io "Device*.xml"
+```
+
+Each TEST_CASE gets a fresh project and network. The test body runs on the project's interpreter, so GVL paths resolve directly. In this mode a test file may contain only TEST_CASEs.
+
+| Built-in | Effect |
+|----------|--------|
+| `SET(path, value)`, `GET(path)` | Set or read any project variable by path |
+| `RUN_CYCLES(n)` | Run n project ticks on the task schedule |
+| `ADVANCE_TIME(d)` | Run d divided by the base tick |
+| `SIM_SET_LINK`, `SIM_TRIP`, `SIM_SLAVE_STATE`, `SIM_ANALOG`, `SIM_DRIVE_FAULT`, `SIM_RAMP`, `SIM_SERIAL_PEER` | Drive the EtherCAT device models |
+
+SET, GET and RUN_CYCLES work without `--io`. The SIM_* built-ins fail with "no --io network loaded" when no exports are given. Scenario files use the same stimuli; see [ETHERCAT_SIMULATION.md](ETHERCAT_SIMULATION.md#scenarios).
+
 ## Vendor FB Mocking
 
 When testing code that uses vendor-specific function blocks (e.g., Beckhoff `MC_MoveAbsolute`), you have three options:

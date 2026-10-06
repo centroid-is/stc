@@ -49,7 +49,7 @@ What IEC 61131-3 Structured Text features stc supports, including CODESYS extens
 | USINT, UINT, UDINT, ULINT | Yes | ULINT is a CODESYS extension |
 | REAL, LREAL | Yes | |
 | STRING | Yes | With optional length `STRING(80)` |
-| WSTRING | Partial | Parsed, limited interpreter support |
+| WSTRING | Partial | Executes; string functions count UTF-8 bytes, so non-ASCII characters count as more than one |
 | TIME, DATE, TIME_OF_DAY, DATE_AND_TIME | Yes | |
 | LTIME, LDATE, LTOD, LDT | Yes | CODESYS 64-bit time extensions |
 | ARRAY | Yes | Single and multi-dimensional, variable-length |
@@ -117,7 +117,7 @@ What IEC 61131-3 Structured Text features stc supports, including CODESYS extens
 
 | Pragma | Supported | Notes |
 |--------|-----------|-------|
-| `{attribute 'name' := 'value'}` | Parsed | Preserved in AST, used by emitter |
+| `{attribute 'name' := 'value'}` | Yes | Preserved on the declaration and re-emitted. `TcLinkTo` binds EtherCAT I/O, `OPC.UA.DA*` decides OPC UA exposure, `qualified_only` is enforced. See [TWINCAT_IMPORT.md](TWINCAT_IMPORT.md) |
 | `{warning 'msg'}` | Parsed | |
 
 ### OOP Extensions (CODESYS)
@@ -129,10 +129,10 @@ What IEC 61131-3 Structured Text features stc supports, including CODESYS extens
 | EXTENDS | Yes | Single inheritance for FBs |
 | METHOD with access specifier | Yes | PUBLIC, PRIVATE, PROTECTED, INTERNAL |
 | PROPERTY with GET/SET | Yes | |
-| POINTER TO | Yes | Parsed and type-checked |
-| REFERENCE TO | Yes | Parsed and type-checked |
-| THIS | Partial | Parsed, limited interpreter support |
-| SUPER | Partial | Parsed, limited interpreter support |
+| POINTER TO | Yes | Parsed, type-checked and executed (ADR, `^`) |
+| REFERENCE TO | Yes | Parsed, type-checked and executed (REF=) |
+| THIS | Yes | `THIS^` member and method access executes |
+| SUPER | Yes | `SUPER^` calls the base implementation, also from inherited code |
 
 ## IEC 61131-3 Ed.3 Compliance
 
@@ -158,7 +158,7 @@ These extensions are required to parse real-world Beckhoff TwinCAT 3 and Schneid
 
 ### Beckhoff TwinCAT 3
 
-Beckhoff uses a full CODESYS-derived ST dialect with all OOP extensions enabled. stc's `beckhoff` vendor profile allows all language features. The emitter produces Beckhoff-compatible attribute syntax.
+Beckhoff uses a full CODESYS-derived ST dialect with all OOP extensions enabled. stc's `beckhoff` vendor profile allows all language features. The emitter produces Beckhoff-compatible attribute syntax. stc reads TwinCAT `.tsproj` and `.plcproj` projects directly, including `AT %I*` wildcards, `qualified_only` GVLs, bit access and actions; see [TWINCAT_IMPORT.md](TWINCAT_IMPORT.md).
 
 ### Schneider EcoStruxure
 
@@ -178,10 +178,9 @@ Allen Bradley support is currently limited to type-checking stubs (timers: TONR,
 
 ## Known Limitations
 
-- **No native code generation**: stc is an analysis and testing toolchain, not a compiler that produces PLC runtime binaries. Output is re-emitted ST text for pasting into vendor IDEs.
-- **Interpreter performance**: The tree-walking interpreter is suitable for unit testing and simulation but is not optimized for large-scale execution.
-- **WSTRING**: Parsed and type-checked but limited interpreter support for wide string operations.
-- **THIS/SUPER**: Parsed but interpreter support for OOP dispatch is partial.
+- **No native code generation**: stc does not produce PLC runtime binaries. It analyses, tests and simulates ST on the host, and `stc emit` re-emits vendor ST for the vendor IDE. `stc sim` and `stc serve` run whole projects in the interpreter for development, not as a production runtime.
+- **Interpreter performance**: The tree-walking interpreter is fast enough for tests and simulation but not for hard real-time. One scan of the ST301 production project takes about 8 ms, so serve it with `--cycle 10ms` instead of its 1 ms task.
+- **WSTRING**: Values execute, but LEN, LEFT, RIGHT, MID and FIND count UTF-8 bytes. Results differ from TwinCAT for non-ASCII text.
 - **SFC**: Sequential Function Chart is not supported (ST-only toolchain).
 - **Cross-reference completeness**: Some complex OOP scenarios (multiple inheritance via interfaces, virtual method dispatch) may have gaps in the checker.
 
