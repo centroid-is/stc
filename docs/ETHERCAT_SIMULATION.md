@@ -166,7 +166,7 @@ Steps due on the same Tick fire in file order.
 | Field | Meaning |
 |-------|---------|
 | `path` | Variable path (`GVL.member`, `MAIN.x`, array and struct paths) or a `TIID^...` link path |
-| `value` | Expected value. Enums compare by name. |
+| `value` | Expected value. Enums compare by value name, case-insensitive, with an optional `E_Type#` or `E_Type.` prefix. STRING values compare exactly. |
 | `within` | Optional number of Ticks after the firing Tick in which the value must be seen (0 to 1 000 000). Without it the value must hold after the firing Tick. |
 | `tol` | Optional absolute tolerance for numeric values (>= 0) |
 

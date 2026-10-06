@@ -320,7 +320,7 @@ expect = {path="missing", value=1}
 		case "real":
 			return 1.505, nil
 		case "enum":
-			return "RUN", nil
+			return EnumName("RUN"), nil
 		case "int":
 			return 1.0, nil
 		}
@@ -451,7 +451,12 @@ func TestExecEqual(t *testing.T) {
 		want bool
 	}{
 		{true, true, true}, {true, int64(1), false},
-		{"Enum#Run", "run", true}, {"x", 1, false},
+		{"Enum#Run", EnumName("run"), true}, {"x", 1, false},
+		{"E_Mode.Run", EnumName("E_Mode#RUN"), true}, {"Run", EnumName("Stop"), false},
+		// Plain STRING values compare exactly (review 2 HI-02).
+		{"file.txt", "other.txt", false}, {"10.0.0.1", "192.168.0.1", false},
+		{"ERR#5", "OK#5", false}, {"Run", "RUN", false}, {"a.b#c", "a.b#c", true},
+		{"Enum#Run", "run", false}, {"x", EnumName("x"), true}, {"x", true, false},
 		{int64(3), int32(3), true}, {int64(3), uint64(4), false},
 		{int64(1), float32(1), true}, {1.0, int8(1), true},
 		{1.0, int16(1), true}, {1.0, int(1), true}, {1.0, uint8(1), true},

@@ -305,17 +305,27 @@ func Describe(st *Step) string {
 	return string(a.Kind)
 }
 
+// EnumName is the value name of an enum variable as Plant.Read returns
+// it. It marshals like a string; Equal compares it as an enum name.
+type EnumName string
+
 // Equal compares an expected scenario value with an actual target value
-// (D-04): BOOL exact, two integers exact, any float within tol, strings
-// case-insensitive with an `Enum#` or `Enum.` prefix stripped.
+// (D-04): BOOL exact, two integers exact, any float within tol, STRING
+// values exactly, and enum names (actual of type EnumName)
+// case-insensitive with an `Enum#` or `Enum.` prefix stripped from both.
 func Equal(expected, actual any, tol float64) bool {
 	switch x := expected.(type) {
 	case bool:
 		b, ok := actual.(bool)
 		return ok && b == x
 	case string:
-		s, ok := actual.(string)
-		return ok && strings.EqualFold(stripEnum(x), stripEnum(s))
+		switch a := actual.(type) {
+		case EnumName:
+			return strings.EqualFold(stripEnum(x), stripEnum(string(a)))
+		case string:
+			return a == x
+		}
+		return false
 	}
 	xi, xInt, xok := number(expected)
 	ai, aInt, aok := number(actual)

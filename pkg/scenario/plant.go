@@ -314,6 +314,9 @@ func (p *Plant) Read(path string) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnknownPath, err)
 	}
+	if v.Enum != "" {
+		return EnumName(fmt.Sprint(p.rt.ToJSON(v))), nil
+	}
 	return p.rt.ToJSON(v), nil
 }
 

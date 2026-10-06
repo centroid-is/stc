@@ -294,3 +294,25 @@ func TestBuiltinsRefuseInsideScan(t *testing.T) {
 	in.SetTestEnv(env)
 	require.NoError(t, in.ExecStatements(env, body))
 }
+
+// Plant.Read marks enum values, so only they get enum-name matching; a
+// STRING variable holding a dotted text compares exactly (review 2 HI-02).
+func TestPlantReadEnumVsString(t *testing.T) {
+	src := "TYPE E_Mode : (Idle, Run); END_TYPE\nPROGRAM MAIN\nVAR m : E_Mode := E_Mode.Run; s : STRING := 'file.txt'; END_VAR\nEND_PROGRAM\n"
+	f := parseST(t, "main.st", src)
+	spec, err := BuildPlantSpec(interp.ProjectSpec{Files: []*ast.SourceFile{f}}, nil)
+	require.NoError(t, err)
+	p, err := spec.New()
+	require.NoError(t, err)
+	m, err := p.Read("MAIN.m")
+	require.NoError(t, err)
+	require.IsType(t, EnumName(""), m)
+	require.True(t, Equal("E_Mode#RUN", m, 0))
+	require.False(t, Equal("E_Mode#Idle", m, 0))
+	s, err := p.Read("MAIN.s")
+	require.NoError(t, err)
+	require.Equal(t, "file.txt", s)
+	require.True(t, Equal("file.txt", s, 0))
+	require.False(t, Equal("other.txt", s, 0))
+	require.False(t, Equal("FILE.TXT", s, 0))
+}
