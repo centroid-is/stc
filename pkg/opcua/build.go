@@ -223,6 +223,12 @@ func (b *builder) visit(n SymbolNode, parent string, inherited, inStructured boo
 			}
 			return nil
 		}
+		if err := arrayServable(at); err != nil {
+			if exposed {
+				b.report(diag.Warning, CodeUnsupported, "%s: %v; not published", path, err)
+			}
+			return nil
+		}
 		if _, leaf := uaGoType(at); leaf {
 			if !exposed {
 				return nil

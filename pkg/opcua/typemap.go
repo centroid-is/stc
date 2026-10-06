@@ -119,6 +119,23 @@ func arrayShape(a *types.ArrayType) (int32, []uint32, error) {
 	return int32(len(dims)), dims, nil
 }
 
+// maxServedSlots is the interpreter's array slot limit (direct indexing:
+// High+1 slots); a longer array is truncated there, so it cannot be served.
+const maxServedSlots = 10000
+
+// arrayServable reports why the runtime cannot serve a's values yet: the
+// interpreter models only the first dimension of an array and at most
+// maxServedSlots slots. Such arrays would be published but never read.
+func arrayServable(a *types.ArrayType) error {
+	if len(a.Dimensions) > 1 {
+		return fmt.Errorf("%s: multi-dimensional arrays are not served yet", a)
+	}
+	if len(a.Dimensions) == 1 && a.Dimensions[0].Known && a.Dimensions[0].High+1 > maxServedSlots {
+		return fmt.Errorf("%s: arrays beyond index %d are not served", a, maxServedSlots-1)
+	}
+	return nil
+}
+
 // arrayLen returns the total element count of a (the product of all
 // dimension lengths).
 func arrayLen(a *types.ArrayType) (int, error) {
