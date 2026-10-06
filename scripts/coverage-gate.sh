@@ -50,7 +50,7 @@ fi
 echo
 awk -v module="$MODULE/" '
 BEGIN {
-    n = split("pkg/parser:95 pkg/lexer:95 pkg/checker:94 pkg/interp:95 pkg/types:95 pkg/emit:95 pkg/symtree:95", rows, " ")
+    n = split("pkg/parser:95 pkg/lexer:95 pkg/checker:94 pkg/interp:95 pkg/types:95 pkg/emit:95 pkg/symtree:95 pkg/scenario:90 pkg/ecat:90 pkg/ecat/devices:90 pkg/projectload:90 pkg/opcua:90", rows, " ")
     for (i = 1; i <= n; i++) {
         split(rows[i], kv, ":")
         order[i] = kv[1]
@@ -81,18 +81,18 @@ END {
         if (k in hit) { cov[p] += stmts[k]; allCov += stmts[k] }
     }
     fail = 0
-    printf "%-14s %10s %8s %6s  %s\n", "package", "covered", "percent", "min", "result"
+    printf "%-18s %10s %8s %6s  %s\n", "package", "covered", "percent", "min", "result"
     for (i = 1; i <= n; i++) {
         p = order[i]
         pct = tot[p] ? 100 * cov[p] / tot[p] : 0
         res = (pct >= thresh[p]) ? "PASS" : "FAIL"
         if (res == "FAIL") fail = 1
-        printf "%-14s %5d/%-5d %7.2f%% %5d%%  %s\n", p, cov[p], tot[p], pct, thresh[p], res
+        printf "%-18s %5d/%-5d %7.2f%% %5d%%  %s\n", p, cov[p], tot[p], pct, thresh[p], res
     }
     pct = all ? 100 * allCov / all : 0
     res = (pct >= totalThresh) ? "PASS" : "FAIL"
     if (res == "FAIL") fail = 1
-    printf "%-14s %5d/%-5d %7.2f%% %5d%%  %s\n", "total", allCov, all, pct, totalThresh, res
+    printf "%-18s %5d/%-5d %7.2f%% %5d%%  %s\n", "total", allCov, all, pct, totalThresh, res
     exit fail
 }
 ' "$WORK/coverage.txt" && status=0 || status=$?

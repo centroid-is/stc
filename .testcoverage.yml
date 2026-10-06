@@ -26,6 +26,17 @@ override:
     threshold: 95
   - path: ^pkg/symtree$
     threshold: 95
+  # v1.2 packages
+  - path: ^pkg/scenario$
+    threshold: 90
+  - path: ^pkg/ecat$
+    threshold: 90
+  - path: ^pkg/ecat/devices$
+    threshold: 90
+  - path: ^pkg/projectload$
+    threshold: 90
+  - path: ^pkg/opcua$
+    threshold: 90
 
 # Exclude test helpers and generated code from coverage analysis.
 exclude:
