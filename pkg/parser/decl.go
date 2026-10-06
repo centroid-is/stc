@@ -155,11 +155,12 @@ func (p *Parser) parseProgram() *ast.ProgramDecl {
 }
 
 // actionBodyStops ends an ACTION body. Besides END_ACTION it stops at the
-// end of the owning POU, at the next ACTION and at any token that starts a
-// top-level declaration, so a missing END_ACTION cannot swallow the rest of
-// the file.
+// end of the owning POU, at the next ACTION, at a METHOD or PROPERTY of the
+// owning FB and at any token that starts a top-level declaration, so a
+// missing END_ACTION cannot swallow the rest of the FB or file.
 var actionBodyStops = []lexer.TokenKind{
 	lexer.KwEndAction, lexer.KwAction, lexer.KwEndProgram, lexer.KwEndFunctionBlock,
+	lexer.KwMethod, lexer.KwProperty,
 	lexer.KwProgram, lexer.KwFunctionBlock, lexer.KwFunction, lexer.KwType,
 	lexer.KwInterface, lexer.KwVarGlobal, lexer.KwTestCase,
 }

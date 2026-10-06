@@ -129,6 +129,21 @@ func TestAction(t *testing.T) {
 		require.Equal(t, "Q", r.File.Declarations[1].(*ast.ProgramDecl).Name.Name)
 	})
 
+	t.Run("missing END_ACTION inside an FB keeps the following METHOD and PROPERTY", func(t *testing.T) {
+		src := "FUNCTION_BLOCK FB\nVAR x : INT; END_VAR\nACTION A\nx := 1;\n" +
+			"METHOD PUBLIC M : BOOL\nM := TRUE;\nEND_METHOD\n" +
+			"PROPERTY P : INT\nGET\nP := x;\nEND_GET\nEND_PROPERTY\nEND_FUNCTION_BLOCK\n"
+		r := Parse("m.st", src)
+		require.True(t, hasDiag(r.Diags, "expected KwEndAction"))
+		require.Len(t, r.Diags, 1, "one diagnostic, no cascade: %v", r.Diags)
+		fb := r.File.Declarations[0].(*ast.FunctionBlockDecl)
+		require.Equal(t, []string{"A"}, actionNames(fb.Actions))
+		require.Len(t, fb.Actions[0].Body, 1)
+		require.Len(t, fb.Methods, 1)
+		require.Equal(t, "M", fb.Methods[0].Name.Name)
+		require.Len(t, fb.Properties, 1)
+	})
+
 	t.Run("attribute before a top-level action attaches to it", func(t *testing.T) {
 		src := "PROGRAM P\nEND_PROGRAM\n{attribute 'hide'}\nACTION A\nEND_ACTION\n"
 		r := Parse("a.st", src)
