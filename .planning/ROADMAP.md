@@ -474,7 +474,7 @@ Plans:
 Plans:
 - [x] 25-01-PLAN.md -- Layout/Binder + model selection + ECAT010 in pkg/ecat; devices base, ids, couplers/passive, digital I/O
 - [x] 25-02-PLAN.md -- EL3054/EL3064 analog, EL9222-5500 trip/reset, PS2001-2410 PSU, EL2912/EP1918/EL1904 field-voltage diag
-- [ ] 25-03-PLAN.md -- EL6001 22-byte serial model, SerialPeer/ScriptedPeer, Baader md/mt1 exchange through the PDO
+- [x] 25-03-PLAN.md -- EL6001 22-byte serial model, SerialPeer/ScriptedPeer, Baader md/mt1 exchange through the PDO
 - [ ] 25-04-PLAN.md -- Env-gated real-export model coverage test, architecture docs, validation sign-off, coverage gate
 
 ### Phase 26: ATV320 Drive & EtherCAT Master Services
@@ -553,7 +553,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 3/4 | In Progress|  |
-| 25. EtherCAT Terminal Models | v1.2 | 2/4 | In Progress|  |
+| 25. EtherCAT Terminal Models | v1.2 | 3/4 | In Progress|  |
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
 | 28. OPC UA Address Space | v1.2 | 0/TBD | Not started | - |
