@@ -57,7 +57,12 @@ func newAtvRig(t *testing.T, files ...*ast.SourceFile) *atvRig {
 		require.NoError(t, err)
 		all = append(all, parseNoErr(t, n, string(src)))
 	}
-	all = append(all, files...)
+	return newAtvRigFiles(t, append(all, files...))
+}
+
+// newAtvRigFiles is newAtvRig over a complete file set (libraries first).
+func newAtvRigFiles(t *testing.T, all []*ast.SourceFile) *atvRig {
+	t.Helper()
 
 	var prog *ast.ProgramDecl
 	for _, f := range all {
