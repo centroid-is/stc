@@ -32,6 +32,7 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 - I/O address parser and mock I/O table (%I/%Q/%M, explicit addresses) — v1.1
 - Shipped starter stubs for Beckhoff, Schneider, Allen Bradley — v1.1
 - Auto-defined STC_TEST/STC_SIM preprocessor symbols and TcPOU stub extractor — v1.1
+- TwinCAT declaration syntax: attribute pragmas in the AST, GVL files with qualified_only, wildcard AT in structs/FBs, empty call arguments, ACTIONs (DIAL-01/02/03/05/08) — v1.2 Phase 19
 
 ## Current Milestone: v1.2 TwinCAT Import, EtherCAT Simulation & OPC UA
 
@@ -48,6 +49,8 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 **Research:** `.planning/research/v1.2/`
 
 ## Current State
+
+**v1.2 in progress** — Phase 19 complete (2026-10-06): sildarvinnsla ST301 parse diagnostics 2711 → 917, SVNCoreComponents 1430 → 615; CI coverage gate green (interp 96.6%).
 
 **v1.0 shipped** — 2026-03-28
 
@@ -136,4 +139,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-05 after starting milestone v1.2*
+*Last updated: 2026-10-06 after Phase 19 completion*
