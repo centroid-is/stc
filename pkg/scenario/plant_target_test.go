@@ -340,3 +340,61 @@ func TestPlantTickError(t *testing.T) {
 	assert.Error(t, p.Tick())
 	assert.Equal(t, p.BaseTick(), p.Clock(), "Project semantics: the clock advances past a failing task")
 }
+
+// Values that do not fit the slot width are errors, not truncated, and
+// IEC literals outside int64 are rejected (review 2 ME-02).
+func TestPlantEncodeRange(t *testing.T) {
+	u8 := ecat.Slot{DataType: "USINT", BitLen: 8}
+	s8 := ecat.Slot{DataType: "SINT", BitLen: 8}
+	u16 := ecat.Slot{DataType: "UINT", BitLen: 16}
+	u64 := ecat.Slot{DataType: "ULINT", BitLen: 64}
+	i64 := ecat.Slot{DataType: "LINT", BitLen: 64}
+	for _, c := range []struct {
+		slot ecat.Slot
+		v    any
+		want uint64
+	}{
+		{u8, int64(255), 255}, {u8, 0, 0}, {s8, int64(-128), uint64(0xFFFFFFFFFFFFFF80)}, {s8, int64(127), 127},
+		{u16, "16#FFFF", 0xFFFF}, {u16, 300.4, 300}, {u64, "16#FFFFFFFFFFFFFFFF", ^uint64(0)},
+		{u64, "18446744073709551615", ^uint64(0)}, {i64, "-9223372036854775808", 1 << 63},
+	} {
+		got, err := encodeSlot(c.slot, c.v)
+		require.NoError(t, err, "%s %v", c.slot.DataType, c.v)
+		assert.Equal(t, c.want, got, "%s %v", c.slot.DataType, c.v)
+	}
+	for _, c := range []struct {
+		slot ecat.Slot
+		v    any
+		msg  string
+	}{
+		{u8, int64(300), "value 300 does not fit an 8-bit unsigned slot"},
+		{u8, -1, "value -1 does not fit an 8-bit unsigned slot"},
+		{s8, int64(128), "value 128 does not fit an 8-bit signed slot"},
+		{s8, "-129", "does not fit an 8-bit signed slot"},
+		{u16, 70000.0, "does not fit a 16-bit unsigned slot"},
+		{u64, int64(-1), "does not fit a 64-bit unsigned slot"},
+		{i64, "16#FFFFFFFFFFFFFFFF", "out of range"},
+		{u64, "-1", "does not fit a 64-bit unsigned slot"},
+		{u64, "18446744073709551616", "invalid IEC integer literal"},
+	} {
+		_, err := encodeSlot(c.slot, c.v)
+		require.Error(t, err, "%s %v", c.slot.DataType, c.v)
+		assert.Contains(t, err.Error(), c.msg)
+	}
+	for _, bad := range []string{"-9999999999999999999", "16#FFFFFFFFFFFFFFFF", "9223372036854775808", "-9223372036854775809"} {
+		_, err := ParseIECInt(bad)
+		assert.Error(t, err, bad)
+	}
+	n, err := ParseIECInt("-9223372036854775808")
+	require.NoError(t, err)
+	assert.Equal(t, int64(math.MinInt64), n)
+}
+
+// A link value wider than its slot fails Check (SCN007 in Prepare)
+// instead of being truncated by ForceInput.
+func TestPlantLinkValueOutOfRange(t *testing.T) {
+	p := demoPlant(t, plantMain)
+	err := p.Check(Action{Kind: ActLink, Path: linkCur, Value: int64(1) << 40})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not fit")
+}

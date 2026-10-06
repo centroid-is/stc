@@ -208,8 +208,9 @@ func signedSlot(slot ecat.Slot) bool {
 }
 
 // encodeSlot turns a scenario value into slot bits: BOOL/BIT from bool or
-// 0/1, integers two's-complement (ForceInput truncates to BitLen), REAL and
-// LREAL as IEEE bits, strings as IEC integer literals or TRUE/FALSE.
+// 0/1, integers two's-complement range-checked against the slot's width
+// and signedness, REAL and LREAL as IEEE bits, strings as IEC integer
+// literals or TRUE/FALSE.
 func encodeSlot(slot ecat.Slot, v any) (uint64, error) {
 	switch x := v.(type) {
 	case bool:
@@ -240,7 +241,14 @@ func encodeSlot(slot ecat.Slot, v any) (uint64, error) {
 		case "FALSE":
 			return 0, nil
 		}
-		n, err := ParseIECInt(s)
+		u, neg, err := parseIECUint(s)
+		if err != nil {
+			return 0, err
+		}
+		if !neg && u > math.MaxInt64 && floatBits(slot) == 0 && slot.BitLen >= 64 && !signedSlot(slot) {
+			return u, nil // ULINT/LWORD above 2^63-1
+		}
+		n, err := iecToInt64(s, u, neg)
 		if err != nil {
 			return 0, err
 		}
@@ -259,14 +267,57 @@ func encodeInt(slot ecat.Slot, n int64) (uint64, error) {
 	if slot.BitLen == 1 && n != 0 && n != 1 {
 		return 0, fmt.Errorf("value %d does not fit a BOOL slot", n)
 	}
+	if slot.BitLen > 1 {
+		if signedSlot(slot) {
+			if slot.BitLen < 64 {
+				lim := int64(1) << (slot.BitLen - 1)
+				if n < -lim || n >= lim {
+					return 0, fmt.Errorf("value %d does not fit %s %d-bit signed slot", n, article(slot.BitLen), slot.BitLen)
+				}
+			}
+		} else if n < 0 || (slot.BitLen < 64 && uint64(n) >= uint64(1)<<slot.BitLen) {
+			return 0, fmt.Errorf("value %d does not fit %s %d-bit unsigned slot", n, article(slot.BitLen), slot.BitLen)
+		}
+	}
 	return uint64(n), nil
+}
+
+// article is "an" before 8, 11 and 18 (spoken "eight", "eleven",
+// "eighteen") and similar, else "a".
+func article(bits int) string {
+	switch s := strconv.Itoa(bits); {
+	case s[0] == '8', s == "11", s == "18":
+		return "an"
+	}
+	return "a"
 }
 
 // ParseIECInt parses an IEC integer literal: decimal, 2#, 8# or 16# with
 // optional sign and underscores, and an optional TYPE# prefix (INT#5).
+// Values outside the int64 range are errors.
 func ParseIECInt(s string) (int64, error) {
+	u, neg, err := parseIECUint(s)
+	if err != nil {
+		return 0, err
+	}
+	return iecToInt64(s, u, neg)
+}
+
+// iecToInt64 applies the sign of a parsed literal, rejecting magnitudes
+// outside int64.
+func iecToInt64(s string, u uint64, neg bool) (int64, error) {
+	switch {
+	case neg && u > 1<<63, !neg && u > math.MaxInt64:
+		return 0, fmt.Errorf("IEC integer literal %q out of range", s)
+	case neg:
+		return int64(-u), nil // -(1<<63) wraps to MinInt64
+	}
+	return int64(u), nil
+}
+
+// parseIECUint parses an IEC integer literal into its magnitude and sign.
+func parseIECUint(s string) (u uint64, neg bool, err error) {
 	lit := strings.ReplaceAll(strings.TrimSpace(s), "_", "")
-	neg := false
 	if strings.HasPrefix(lit, "-") || strings.HasPrefix(lit, "+") {
 		neg = lit[0] == '-'
 		lit = lit[1:]
@@ -280,19 +331,17 @@ func ParseIECInt(s string) (int64, error) {
 			lit = rest
 		default:
 			if _, err := strconv.Atoi(head); err == nil || head == "" {
-				return 0, fmt.Errorf("invalid IEC integer literal %q", s)
+				return 0, false, fmt.Errorf("invalid IEC integer literal %q", s)
 			}
-			return ParseIECInt(rest) // TYPE#value
+			u, n2, err := parseIECUint(rest) // TYPE#value
+			return u, neg != n2, err
 		}
 	}
-	u, err := strconv.ParseUint(lit, base, 64)
+	u, err = strconv.ParseUint(lit, base, 64)
 	if err != nil || lit == "" {
-		return 0, fmt.Errorf("invalid IEC integer literal %q", s)
+		return 0, false, fmt.Errorf("invalid IEC integer literal %q", s)
 	}
-	if neg {
-		return -int64(u), nil
-	}
-	return int64(u), nil
+	return u, neg, nil
 }
 
 // Read returns a variable path as ToJSON renders it, or a link path's slot
