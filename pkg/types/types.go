@@ -133,6 +133,16 @@ type ArrayDimension struct {
 	Low   int
 	High  int
 	Known bool
+	// Text is the source form of the bounds ("1..GVL.N") when they are
+	// not Known, so two unknown dimensions compare by their expressions.
+	Text string
+}
+
+// sameDimension reports whether two array dimensions denote the same
+// range: equal bounds, both Known or both unknown, and for unknown bounds
+// the same bound expressions. A Known dimension never equals an unknown one.
+func sameDimension(a, b ArrayDimension) bool {
+	return a.Known == b.Known && a.Low == b.Low && a.High == b.High && a.Text == b.Text
 }
 
 // StructMember represents a named member of a struct type.
@@ -182,7 +192,7 @@ func (t *ArrayType) Equal(o Type) bool {
 		return false
 	}
 	for i, d := range t.Dimensions {
-		if d.Low != a.Dimensions[i].Low || d.High != a.Dimensions[i].High {
+		if !sameDimension(d, a.Dimensions[i]) {
 			return false
 		}
 	}

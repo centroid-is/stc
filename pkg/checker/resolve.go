@@ -1145,13 +1145,18 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 		elemType := r.resolveTypeSpec(t.ElementType)
 		dims := make([]types.ArrayDimension, len(t.Ranges))
 		for i, rng := range t.Ranges {
-			low, lowOK := ast.IntLiteralValue(rng.Low)
-			high, highOK := ast.IntLiteralValue(rng.High)
+			if rng == nil {
+				continue
+			}
+			// Bounds may name constants (ARRAY[1..GVL.N]); see enumConst.
+			low, lowOK := r.enumConst(rng.Low)
+			high, highOK := r.enumConst(rng.High)
 			if lowOK && highOK {
 				dims[i] = types.ArrayDimension{Low: int(low), High: int(high), Known: true}
 				continue
 			}
-			dims[i] = types.ArrayDimension{Low: evalConstInt(rng.Low), High: evalConstInt(rng.High)}
+			dims[i] = types.ArrayDimension{Low: evalConstInt(rng.Low), High: evalConstInt(rng.High),
+				Text: boundText(rng.Low) + ".." + boundText(rng.High)}
 		}
 		return &types.ArrayType{ElementType: elemType, Dimensions: dims}
 
@@ -1236,6 +1241,28 @@ func (r *Resolver) reportUndeclaredType(t *ast.NamedType) {
 		name = t.Namespace.Name + "." + name
 	}
 	r.diags.Errorf(astPosToSource(t.Span().Start), CodeUndeclaredType, "undeclared type '%s'", name)
+}
+
+// boundText is a canonical source form of an array bound expression, used to
+// compare bounds whose value is not known. Unsupported expressions give "?".
+func boundText(x ast.Expr) string {
+	switch v := x.(type) {
+	case *ast.Ident:
+		return strings.ToUpper(v.Name)
+	case *ast.Literal:
+		return v.Value
+	case *ast.MemberAccessExpr:
+		if v.Member != nil {
+			return boundText(v.Object) + "." + strings.ToUpper(v.Member.Name)
+		}
+	case *ast.ParenExpr:
+		return boundText(v.Inner)
+	case *ast.UnaryExpr:
+		return v.Op.Text + boundText(v.Operand)
+	case *ast.BinaryExpr:
+		return "(" + boundText(v.Left) + v.Op.Text + boundText(v.Right) + ")"
+	}
+	return "?"
 }
 
 // evalConstInt evaluates a constant integer expression from an AST node.

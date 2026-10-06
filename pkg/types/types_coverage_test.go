@@ -428,3 +428,16 @@ func TestComplexType_Strings(t *testing.T) {
 
 	assert.Equal(t, "VOID", TypeVOID.String())
 }
+
+func TestArrayType_UnknownDimensions(t *testing.T) {
+	arr := func(d ArrayDimension) *ArrayType {
+		return &ArrayType{ElementType: TypeINT, Dimensions: []ArrayDimension{d}}
+	}
+	known := ArrayDimension{Low: 1, High: 0, Known: true}
+	unknownA := ArrayDimension{Low: 1, High: 0, Text: "1..GVL.A"}
+	unknownB := ArrayDimension{Low: 1, High: 0, Text: "1..GVL.B"}
+	assert.True(t, arr(unknownA).Equal(arr(unknownA)))
+	assert.False(t, arr(unknownA).Equal(arr(unknownB)))
+	assert.False(t, arr(known).Equal(arr(unknownA)))
+	assert.True(t, arr(known).Equal(arr(known)))
+}
