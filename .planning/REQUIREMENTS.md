@@ -22,11 +22,11 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### TwinCAT project import (IMPT)
 
-- [ ] **IMPT-01**: `stc vendor import <x.tsproj|x.plcproj>` reads TcPOU (declaration, implementation, methods, actions, properties), TcGVL and TcDUT files listed in the plcproj and builds one project model stc can check and run
-- [ ] **IMPT-02**: Library placeholder references in the plcproj resolve in order: project POUs, sibling library plcproj (SVNCoreComponents), shipped stubs; unresolved references are reported as diagnostics
-- [ ] **IMPT-03**: Task cycle time and PLC project name are read from the `.tsproj` and used by the runtime and the OPC UA namespace
+- [x] **IMPT-01**: `stc vendor import <x.tsproj|x.plcproj>` reads TcPOU (declaration, implementation, methods, actions, properties), TcGVL and TcDUT files listed in the plcproj and builds one project model stc can check and run
+- [x] **IMPT-02**: Library placeholder references in the plcproj resolve in order: project POUs, sibling library plcproj (SVNCoreComponents), shipped stubs; unresolved references are reported as diagnostics
+- [x] **IMPT-03**: Task cycle time and PLC project name are read from the `.tsproj` and used by the runtime and the OPC UA namespace
 - [ ] **IMPT-04**: Shipped stubs cover Tc2_EtherCAT (`FB_EcGetSlaveState`, `FB_EcGetAllSlaveStates`, `FB_EcSetSlaveState`, `FB_EcGetMasterState`, `FB_EcGetAllSlaveCrcErrors`, `FB_EcGetSlaveCrcErrorEx`, `FB_EcCoESDoRead`, `FB_EcCoESDoWrite`, `FB_EcPhysicalWriteCmd`, `ST_EcSlaveState`; `E_EcSlaveState` is declared by SVNCoreComponents, not Beckhoff), Tc2_System additions (`AMSADDR`, `T_AmsNetIdArr`, `F_CreateAmsNetId`, `MEMCPY`), Tc2_ModbusSrv, Tc3_Module and Tc2_SerialCom so the sildarvinnsla projects type-check
-- [ ] **IMPT-05**: `stc vendor extract` emits stubs that parse (closing keywords, methods included) and no longer silently skips TcGVL/TcDUT entries
+- [x] **IMPT-05**: `stc vendor extract` emits stubs that parse (closing keywords, methods included) and no longer silently skips TcGVL/TcDUT entries
 
 ### Runtime model (RUNT)
 
@@ -120,11 +120,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIAL-08 | Phase 19 | Complete |
 | DIAL-09 | Phase 20 | Complete |
 | DIAL-10 | Phase 20 | Complete |
-| IMPT-01 | Phase 21 | Pending |
-| IMPT-02 | Phase 21 | Pending |
-| IMPT-03 | Phase 21 | Pending |
+| IMPT-01 | Phase 21 | Complete |
+| IMPT-02 | Phase 21 | Complete |
+| IMPT-03 | Phase 21 | Complete |
 | IMPT-04 | Phase 21 | Pending |
-| IMPT-05 | Phase 21 | Pending |
+| IMPT-05 | Phase 21 | Complete |
 | RUNT-01 | Phase 22 | Pending |
 | RUNT-02 | Phase 22 | Pending |
 | RUNT-03 | Phase 23 | Pending |

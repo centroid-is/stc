@@ -418,7 +418,7 @@ Plans:
 - [x] 21-01-PLAN.md -- Parser/checker fixes: PROPERTY access modifiers, statement-level `fb();` checked as FB call, double-quoted attributes ignored with SEMA039
 - [x] 21-02-PLAN.md -- Embedded Beckhoff stubs (Tc2_EtherCAT, Tc2_System, Tc2_Utilities, Tc2_ModbusSrv, Tc2_SerialCom, Tc3_Module, Tc3_IPCDiag) with dependency closure and check-clean tests
 - [x] 21-03-PLAN.md -- pkg/vendor/twincat model, tsproj/xti/plcproj/TcTTO readers, line-preserving TcPOU converter, synthetic fixtures
-- [ ] 21-04-PLAN.md -- Ordered library resolver (sibling, library_paths, stubs, VEND020), Import + analyzer.AnalyzeProject, vendor extract on the shared converter
+- [x] 21-04-PLAN.md -- Ordered library resolver (sibling, library_paths, stubs, VEND020), Import + analyzer.AnalyzeProject, vendor extract on the shared converter
 - [ ] 21-05-PLAN.md -- CLI: `stc vendor import [--out]`, `stc check <project>`, `stc test --project` (RunOpts.ProjectFiles), `stc sim <project>`, extract JSON
 - [ ] 21-06-PLAN.md -- STC_SILD_DIR oracle gate on ST301/ST101/ST201/Baader/SVNCore with owner buckets, docs, VALIDATION sign-off, coverage gate
 
@@ -538,7 +538,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 18. Auto-Defines & TcPOU Extractor | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 19. TwinCAT Declaration Syntax | v1.2 | 10/10 | Complete    | 2026-10-06 |
 | 20. TwinCAT Expression Semantics | v1.2 | 9/9 | Complete    | 2026-10-06 |
-| 21. TwinCAT Project Import & Library Stubs | v1.2 | 3/6 | In Progress|  |
+| 21. TwinCAT Project Import & Library Stubs | v1.2 | 4/6 | In Progress|  |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 0/TBD | Not started | - |
