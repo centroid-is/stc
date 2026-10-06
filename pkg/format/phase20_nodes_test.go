@@ -181,3 +181,18 @@ func TestPhase20Nodes(t *testing.T) {
 		}
 	})
 }
+
+func TestPhase20NodesNilEntries(t *testing.T) {
+	call := &ast.CallExpr{Callee: p20Id("F"), NamedArgs: []*ast.CallArg{nil, p20Named("a", p20Int("1"), false), nil}}
+	si := &ast.StructInit{Fields: []*ast.FieldInit{nil, {Value: p20Int("2")}, p20Field("b", p20Int("3"))}}
+	ai := &ast.ArrayInit{Elements: []*ast.ArrayInitElem{nil, p20Elem(nil, p20Int("4")), nil}}
+	stmt := &ast.CallStmt{Callee: p20Id("fb"), Args: []*ast.CallArg{nil}}
+	f := &ast.SourceFile{Declarations: []ast.Declaration{&ast.ProgramDecl{Name: p20Id("P"),
+		Body: []ast.Statement{p20Assign(p20Id("x"), call), p20Assign(p20Id("y"), si), p20Assign(p20Id("z"), ai), stmt}}}}
+	out := Format(f, DefaultFormatOptions())
+	for _, want := range []string{"x := F(a := 1);", "y := (2, b := 3);", "z := [4];", "fb();"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+}

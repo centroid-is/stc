@@ -148,6 +148,9 @@ func walkExprsInStmt(stmt ast.Statement, visit func(ast.Expr)) {
 		for _, st := range s.ElseBranch {
 			walkExprsInStmt(st, visit)
 		}
+	case *ast.RefAssignStmt:
+		walkExpr(s.Value, visit)
+		walkExpr(s.Target, visit)
 	case *ast.CallStmt:
 		walkExpr(s.Callee, visit)
 		for _, arg := range s.Args {
@@ -172,6 +175,31 @@ func walkExpr(expr ast.Expr, visit func(ast.Expr)) {
 		walkExpr(e.Callee, visit)
 		for _, a := range e.Args {
 			walkExpr(a, visit)
+		}
+		for _, a := range e.NamedArgs {
+			if a != nil {
+				walkExpr(a.Value, visit)
+			}
+		}
+	case *ast.BitAccessExpr:
+		walkExpr(e.Target, visit)
+		// A literal bit index (w.3) is a bit position, not a magic number;
+		// a constant-name index is still visited.
+		if _, isLit := e.Index.(*ast.Literal); !isLit {
+			walkExpr(e.Index, visit)
+		}
+	case *ast.StructInit:
+		for _, f := range e.Fields {
+			if f != nil {
+				walkExpr(f.Value, visit)
+			}
+		}
+	case *ast.ArrayInit:
+		for _, el := range e.Elements {
+			if el != nil {
+				walkExpr(el.Count, visit)
+				walkExpr(el.Value, visit)
+			}
 		}
 	case *ast.MemberAccessExpr:
 		walkExpr(e.Object, visit)
