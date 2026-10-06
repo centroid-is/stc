@@ -365,7 +365,7 @@ Plans:
   3. `ST_EL1008` (struct members `I1 AT %I* : BOOL`) and FBs with `AT %I*`/`%Q*` in `VAR`/`VAR_INPUT`/`VAR_OUTPUT` check with no warnings, while an explicit `%IX0.0` inside an FB still reports SEMA031
   4. `t(IN := b, PT := , Q => , ET => );` parses and runs as if the empty arguments were omitted
   5. A MAIN that is a chain of action calls (CODESYS `ACTION ... END_ACTION` text form) parses, checks and executes each action against the owning POU's variables
-**Plans:** 9/10 plans executed
+**Plans:** 10/10 plans complete
 
 Plans:
 - [x] 19-01-PLAN.md — Interp coverage lift, local coverage-gate script, committed TwinCAT probe fixtures, oracle baseline
@@ -376,7 +376,7 @@ Plans:
 - [x] 19-06-PLAN.md — Interpreter GVL env layer, test runner and sim wiring, twincat_dialect ST suite (DIAL-02)
 - [x] 19-07-PLAN.md — ACTION parsing (inside and after POU), printing, checker resolution (DIAL-08)
 - [x] 19-08-PLAN.md — ACTION execution in owner env with recursion guard; action and empty-arg ST suites (DIAL-08, DIAL-05)
-- [ ] 19-09-PLAN.md — Phase gate: fixture/oracle tests, LSP robustness, coverage gate, validation sign-off
+- [x] 19-09-PLAN.md — Phase gate: fixture/oracle tests, LSP robustness, coverage gate, validation sign-off
 - [x] 19-10-PLAN.md — --gvl-name flag on parse/check/fmt/emit and ECT JSON CLI acceptance test (DIAL-02)
 
 ### Phase 20: TwinCAT Expression Semantics
@@ -517,7 +517,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 16. Shipped Stubs -- Schneider & AB | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 17. Behavioral Mocks | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 18. Auto-Defines & TcPOU Extractor | v1.1 | 1/1 | Complete | 2026-03-30 |
-| 19. TwinCAT Declaration Syntax | v1.2 | 9/10 | In Progress|  |
+| 19. TwinCAT Declaration Syntax | v1.2 | 10/10 | Complete   | 2026-10-06 |
 | 20. TwinCAT Expression Semantics | v1.2 | 0/TBD | Not started | - |
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 0/TBD | Not started | - |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |

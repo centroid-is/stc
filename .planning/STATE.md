@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: executing
+status: verifying
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-06T00:01:41.243Z"
+last_updated: "2026-10-06T00:10:46.957Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
-  completed_phases: 14
+  completed_phases: 15
   total_plans: 48
-  completed_plans: 47
-  percent: 48
+  completed_plans: 48
+  percent: 52
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 Phase: 19 (TwinCAT Declaration Syntax) — EXECUTING
 Plan: 10 of 10
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-06
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -91,6 +91,8 @@ Recent decisions affecting current work:
 - [Phase 19]: FB methods are FunctionType symbols in the FB scope so actions and the FB body can call them unqualified
 - [Phase 19]: DIAL-08 stays pending until 19-08 adds runtime action execution
 - [Phase 19]: 19-10: --gvl-name is applied after parsing (after ia.Parse in check), never in the incremental parse path; more than one input file is a usage error, a JSON {error} object under --format json
+- [Phase 19]: 19-09: gofmt is not CI-enforced; pre-existing non-gofmt files left untouched
+- [Phase 19]: 19-09: LSP resolves qualified_only GVL variables via the GVL struct type, same-file GVL first
 
 ### Pending Todos
 
@@ -104,7 +106,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T00:01:37.439Z
+Last session: 2026-10-06T00:10:41.930Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
