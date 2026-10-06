@@ -644,7 +644,10 @@ stc-mcp --project cmd/stc-mcp/testdata/live --io "tests/ecat_fixtures/Demo Devic
 |------|-------------|
 | `--project` | Project to simulate: `.tsproj`, `.plcproj`, a `.st` file or a directory of `.st` files |
 | `--io` | EtherCATConfig export attached to the TcLinkTo links; repeatable, globs allowed |
-| `--opcua` | Also serve the session over OPC UA on host:port; it shares the session runtime |
+| `--opcua` | Also serve the session over OPC UA on host:port; it shares the session runtime. A bare `:port` or `port` binds `127.0.0.1`; give `0.0.0.0:port` for all interfaces. The server starts with the session, on the first sim tool call |
+| `--security` | OPC UA security mode, as for `stc serve`: `none` (default) or `basic256sha256` |
+| `--allow-anonymous` | Accept anonymous OPC UA clients (default true; false with `basic256sha256` unless given) |
+| `--allow-anonymous-write` | Let anonymous OPC UA clients write (default true). When anonymous writes are allowed on a non-loopback address, a warning goes to stderr |
 | `--scenario` | Scenario TOML file (see [EtherCAT Simulation, Scenarios](ETHERCAT_SIMULATION.md#scenarios)); its steps fire as `stc_sim_step` advances the scan, and each step result lists the expects that failed in `scenario_failures` |
 
 The project loads on the first sim tool call. Without `--project` the sim

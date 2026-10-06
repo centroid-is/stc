@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -43,6 +44,17 @@ type simConfig struct {
 	Scenario string   // scenario TOML file fired as stc_sim_step advances ("" = none)
 	OPCUA    string   // host:port of the optional OPC UA server ("" = none)
 	PKIDir   string   // OPC UA certificate directory ("" = user cache dir)
+	// Security, NoAnonymous and NoAnonymousWrite are the stc serve OPC UA
+	// controls (--security, --allow-anonymous=false,
+	// --allow-anonymous-write=false); the zero value is serve's default.
+	// AnonymousSet records an explicit --allow-anonymous.
+	Security         string
+	NoAnonymous      bool
+	NoAnonymousWrite bool
+	AnonymousSet     bool
+	// Warn receives start-up warnings; stdout is the MCP stream, so it is
+	// stderr (nil = discard).
+	Warn io.Writer
 }
 
 // simSession is the loaded project with its optional EtherCAT network and
@@ -129,6 +141,14 @@ func (s *simSession) startOPCUA(cfg simConfig) error {
 	oc := opcua.DefaultConfig()
 	oc.Endpoint = cfg.OPCUA
 	oc.PKIDir = cfg.PKIDir
+	oc.AllowAnonymous, oc.AllowAnonymousWrite = !cfg.NoAnonymous, !cfg.NoAnonymousWrite
+	security := cfg.Security
+	if security == "" {
+		security = "none"
+	}
+	if err := oc.ApplySecurity(security, cfg.AnonymousSet); err != nil {
+		return err
+	}
 	srv, err := opcua.New(oc)
 	if err != nil {
 		return fmt.Errorf("opc ua server: %w", err)
@@ -142,6 +162,9 @@ func (s *simSession) startOPCUA(cfg simConfig) error {
 		return fmt.Errorf("starting opc ua server: %w", err)
 	}
 	s.srv = srv
+	if warn := opcua.AnonymousWriteWarning(oc, srv.ListenAddr()); warn != nil && cfg.Warn != nil {
+		fmt.Fprintf(cfg.Warn, "stc-mcp: warning: %v\n", warn)
+	}
 	return nil
 }
 

@@ -232,7 +232,7 @@ func TestParseFlags(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, liveFixture, cfg.Project)
 	assert.Len(t, cfg.IO, 2)
-	assert.Equal(t, ":4841", cfg.OPCUA)
+	assert.Equal(t, "127.0.0.1:4841", cfg.OPCUA, "a port-only --opcua binds loopback")
 
 	cfg, err = parseFlags([]string{"--io", "a.xml,b.xml", "--io", "c.xml", "--project", "p"}, &errb)
 	require.NoError(t, err)
@@ -240,7 +240,7 @@ func TestParseFlags(t *testing.T) {
 
 	cfg, err = parseFlags(nil, &errb)
 	require.NoError(t, err)
-	assert.Equal(t, simConfig{}, cfg)
+	assert.Equal(t, simConfig{Security: "none", Warn: &errb}, cfg)
 
 	_, err = parseFlags([]string{"--opcua", ":1"}, &errb)
 	assert.Error(t, err)
@@ -314,4 +314,62 @@ func TestSimSessionScenarioInvalid(t *testing.T) {
 	cfg.Scenario = writeScenario(t, "[[step]]\nbogus = 1\n")
 	_, err = newSimSession(cfg)
 	assert.ErrorContains(t, err, `unknown key "bogus"`)
+}
+
+// stc-mcp --opcua has the stc serve controls, binds loopback for a bare
+// port and warns on stderr when anonymous writes are exposed (review 2
+// ME-03).
+func TestParseFlagsOPCUAControls(t *testing.T) {
+	var errb bytes.Buffer
+	for in, want := range map[string]string{
+		":4840": "127.0.0.1:4840", "4840": "127.0.0.1:4840", "0.0.0.0:4840": "0.0.0.0:4840",
+		"[::1]:4840": "[::1]:4840", "plc.local:4840": "plc.local:4840",
+	} {
+		cfg, err := parseFlags([]string{"--project", "p", "--opcua", in}, &errb)
+		require.NoError(t, err, in)
+		assert.Equal(t, want, cfg.OPCUA, in)
+	}
+	_, err := parseFlags([]string{"--project", "p", "--opcua", "nope"}, &errb)
+	assert.ErrorContains(t, err, "invalid --opcua")
+
+	cfg, err := parseFlags([]string{"--project", "p", "--opcua", ":1", "--allow-anonymous-write=false"}, &errb)
+	require.NoError(t, err)
+	assert.True(t, cfg.NoAnonymousWrite)
+	assert.False(t, cfg.NoAnonymous)
+	assert.False(t, cfg.AnonymousSet)
+
+	cfg, err = parseFlags([]string{"--project", "p", "--opcua", ":1", "--security", "basic256sha256", "--allow-anonymous"}, &errb)
+	require.NoError(t, err)
+	assert.Equal(t, "basic256sha256", cfg.Security)
+	assert.True(t, cfg.AnonymousSet)
+
+	_, err = parseFlags([]string{"--project", "p", "--opcua", ":1", "--security", "rot13"}, &errb)
+	assert.ErrorContains(t, err, "invalid --security")
+	_, err = parseFlags([]string{"--project", "p", "--opcua", ":1", "--allow-anonymous=false"}, &errb)
+	assert.ErrorContains(t, err, "needs --security basic256sha256")
+}
+
+func TestSimOPCUAExposureWarning(t *testing.T) {
+	_, port, err := net.SplitHostPort(freeAddr(t))
+	require.NoError(t, err)
+	var warn bytes.Buffer
+	cfg := liveConfig()
+	cfg.OPCUA, cfg.Warn, cfg.PKIDir = net.JoinHostPort("0.0.0.0", port), &warn, t.TempDir()
+	newLive(t, cfg)
+	assert.Contains(t, warn.String(), "anonymous OPC UA clients can write on :"+port)
+
+	warn.Reset()
+	cfg.OPCUA, cfg.NoAnonymousWrite = freeAddr(t), false
+	newLive(t, cfg)
+	assert.Empty(t, warn.String(), "loopback is not exposed")
+
+	warn.Reset()
+	_, port, _ = net.SplitHostPort(freeAddr(t))
+	cfg.OPCUA, cfg.NoAnonymousWrite = net.JoinHostPort("0.0.0.0", port), true
+	newLive(t, cfg)
+	assert.Empty(t, warn.String(), "read-only anonymous access is not warned about")
+
+	cfg.Security = "bogus"
+	_, err = newSimSession(cfg)
+	assert.ErrorContains(t, err, "invalid --security")
 }

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/signal"
 	"runtime"
@@ -226,8 +225,7 @@ func startOPCUA(r *projectRunner, cfg opcua.Config, out, errOut io.Writer, forma
 		diags = []diag.Diagnostic{}
 	}
 	anonWrite := cfg.AllowAnonymous && cfg.AllowAnonymousWrite
-	if anonWrite && exposed(srv.ListenAddr()) {
-		warn := fmt.Errorf("anonymous OPC UA clients can write on %s; bind a loopback host or pass --allow-anonymous-write=false", srv.ListenAddr())
+	if warn := opcua.AnonymousWriteWarning(cfg, srv.ListenAddr()); warn != nil {
 		if format == "json" {
 			reportServe(errOut, format, "warning", warn)
 		} else {
@@ -253,36 +251,12 @@ func serveConfig(cmd *cobra.Command) (opcua.Config, error) {
 	cfg.AllowAnonymousWrite, _ = cmd.Flags().GetBool("allow-anonymous-write")
 	cfg.AllowAnonymous, _ = cmd.Flags().GetBool("allow-anonymous")
 	sec, _ := cmd.Flags().GetString("security")
-	switch strings.ToLower(sec) {
-	case "none":
-		if !cfg.AllowAnonymous {
-			return cfg, errors.New("--allow-anonymous=false needs --security basic256sha256: SecurityPolicy None only supports anonymous clients")
-		}
-	case "basic256sha256":
-		cfg.AllowNone = false
-		cfg.EnableBasic256Sha256 = true
-		if !cmd.Flags().Changed("allow-anonymous") {
-			cfg.AllowAnonymous = false
-		}
-	default:
-		return cfg, fmt.Errorf("invalid --security %q: want none or basic256sha256", sec)
-	}
-	return cfg, nil
+	err := cfg.ApplySecurity(sec, cmd.Flags().Changed("allow-anonymous"))
+	return cfg, err
 }
 
-// exposed reports whether a listen address is reachable from other hosts:
-// all interfaces, or a host that is not loopback.
-func exposed(listen string) bool {
-	host, _, err := net.SplitHostPort(listen)
-	if err != nil || host == "" {
-		return true
-	}
-	if host == "localhost" {
-		return false
-	}
-	ip := net.ParseIP(host)
-	return ip == nil || !ip.IsLoopback()
-}
+// exposed reports whether a listen address is reachable from other hosts.
+func exposed(listen string) bool { return opcua.Exposed(listen) }
 
 func printServeInfo(out, errOut io.Writer, format string, info serveInfo) {
 	if format == "json" {
