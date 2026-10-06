@@ -895,7 +895,7 @@ stc emit src/conveyor.st --target beckhoff
 
 A CLI command that scaffolds vendor library stubs:
 
-```bash
+```bash proposed
 stc vendor init beckhoff tc2_mc2
 # Creates vendor/beckhoff/tc2_mc2.st with all FB stubs
 
