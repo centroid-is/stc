@@ -22,6 +22,9 @@ type Checker struct {
 	currentReturnType   types.Type
 	currentFunctionName string
 	currentScope        *symbols.Scope
+	// currentFB is the FUNCTION_BLOCK whose body or action is being
+	// checked; THIS and SUPER refer to it. nil outside an FB.
+	currentFB *ast.FunctionBlockDecl
 }
 
 // NewChecker creates a new Checker using the given symbol table and diagnostics.
@@ -37,24 +40,33 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 			case *ast.ProgramDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "PROGRAM")
+					c.checkVarInitializers(d.VarBlocks, c.table.LookupPOU(d.Name.Name))
 					c.checkPOUBody(d.Name.Name, d.Body)
 					c.checkActionBodies(d.Name.Name, d.Actions)
 				}
 			case *ast.FunctionBlockDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION_BLOCK")
+					c.checkVarInitializers(d.VarBlocks, c.table.LookupPOU(d.Name.Name))
+					c.currentFB = d
 					c.checkPOUBody(d.Name.Name, d.Body)
 					c.checkActionBodies(d.Name.Name, d.Actions)
+					c.currentFB = nil
 				}
 			case *ast.TypeDecl:
 				if st, ok := d.Type.(*ast.StructType); ok {
 					c.checkStructATAddresses(st)
+					if d.Name != nil {
+						c.checkStructMemberInitializers(d, st)
+					}
 				}
 			case *ast.GVLDecl:
 				c.checkATAddresses(d.Blocks, "GVL")
+				c.checkGVLInitializers(d)
 			case *ast.FunctionDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION")
+					c.checkVarInitializers(d.VarBlocks, c.table.LookupPOU(d.Name.Name))
 					// Set return type for RETURN checks
 					if sym := c.table.LookupGlobal(d.Name.Name); sym != nil {
 						if fnType, ok := sym.Type.(*types.FunctionType); ok {
@@ -211,6 +223,8 @@ func (c *Checker) checkStmt(stmt ast.Statement) {
 	switch s := stmt.(type) {
 	case *ast.AssignStmt:
 		c.checkAssignStmt(s)
+	case *ast.RefAssignStmt:
+		c.checkRefAssignStmt(s)
 	case *ast.IfStmt:
 		c.checkIfStmt(s)
 	case *ast.ForStmt:
@@ -253,6 +267,17 @@ func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
 	}
 
 	if targetType == types.Invalid || valueType == types.Invalid {
+		return
+	}
+
+	// A reference reads and writes through to its target (research
+	// Pitfall 10); a reference assigned to a reference keeps both types.
+	if !(isReference(targetType) && isReference(valueType)) {
+		targetType, valueType = derefRef(targetType), derefRef(valueType)
+	}
+
+	if involvesEnum(valueType, targetType) {
+		c.checkEnumAssign(s, valueType, targetType)
 		return
 	}
 
@@ -371,18 +396,10 @@ func (c *Checker) checkCaseStmt(s *ast.CaseStmt) {
 		for _, label := range branch.Labels {
 			switch l := label.(type) {
 			case *ast.CaseLabelValue:
-				labelType := c.checkExpr(l.Value)
-				if exprType != types.Invalid && labelType != types.Invalid {
-					if _, ok := types.CommonType(exprType.Kind(), labelType.Kind()); !ok {
-						pos := astPosToSource(l.Span().Start)
-						c.diags.Errorf(pos, CodeTypeMismatch,
-							"case label type %s incompatible with selector type %s",
-							labelType, exprType)
-					}
-				}
+				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Value))
 			case *ast.CaseLabelRange:
-				c.checkExpr(l.Low)
-				c.checkExpr(l.High)
+				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Low))
+				c.caseLabelCompatible(l, exprType, c.checkExpr(l.High))
 			}
 		}
 		for _, stmt := range branch.Body {
@@ -402,13 +419,20 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 	// Resolve callee - should be an FB instance
 	calleeType := c.checkExpr(s.Callee)
 	if calleeType == types.Invalid {
+		// The callee is already reported (undeclared name or type). Still
+		// check the argument values so their variables count as used.
+		for _, arg := range s.Args {
+			if arg.Value != nil {
+				c.checkExpr(arg.Value)
+			}
+		}
 		return
 	}
 
 	if fnType, ok := calleeType.(*types.FunctionType); ok {
 		// A FUNCTION, METHOD or ACTION called as a statement with formal
 		// arguments: M(a := x);
-		c.checkFuncCallStmtArgs(fnType, s.Args)
+		c.checkFuncCallStmtArgs(s, fnType)
 		return
 	}
 
@@ -421,15 +445,27 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 	}
 
 	// Validate named arguments against FB inputs/outputs
+	bound := make(map[string]bool)
 	for _, arg := range s.Args {
 		if arg.Name == nil {
 			continue
 		}
 		argName := strings.ToUpper(arg.Name.Name)
+		// An alias (CTU.R) and its canonical input (RESET) set the same
+		// field, so binding both is a double binding.
+		canon := argName
+		if c, ok := fbType.ParamAliases[argName]; ok && !arg.IsOutput {
+			canon = c
+		}
+		if bound[canon] {
+			c.diags.Errorf(astPosToSource(arg.Span().Start), CodeNoMember,
+				"parameter %q of %s is bound more than once", arg.Name.Name, fbType.Name)
+		}
+		bound[canon] = true
 
 		// Find the parameter in the FB type
 		var paramType types.Type
-		found := false
+		found, inOut := false, false
 		if arg.IsOutput {
 			for _, out := range fbType.Outputs {
 				if strings.ToUpper(out.Name) == argName {
@@ -439,10 +475,12 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 				}
 			}
 		} else {
-			for _, in := range fbType.Inputs {
+			// name := value binds a VAR_INPUT or a VAR_IN_OUT.
+			for _, in := range append(fbType.Inputs[:len(fbType.Inputs):len(fbType.Inputs)], fbType.InOuts...) {
 				if strings.ToUpper(in.Name) == argName {
 					paramType = in.Type
 					found = true
+					inOut = in.Direction == types.DirInOut
 					break
 				}
 			}
@@ -459,7 +497,22 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 		}
 
 		if arg.Value != nil {
+			if inOut && !c.checkInOutArg(fbType.Name, types.Parameter{Name: arg.Name.Name}, arg.Value) {
+				continue
+			}
 			argType := c.checkExpr(arg.Value)
+			if argType != types.Invalid && paramType != nil && involvesEnum(argType, paramType) {
+				from, to := argType, paramType
+				if arg.IsOutput {
+					from, to = paramType, argType
+				}
+				c.checkEnumArg(arg.Value, from, to, func() {
+					c.diags.Errorf(astPosToSource(arg.Value.Span().Start), CodeWrongArgType,
+						"cannot pass %s as %s parameter %q (expected %s)",
+						argType, paramDirStr(arg.IsOutput), arg.Name.Name, paramType)
+				})
+				continue
+			}
 			if argType != types.Invalid && paramType != nil {
 				if !paramType.Equal(argType) && !types.CanWiden(argType.Kind(), paramType.Kind()) {
 					// Allow literal compatibility (e.g., integer literal 100 passed as INT param)
@@ -477,28 +530,9 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 }
 
 // checkFuncCallStmtArgs checks the formal arguments of a function-like call
-// statement. Input names must be parameters of fnType; output bindings (=>)
-// are not validated because a FunctionType does not list outputs. Every
-// argument value is checked so its variables count as used.
-func (c *Checker) checkFuncCallStmtArgs(fnType *types.FunctionType, args []*ast.CallArg) {
-	for _, arg := range args {
-		if arg.Name != nil && !arg.IsOutput && !hasParam(fnType.Params, arg.Name.Name) {
-			c.diags.Errorf(astPosToSource(arg.Name.Span().Start), CodeNoMember,
-				"%s has no input parameter %q", fnType.Name, arg.Name.Name)
-		}
-		if arg.Value != nil {
-			c.checkExpr(arg.Value)
-		}
-	}
-}
-
-func hasParam(params []types.Parameter, name string) bool {
-	for _, p := range params {
-		if strings.EqualFold(p.Name, name) {
-			return true
-		}
-	}
-	return false
+// statement (F(a := 1);) with the same binding rules as a call expression.
+func (c *Checker) checkFuncCallStmtArgs(s *ast.CallStmt, fnType *types.FunctionType) {
+	c.bindCallArgs(s, fnType, s.Args)
 }
 
 // checkExpr type-checks an expression and returns its resolved type.
@@ -524,6 +558,12 @@ func (c *Checker) checkExpr(expr ast.Expr) types.Type {
 		return c.checkIndexExpr(e)
 	case *ast.DerefExpr:
 		return c.checkDerefExpr(e)
+	case *ast.BitAccessExpr:
+		return c.checkBitAccessExpr(e)
+	case *ast.ThisExpr:
+		return c.checkThisExpr(e)
+	case *ast.SuperExpr:
+		return c.checkSuperExpr(e)
 	case *ast.ParenExpr:
 		return c.checkExpr(e.Inner)
 	case *ast.ErrorNode:
@@ -538,7 +578,10 @@ func (c *Checker) checkIdent(e *ast.Ident) types.Type {
 	}
 	sym := c.currentScope.Lookup(e.Name)
 	if sym == nil {
-		c.reportUndeclared(astPosToSource(e.Span().Start), e.Name)
+		pos := astPosToSource(e.Span().Start)
+		if !c.reportQualifiedEnumValue(pos, e.Name) {
+			c.reportUndeclared(pos, e.Name)
+		}
 		return types.Invalid
 	}
 	sym.MarkUsed()
@@ -586,6 +629,8 @@ func (c *Checker) qualifiedOnlyGVLs(name string) []string {
 func (c *Checker) checkConstantTarget(target ast.Expr) {
 	var name string
 	constant := false
+	// Writing a bit writes the variable that holds it.
+	target = c.assignRoot(target)
 	switch t := target.(type) {
 	case *ast.Ident:
 		sym := c.currentScope.Lookup(t.Name)
@@ -639,14 +684,21 @@ func (c *Checker) checkLiteral(e *ast.Literal) types.Type {
 }
 
 func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
-	left := c.checkExpr(e.Left)
-	right := c.checkExpr(e.Right)
+	left := derefRef(c.checkExpr(e.Left))
+	right := derefRef(c.checkExpr(e.Right))
 
 	if left == types.Invalid || right == types.Invalid {
 		return types.Invalid // propagate errors, don't cascade
 	}
 
 	op := strings.ToUpper(e.Op.Text)
+	left, right, result, done, ok := c.checkEnumBinary(e, op, left, right)
+	if !ok {
+		return types.Invalid
+	}
+	if done {
+		return result
+	}
 	switch {
 	case isArithmeticOp(op):
 		common, ok := types.CommonType(left.Kind(), right.Kind())
@@ -683,7 +735,7 @@ func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
 }
 
 func (c *Checker) checkUnaryExpr(e *ast.UnaryExpr) types.Type {
-	operandType := c.checkExpr(e.Operand)
+	operandType := derefRef(c.checkExpr(e.Operand))
 	if operandType == types.Invalid {
 		return types.Invalid
 	}
@@ -714,10 +766,23 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 	// Resolve callee
 	calleeName := exprName(e.Callee)
 	if calleeName == "" {
-		// Member callees (inst.A1(), GVL.fb()) are accepted unchecked;
-		// the instance they are called on still counts as used.
-		c.markRootUsed(e.Callee)
+		// Member callees (inst.M(), THIS^.M(), GVL.fb()) are accepted
+		// unchecked, arguments included (research Pitfall 11): the callee
+		// type of a member call is not resolved yet. The instance they are
+		// called on still counts as used, and THIS^ / SUPER^ are validated.
+		c.checkMemberCalleeRoot(e.Callee)
 		return types.Invalid
+	}
+
+	// A METHOD or ACTION of the current POU (own or inherited) binds
+	// before a built-in function of the same name.
+	if c.currentScope != nil {
+		if sym := lookupInPOUChain(c.currentScope, calleeName); sym != nil {
+			if fnType, ok := sym.Type.(*types.FunctionType); ok {
+				sym.MarkUsed()
+				return c.checkUserFuncCall(e, fnType)
+			}
+		}
 	}
 
 	// Check built-in functions first
@@ -757,10 +822,23 @@ func (c *Checker) checkBuiltinCall(e *ast.CallExpr, fnType *types.FunctionType) 
 		return types.Invalid
 	}
 
-	// Type-check arguments
+	// Type-check arguments. A conversion function takes any enum as its
+	// base integer type; other built-ins take only non-strict enums that
+	// way, and a strict enum passed to a typed parameter is SEMA036.
+	conversion := isConversionBuiltin(fnType.Name)
 	argTypes := make([]types.Type, len(e.Args))
 	for i, arg := range e.Args {
 		argTypes[i] = c.checkExpr(arg)
+		if et := asEnum(argTypes[i]); et != nil {
+			switch {
+			case conversion || !et.Strict:
+				argTypes[i] = enumBase(et)
+			case fnType.Params[i].Type != nil:
+				c.diags.Errorf(astPosToSource(arg.Span().Start), CodeEnumRule,
+					"strict enum %s passed to %s; use an explicit conversion", et.Name, fnType.Name)
+				return types.Invalid
+			}
+		}
 	}
 
 	// Use candidate resolution for generic functions
@@ -775,33 +853,12 @@ func (c *Checker) checkBuiltinCall(e *ast.CallExpr, fnType *types.FunctionType) 
 	return retType
 }
 
+// checkUserFuncCall checks a call of a user FUNCTION, METHOD or ACTION and
+// returns its return type.
 func (c *Checker) checkUserFuncCall(e *ast.CallExpr, fnType *types.FunctionType) types.Type {
-	// Validate argument count
-	if len(e.Args) != len(fnType.Params) {
-		pos := astPosToSource(e.Span().Start)
-		c.diags.Errorf(pos, CodeWrongArgCount,
-			"%s expects %d argument(s), got %d",
-			fnType.Name, len(fnType.Params), len(e.Args))
+	if !c.checkCallArgs(e, fnType) {
 		return types.Invalid
 	}
-
-	// Type-check arguments
-	for i, arg := range e.Args {
-		argType := c.checkExpr(arg)
-		if argType == types.Invalid || i >= len(fnType.Params) {
-			continue
-		}
-		paramType := fnType.Params[i].Type
-		if paramType != nil && !paramType.Equal(argType) {
-			if !types.CanWiden(argType.Kind(), paramType.Kind()) {
-				pos := astPosToSource(arg.Span().Start)
-				c.diags.Errorf(pos, CodeWrongArgType,
-					"argument %d: cannot pass %s as %s",
-					i+1, argType, paramType)
-			}
-		}
-	}
-
 	return fnType.ReturnType
 }
 
@@ -814,6 +871,15 @@ func (c *Checker) checkMemberAccessExpr(e *ast.MemberAccessExpr) types.Type {
 		return types.Invalid
 	}
 	memberName := e.Member.Name
+
+	// v.cBit on an integer value with a CONSTANT index is bit access.
+	if typ, ok := c.checkConstBitIndex(e, objType); ok {
+		return typ
+	}
+	objType = derefRef(objType)
+	if typ, ok := c.selfMember(e.Object, objType, e.Member); ok {
+		return typ
+	}
 
 	switch t := objType.(type) {
 	case *types.StructType:
@@ -868,7 +934,7 @@ func (c *Checker) checkMemberAccessExpr(e *ast.MemberAccessExpr) types.Type {
 }
 
 func (c *Checker) checkIndexExpr(e *ast.IndexExpr) types.Type {
-	objType := c.checkExpr(e.Object)
+	objType := derefRef(c.checkExpr(e.Object))
 	if objType == types.Invalid {
 		return types.Invalid
 	}
@@ -937,12 +1003,15 @@ func isBooleanOp(op string) bool {
 // (inst in inst.A1 or a.b.c) as used. Unknown roots are left alone: the
 // call is accepted without checking, so no diagnostic is added here.
 func (c *Checker) markRootUsed(e ast.Expr) {
-	for {
-		ma, ok := e.(*ast.MemberAccessExpr)
-		if !ok {
-			break
+	for walking := true; walking; {
+		switch x := e.(type) {
+		case *ast.MemberAccessExpr:
+			e = x.Object
+		case *ast.BitAccessExpr:
+			e = x.Target
+		default:
+			walking = false
 		}
-		e = ma.Object
 	}
 	id, ok := e.(*ast.Ident)
 	if !ok || c.currentScope == nil {

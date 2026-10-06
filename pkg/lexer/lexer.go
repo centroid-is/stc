@@ -245,8 +245,11 @@ func (l *Lexer) scanNumber(start Pos) Token {
 	// Check for base prefix: digits followed by #
 	if !l.atEnd() && l.peek() == '#' {
 		// This is a multi-base integer: 16#FF, 2#1010, 8#77
+		base := l.src[start.Offset:l.pos]
 		l.advance() // consume #
-		l.scanBaseDigits()
+		if !l.scanBasedValue(base) {
+			return l.makeToken(Illegal, start)
+		}
 		return l.makeToken(IntLiteral, start)
 	}
 
@@ -296,6 +299,16 @@ func (l *Lexer) scanBaseDigits() {
 	}
 }
 
+// scanBasedValue consumes the digits after the # of a based integer and
+// reports whether the literal is valid: IEC 61131-3 allows only the bases
+// 2, 8 and 16, and at least one digit must follow the #.
+func (l *Lexer) scanBasedValue(base string) bool {
+	digitsStart := l.pos
+	l.scanBaseDigits()
+	digits := strings.ReplaceAll(l.src[digitsStart:l.pos], "_", "")
+	return (base == "2" || base == "8" || base == "16") && digits != ""
+}
+
 // timePrefixes maps uppercased time/date prefix keywords to their literal token kinds.
 var timePrefixes = map[string]TokenKind{
 	"T":             TimeLiteral,
@@ -342,13 +355,24 @@ func (l *Lexer) scanIdentOrKeyword(start Pos) Token {
 		// Time/date literal prefix?
 		if kind, ok := timePrefixes[upper]; ok {
 			l.advance() // consume #
-			l.scanLiteralValue()
+			l.scanLiteralValue(true)
 			return l.makeToken(kind, start)
 		}
 		// Typed literal prefix?
 		if typedLiteralPrefixes[upper] {
 			l.advance() // consume #
-			l.scanLiteralValue()
+			valueStart := l.pos
+			l.scanLiteralValue(false)
+			// Typed based literal such as BYTE#16#10: the value so far is the
+			// decimal base, and a second # introduces the digits.
+			if l.pos > valueStart && allDecimal(l.src[valueStart:l.pos]) &&
+				!l.atEnd() && l.peek() == '#' {
+				base := l.src[valueStart:l.pos]
+				l.advance() // consume the second #
+				if !l.scanBasedValue(base) {
+					return l.makeToken(Illegal, start)
+				}
+			}
 			return l.makeToken(TypedLiteral, start)
 		}
 	}
@@ -360,12 +384,24 @@ func (l *Lexer) scanIdentOrKeyword(start Pos) Token {
 	return l.makeToken(Ident, start)
 }
 
+// allDecimal reports whether s consists only of decimal digits.
+func allDecimal(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isDigit(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // scanLiteralValue consumes the value portion after a # in typed/time/date literals.
-// Handles: digits, letters, underscores, dots, colons, plus, minus signs.
-func (l *Lexer) scanLiteralValue() {
+// Handles: digits, letters, underscores, dots, plus, minus signs, and colons
+// when allowColon is set (TOD#12:00, DT#...-12:00). Typed literals such as
+// INT#5 never contain a colon, so INT#5: lexes as TypedLiteral then Colon.
+func (l *Lexer) scanLiteralValue(allowColon bool) {
 	for !l.atEnd() {
 		ch := l.peek()
-		if isIdentPart(ch) || isDigit(ch) || ch == '.' || ch == ':' || ch == '-' || ch == '+' {
+		if isIdentPart(ch) || isDigit(ch) || ch == '.' || (ch == ':' && allowColon) || ch == '-' || ch == '+' {
 			l.advance()
 		} else {
 			break

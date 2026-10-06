@@ -65,6 +65,18 @@ const (
 	KindGVLDecl
 	KindAttribute
 	KindPragma
+
+	// Phase 20 (TwinCAT expression semantics). Appended after KindPragma so
+	// every earlier numeric value stays stable.
+	KindBitAccessExpr
+	KindThisExpr
+	KindSuperExpr
+	KindRefAssignStmt
+	KindCallArg
+	KindStructInit
+	KindFieldInit
+	KindArrayInit
+	KindArrayInitElem
 )
 
 var nodeKindNames = [...]string{
@@ -112,6 +124,15 @@ var nodeKindNames = [...]string{
 	KindGVLDecl:           "GVLDecl",
 	KindAttribute:         "Attribute",
 	KindPragma:            "Pragma",
+	KindBitAccessExpr:     "BitAccessExpr",
+	KindThisExpr:          "ThisExpr",
+	KindSuperExpr:         "SuperExpr",
+	KindRefAssignStmt:     "RefAssignStmt",
+	KindCallArg:           "CallArg",
+	KindStructInit:        "StructInit",
+	KindFieldInit:         "FieldInit",
+	KindArrayInit:         "ArrayInit",
+	KindArrayInitElem:     "ArrayInitElem",
 }
 
 // String returns the human-readable name of a NodeKind.

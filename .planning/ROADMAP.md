@@ -389,7 +389,18 @@ Plans:
   3. `CASE e OF lft_e.eef1: ... E.a, E.b: ...` and an enum declared `(a := 0, b := 1) UINT` with `strict` / `to_string` attributes check and execute; `REF=`, `THIS^` and `SUPER^` execute with the expected results in host tests
   4. `stc check` on the flattened ST301 + SVNCoreComponents probe sources reports zero parse errors
   5. `stc check` accepts TON/TOF/TP/CTU/CTD/CTUD/R_TRIG/F_TRIG/SR/RS calls without stubs and reports an error for an undeclared type name such as `FB_DoesNotExist`
-**Plans**: TBD
+**Plans**: 9 plans
+
+Plans:
+- [x] 20-01-PLAN.md -- AST contracts: bit access, named call args, REF=, THIS/SUPER, initialisers, namespace types, enum base/default; JSON kinds, fmt/emit/lint, shared enum numbering
+- [x] 20-02-PLAN.md -- Parser expressions/statements: bit access, named args in expression calls, trailing comma, qualified CASE labels, REF=, THIS^/SUPER^
+- [x] 20-03-PLAN.md -- Lexer and declaration parsing: typed based literals, enum base type and TYPE default, namespace-qualified types, struct/array initialisers, stray semicolons
+- [x] 20-04-PLAN.md -- Checker resolver: pointer-stable two-pass registration, ten standard FBs with aliases, inherited EXTENDS scope, SEMA037 with fixture audit
+- [x] 20-05-PLAN.md -- Interpreter values: bit read/write, enum numbering/qualified/inline values, TO_STRING, standard FB input aliases
+- [x] 20-06-PLAN.md -- Checker metadata and calls: enum metadata and inline enums, FUNCTION outputs, bit access SEMA035 (read and write), named-arg binding
+- [x] 20-07-PLAN.md -- Interpreter calls and references: shared arg binder, FUNCTIONs in pkg/interp, unqualified methods, THIS^/SUPER^, path-based REF=
+- [x] 20-09-PLAN.md -- Checker semantics: enum rules SEMA036 and TO_STRING, REF=/THIS/SUPER SEMA038 with reference auto-deref, initialiser checks
+- [x] 20-08-PLAN.md -- Acceptance gate: ST dialect suites, probe gate without allowances, zero-parse-error oracle, hand-off re-run, validation sign-off
 
 ### Phase 21: TwinCAT Project Import & Library Stubs
 **Goal**: A TwinCAT solution on disk becomes one stc project model, with library references resolved and the Beckhoff libraries sildarvinnsla uses available as stubs
@@ -518,7 +529,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 17. Behavioral Mocks | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 18. Auto-Defines & TcPOU Extractor | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 19. TwinCAT Declaration Syntax | v1.2 | 10/10 | Complete    | 2026-10-06 |
-| 20. TwinCAT Expression Semantics | v1.2 | 0/TBD | Not started | - |
+| 20. TwinCAT Expression Semantics | v1.2 | 9/9 | Complete    | 2026-10-06 |
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 0/TBD | Not started | - |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |

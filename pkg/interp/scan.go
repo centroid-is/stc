@@ -245,6 +245,9 @@ func (e *ScanCycleEngine) initializeEnv() {
 	for _, a := range e.program.Actions {
 		e.env.DefineAction(a)
 	}
+	if e.program.Name != nil {
+		e.interp.RegisterInlineEnums(e.program.Name.Name, e.program.VarBlocks)
+	}
 
 	for _, vb := range e.program.VarBlocks {
 		for _, vd := range vb.Declarations {

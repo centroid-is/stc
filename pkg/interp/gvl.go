@@ -72,6 +72,7 @@ func (interp *Interpreter) RegisterGVL(decl *ast.GVLDecl) *Env {
 	if !qualifiedOnly {
 		interp.gvls.unqualified = env
 	}
+	interp.retryPendingEnums()
 	return env
 }
 
@@ -128,9 +129,10 @@ func evalGVLMember(g *Env, gvl *ast.Ident, member *ast.Ident) (Value, error) {
 // assignGVLMember writes gvl.member in the GVL's own scope. Unknown members
 // are an error rather than being created, so a typo cannot add a variable.
 func assignGVLMember(g *Env, gvl *ast.Ident, member *ast.Ident, val Value) error {
-	if _, ok := g.GetLocal(member.Name); !ok {
+	cur, ok := g.GetLocal(member.Name)
+	if !ok {
 		return gvlMemberError(gvl, member)
 	}
-	g.Define(member.Name, val)
+	g.Define(member.Name, adoptEnumTag(cur, val))
 	return nil
 }

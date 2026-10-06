@@ -58,6 +58,18 @@ var elementaryTypes = map[string]Type{
 	"TOD":           TypeTOD,
 	"CHAR":          TypeCHAR,
 	"WCHAR":         TypeWCHAR,
+
+	// IEC 61131-3 3rd edition long date and time types. stc has no 64-bit
+	// time kinds yet, so each maps to the kind of its short counterpart.
+	"LTIME":          TypeTIME,
+	"LDATE":          TypeDATE,
+	"LTIME_OF_DAY":   TypeTOD,
+	"LTOD":           TypeTOD,
+	"LDATE_AND_TIME": TypeDT,
+	"LDT":            TypeDT,
+
+	// VOID is the return type of a FUNCTION without a result (CODESYS).
+	"VOID": TypeVOID,
 }
 
 // LookupElementaryType resolves a type name (case-insensitive) to its Type constant.
@@ -197,6 +209,23 @@ func init() {
 		{"LREAL_TO_DINT", TypeLREAL, TypeDINT},
 		{"TIME_TO_DINT", TypeTIME, TypeDINT},
 		{"TIME_TO_LREAL", TypeTIME, TypeLREAL},
+		{"TIME_TO_REAL", TypeTIME, TypeREAL},
+		// Width and sign changes the interpreter implements
+		{"INT_TO_UDINT", TypeINT, TypeUDINT},
+		{"UDINT_TO_INT", TypeUDINT, TypeINT},
+		{"UDINT_TO_DINT", TypeUDINT, TypeDINT},
+		{"DINT_TO_UDINT", TypeDINT, TypeUDINT},
+		{"UINT_TO_UDINT", TypeUINT, TypeUDINT},
+		{"UDINT_TO_UINT", TypeUDINT, TypeUINT},
+		{"UINT_TO_INT", TypeUINT, TypeINT},
+		{"INT_TO_UINT", TypeINT, TypeUINT},
+		{"SINT_TO_REAL", TypeSINT, TypeREAL},
+		{"USINT_TO_REAL", TypeUSINT, TypeREAL},
+		{"UINT_TO_REAL", TypeUINT, TypeREAL},
+		{"UDINT_TO_REAL", TypeUDINT, TypeREAL},
+		{"UDINT_TO_LREAL", TypeUDINT, TypeLREAL},
+		{"REAL_TO_LREAL", TypeREAL, TypeLREAL},
+		{"LREAL_TO_REAL", TypeLREAL, TypeREAL},
 		// TRUNC: truncate toward zero (as opposed to REAL_TO_INT's rounding)
 		{"TRUNC", TypeREAL, TypeDINT},
 		{"TRUNC_INT", TypeREAL, TypeINT},
@@ -208,6 +237,28 @@ func init() {
 			ReturnType: c.to,
 			Params:     []Parameter{{Name: "IN", Type: c.from, Direction: DirInput}},
 		}
+	}
+
+	// Overloaded conversions TO_<type> (IEC 61131-3 3rd edition): one
+	// argument of any elementary type, enums included. TO_STRING gives the
+	// value name of a to_string enum at runtime.
+	for _, to := range []Type{
+		TypeSINT, TypeINT, TypeDINT, TypeLINT,
+		TypeUSINT, TypeUINT, TypeUDINT, TypeULINT,
+		TypeBYTE, TypeWORD, TypeDWORD, TypeLWORD,
+		TypeREAL, TypeLREAL,
+	} {
+		name := "TO_" + to.String()
+		BuiltinFunctions[name] = &FunctionType{
+			Name:       name,
+			ReturnType: to,
+			Params:     []Parameter{anyParam("IN")},
+		}
+	}
+	BuiltinFunctions["TO_STRING"] = &FunctionType{
+		Name:       "TO_STRING",
+		ReturnType: TypeSTRING,
+		Params:     []Parameter{anyParam("IN")},
 	}
 
 	// String functions

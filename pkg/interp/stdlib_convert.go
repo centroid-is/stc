@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/centroid-is/stc/pkg/types"
@@ -206,8 +207,34 @@ func registerConvertFunctions() {
 		if len(args) < 1 {
 			return Value{}, &RuntimeError{Msg: "REAL_TO_STRING requires 1 argument"}
 		}
-		s := strconv.FormatFloat(args[0].Real, 'G', -1, 64)
-		return Value{Kind: ValString, Str: s, IECType: types.KindSTRING}, nil
+		return Value{Kind: ValString, Str: formatReal(args[0].Real), IECType: types.KindSTRING}, nil
+	}
+
+	// TO_STRING: overloaded conversion. The interpreter answers a to_string
+	// enum value with its name before reaching this function (see evalCall).
+	StdlibFunctions["TO_STRING"] = func(args []Value) (Value, error) {
+		if len(args) != 1 {
+			return Value{}, &RuntimeError{Msg: "TO_STRING requires 1 argument"}
+		}
+		return Value{Kind: ValString, Str: anyToString(args[0]), IECType: types.KindSTRING}, nil
+	}
+
+	// TO_<int>, TO_<bits>, TO_REAL, TO_LREAL: overloaded conversions of one
+	// argument (enum values arrive as their ordinal).
+	for _, k := range []types.TypeKind{
+		types.KindSINT, types.KindINT, types.KindDINT, types.KindLINT,
+		types.KindUSINT, types.KindUINT, types.KindUDINT, types.KindULINT,
+		types.KindBYTE, types.KindWORD, types.KindDWORD, types.KindLWORD,
+		types.KindREAL, types.KindLREAL,
+	} {
+		kind := k
+		name := "TO_" + kind.String()
+		StdlibFunctions[name] = func(args []Value) (Value, error) {
+			if len(args) != 1 {
+				return Value{}, &RuntimeError{Msg: name + " requires 1 argument"}
+			}
+			return convertTo(name, kind, args[0])
+		}
 	}
 
 	// STRING_TO_REAL
@@ -237,4 +264,73 @@ func registerConvertFunctions() {
 		}
 		return Value{Kind: ValInt, Int: args[0].Int & 0xFF, IECType: types.KindBYTE}, nil
 	}
+}
+
+// formatReal is the REAL_TO_STRING text of f.
+func formatReal(f float64) string {
+	return strconv.FormatFloat(f, 'G', -1, 64)
+}
+
+// anyToString formats v for TO_STRING by kind: integers in decimal, BOOL as
+// TRUE/FALSE, reals like REAL_TO_STRING, strings unchanged and every other
+// kind by its literal form.
+func anyToString(v Value) string {
+	switch v.Kind {
+	case ValInt:
+		return strconv.FormatInt(v.Int, 10)
+	case ValBool:
+		if v.Bool {
+			return "TRUE"
+		}
+		return "FALSE"
+	case ValReal:
+		return formatReal(v.Real)
+	case ValString:
+		return v.Str
+	default:
+		return v.String()
+	}
+}
+
+// convertTo converts v to the integer, bit-string or real kind for the
+// TO_<type> functions. Reals round half to even into integers, BOOL gives
+// 0 or 1, TIME gives milliseconds and a STRING must hold a number.
+func convertTo(name string, kind types.TypeKind, v Value) (Value, error) {
+	if types.IsAnyReal(kind) {
+		switch v.Kind {
+		case ValInt, ValReal, ValBool:
+			return Value{Kind: ValReal, Real: toFloat(v), IECType: kind}, nil
+		case ValTime:
+			return Value{Kind: ValReal, Real: float64(v.Time) / float64(time.Millisecond), IECType: kind}, nil
+		case ValString:
+			f, err := strconv.ParseFloat(strings.TrimSpace(v.Str), 64)
+			if err != nil {
+				return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: invalid number %q", name, v.Str)}
+			}
+			return Value{Kind: ValReal, Real: f, IECType: kind}, nil
+		}
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: cannot convert %s", name, v.Kind)}
+	}
+	var n int64
+	switch v.Kind {
+	case ValInt:
+		n = v.Int
+	case ValBool:
+		if v.Bool {
+			n = 1
+		}
+	case ValReal:
+		n = int64(math.RoundToEven(v.Real))
+	case ValTime:
+		n = v.Time.Milliseconds()
+	case ValString:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(v.Str), 10, 64)
+		if err != nil {
+			return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: invalid integer %q", name, v.Str)}
+		}
+		n = parsed
+	default:
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s: cannot convert %s", name, v.Kind)}
+	}
+	return Value{Kind: ValInt, Int: n, IECType: kind}, nil
 }

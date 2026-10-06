@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/lexer"
 )
@@ -98,7 +100,7 @@ func (p *Parser) parseStatement() ast.Statement {
 				NodeSpan: spanFromTokens(startTok, startTok),
 			},
 		}
-	case lexer.Ident:
+	case lexer.Ident, lexer.KwThis, lexer.KwSuper:
 		return p.parseAssignOrCall()
 	default:
 		return p.recoverStatement()
@@ -108,7 +110,14 @@ func (p *Parser) parseStatement() ast.Statement {
 // parseAssignOrCall parses either an assignment (x := expr;) or FB call (fb(args);).
 func (p *Parser) parseAssignOrCall() ast.Statement {
 	startTok := p.peek()
+	p.stmtHead = true
 	lhs := p.parseExpr(0)
+	p.stmtHead = false
+
+	// Reference rebind: lhs REF= rhs ; (REF is an ordinary identifier).
+	if p.at(lexer.Ident) && strings.EqualFold(p.peek().Text, "REF") && p.kindAt(1) == lexer.Eq {
+		return p.parseRefAssign(startTok, lhs)
+	}
 
 	// Assignment: lhs := rhs ;
 	if p.match(lexer.Assign) {
@@ -151,6 +160,45 @@ func (p *Parser) parseAssignOrCall() ast.Statement {
 		},
 		Target: lhs,
 	}
+}
+
+// parseRefAssign parses the rest of `lhs REF= rhs ;` with the current token
+// at REF.
+func (p *Parser) parseRefAssign(startTok lexer.Token, lhs ast.Expr) ast.Statement {
+	p.advance() // REF
+	p.advance() // =
+	var value ast.Expr
+	if p.at(lexer.Semicolon) || p.atEnd() {
+		cur := p.peek()
+		p.error("expected expression after REF=, got %s", cur.Kind.String())
+		value = &ast.ErrorNode{
+			NodeBase: ast.NodeBase{
+				NodeKind: ast.KindErrorNode,
+				NodeSpan: ast.SpanFrom(astPos(cur.Pos), astPos(cur.Pos)),
+			},
+			Message: "expected expression",
+		}
+	} else {
+		value = p.parseExpr(0)
+	}
+	endTok := p.peek()
+	p.expect(lexer.Semicolon)
+	return &ast.RefAssignStmt{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindRefAssignStmt,
+			NodeSpan: spanFromTokens(startTok, endTok),
+		},
+		Target: lhs,
+		Value:  value,
+	}
+}
+
+// kindAt returns the kind of the token offset positions ahead (EOF past the end).
+func (p *Parser) kindAt(offset int) lexer.TokenKind {
+	if i := p.pos + offset; i < len(p.tokens) {
+		return p.tokens[i].Kind
+	}
+	return lexer.EOF
 }
 
 // parseIfStmt parses IF cond THEN body [ELSIF cond THEN body]* [ELSE body] END_IF [;]
@@ -299,17 +347,33 @@ func (p *Parser) parseCaseBranchBody() []ast.Statement {
 	return stmts
 }
 
-// isCaseLabelStart uses lookahead to determine if current position starts a case label.
+// isCaseLabelStart uses lookahead to determine if current position starts a
+// case label: an integer, typed literal, negative integer, or a (qualified)
+// name such as E.v, Lib.E.v or E#v, followed by ':', '..' or ','. No
+// statement can start that way, since assignment is the distinct ':=' token.
 func (p *Parser) isCaseLabelStart() bool {
-	if p.at(lexer.IntLiteral) || p.at(lexer.Ident) {
-		saved := p.pos
-		defer func() { p.pos = saved }()
+	saved := p.pos
+	defer func() { p.pos = saved }()
+	switch p.peek().Kind {
+	case lexer.IntLiteral, lexer.TypedLiteral:
 		p.advance()
-		// If followed by :, .., or , it's a label
-		cur := p.peek().Kind
-		return cur == lexer.Colon || cur == lexer.DotDot || cur == lexer.Comma
+	case lexer.Minus:
+		if p.kindAt(1) != lexer.IntLiteral {
+			return false
+		}
+		p.advance()
+		p.advance()
+	case lexer.Ident:
+		p.advance()
+		for (p.at(lexer.Dot) || p.at(lexer.Hash)) && p.kindAt(1) == lexer.Ident {
+			p.advance()
+			p.advance()
+		}
+	default:
+		return false
 	}
-	return false
+	cur := p.peek().Kind
+	return cur == lexer.Colon || cur == lexer.DotDot || cur == lexer.Comma
 }
 
 // parseForStmt parses FOR var := from TO to [BY step] DO body END_FOR [;]
@@ -400,6 +464,9 @@ func (p *Parser) parseCallArgs() []*ast.CallArg {
 		if !p.match(lexer.Comma) {
 			break
 		}
+		if p.at(lexer.RParen) {
+			break // trailing comma: f(a := 1, ) — dropped
+		}
 	}
 	return args
 }
@@ -422,6 +489,7 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
+					NodeKind: ast.KindCallArg,
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
 				},
 				Name:  makeIdent(nameTok),
@@ -436,6 +504,7 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
+					NodeKind: ast.KindCallArg,
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
 				},
 				Name:     makeIdent(nameTok),
@@ -451,6 +520,7 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 	value := p.parseExpr(0)
 	return &ast.CallArg{
 		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindCallArg,
 			NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
 		},
 		Value: value,

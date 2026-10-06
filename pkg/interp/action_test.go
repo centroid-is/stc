@@ -73,6 +73,58 @@ func TestAction(t *testing.T) {
 		assert.Equal(t, int64(3), intVar(t, eng.env, "n"))
 	})
 
+	t.Run("program action drives a TON and an R_TRIG across ticks", func(t *testing.T) {
+		eng := gvlEngine(t, "timers.st", `
+PROGRAM MAIN
+VAR
+	x : BOOL;
+	done : BOOL;
+	edge : BOOL;
+	edges : DINT;
+	elapsed : TIME;
+	t : TON;
+	trig : R_TRIG;
+END_VAR
+A_Timers();
+ACTION A_Timers
+t(IN := x, PT := T#100MS);
+trig(CLK := x);
+done := t.Q;
+elapsed := t.ET;
+edge := trig.Q;
+IF edge THEN
+	edges := edges + 1;
+END_IF
+END_ACTION
+END_PROGRAM
+`)
+		eng.Initialize()
+		require.NoError(t, eng.Tick(40*time.Millisecond))
+		assert.False(t, boolVar(t, eng.env, "edge"), "no edge while x is FALSE")
+		assert.False(t, boolVar(t, eng.env, "done"))
+
+		require.True(t, eng.env.Set("x", BoolValue(true)))
+		require.NoError(t, eng.Tick(40*time.Millisecond))
+		assert.True(t, boolVar(t, eng.env, "edge"), "rising edge on the scan x goes TRUE")
+		assert.False(t, boolVar(t, eng.env, "done"))
+
+		require.NoError(t, eng.Tick(40*time.Millisecond))
+		assert.False(t, boolVar(t, eng.env, "edge"), "edge lasts one scan")
+		assert.False(t, boolVar(t, eng.env, "done"), "TON still short of PT")
+
+		require.NoError(t, eng.Tick(40*time.Millisecond))
+		require.NoError(t, eng.Tick(40*time.Millisecond))
+		assert.True(t, boolVar(t, eng.env, "done"), "TON done once PT has elapsed")
+		assert.Equal(t, int64(1), intVar(t, eng.env, "edges"))
+
+		require.True(t, eng.env.Set("x", BoolValue(false)))
+		require.NoError(t, eng.Tick(40*time.Millisecond))
+		assert.False(t, boolVar(t, eng.env, "done"), "TON resets when IN drops")
+		ev, ok := eng.env.Get("elapsed")
+		require.True(t, ok)
+		assert.Equal(t, time.Duration(0), ev.Time)
+	})
+
 	t.Run("RETURN in an action exits only the action", func(t *testing.T) {
 		eng := gvlEngine(t, "ret.st", `
 PROGRAM MAIN

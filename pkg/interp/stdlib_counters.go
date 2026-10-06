@@ -8,6 +8,7 @@ import (
 )
 
 // CTU implements the IEC 61131-3 up counter.
+// Inputs accept the IEC name R and the Tc2_Standard name RESET.
 // Counts rising edges on CU. R resets CV to 0. Q=TRUE when CV>=PV.
 type CTU struct {
 	cu     bool
@@ -33,7 +34,7 @@ func (c *CTU) SetInput(name string, v Value) {
 	switch strings.ToUpper(name) {
 	case "CU":
 		c.cu = v.Bool
-	case "R":
+	case "R", "RESET":
 		c.r = v.Bool
 	case "PV":
 		c.pv = v.Int
@@ -54,7 +55,7 @@ func (c *CTU) GetInput(name string) Value {
 	switch strings.ToUpper(name) {
 	case "CU":
 		return Value{Kind: ValBool, Bool: c.cu, IECType: types.KindBOOL}
-	case "R":
+	case "R", "RESET":
 		return Value{Kind: ValBool, Bool: c.r, IECType: types.KindBOOL}
 	case "PV":
 		return Value{Kind: ValInt, Int: c.pv, IECType: types.KindDINT}
@@ -63,6 +64,7 @@ func (c *CTU) GetInput(name string) Value {
 }
 
 // CTD implements the IEC 61131-3 down counter.
+// Inputs accept the IEC name LD and the Tc2_Standard name LOAD.
 // Counts rising edges on CD (decrement). LD loads CV=PV. Q=TRUE when CV<=0.
 type CTD struct {
 	cd     bool
@@ -88,7 +90,7 @@ func (c *CTD) SetInput(name string, v Value) {
 	switch strings.ToUpper(name) {
 	case "CD":
 		c.cd = v.Bool
-	case "LD":
+	case "LD", "LOAD":
 		c.ld = v.Bool
 	case "PV":
 		c.pv = v.Int
@@ -109,7 +111,7 @@ func (c *CTD) GetInput(name string) Value {
 	switch strings.ToUpper(name) {
 	case "CD":
 		return Value{Kind: ValBool, Bool: c.cd, IECType: types.KindBOOL}
-	case "LD":
+	case "LD", "LOAD":
 		return Value{Kind: ValBool, Bool: c.ld, IECType: types.KindBOOL}
 	case "PV":
 		return Value{Kind: ValInt, Int: c.pv, IECType: types.KindDINT}
@@ -118,6 +120,8 @@ func (c *CTD) GetInput(name string) Value {
 }
 
 // CTUD implements the IEC 61131-3 up/down counter.
+// Inputs accept the IEC names R and LD and the Tc2_Standard names RESET
+// and LOAD.
 // Priority: R > LD > CU/CD. QU=(CV>=PV), QD=(CV<=0).
 type CTUD struct {
 	cu     bool
@@ -157,9 +161,9 @@ func (c *CTUD) SetInput(name string, v Value) {
 		c.cu = v.Bool
 	case "CD":
 		c.cd = v.Bool
-	case "R":
+	case "R", "RESET":
 		c.r = v.Bool
-	case "LD":
+	case "LD", "LOAD":
 		c.ld = v.Bool
 	case "PV":
 		c.pv = v.Int
@@ -184,9 +188,9 @@ func (c *CTUD) GetInput(name string) Value {
 		return Value{Kind: ValBool, Bool: c.cu, IECType: types.KindBOOL}
 	case "CD":
 		return Value{Kind: ValBool, Bool: c.cd, IECType: types.KindBOOL}
-	case "R":
+	case "R", "RESET":
 		return Value{Kind: ValBool, Bool: c.r, IECType: types.KindBOOL}
-	case "LD":
+	case "LD", "LOAD":
 		return Value{Kind: ValBool, Bool: c.ld, IECType: types.KindBOOL}
 	case "PV":
 		return Value{Kind: ValInt, Int: c.pv, IECType: types.KindDINT}

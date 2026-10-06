@@ -91,10 +91,16 @@ func (n *Literal) Children() []Node { return nil }
 func (n *Literal) exprNode()        {}
 
 // CallExpr represents a function call in expression position.
+//
+// Args holds the leading positional arguments. NamedArgs holds everything
+// from the first named argument (name := v or name => v) on, in source
+// order; a positional argument that follows a named one is stored there
+// as a CallArg with a nil Name.
 type CallExpr struct {
 	NodeBase
-	Callee Expr   `json:"callee"`
-	Args   []Expr `json:"args,omitempty"`
+	Callee    Expr       `json:"callee"`
+	Args      []Expr     `json:"args,omitempty"`
+	NamedArgs []*CallArg `json:"named_args,omitempty"`
 }
 
 func (n *CallExpr) Children() []Node {
@@ -103,6 +109,9 @@ func (n *CallExpr) Children() []Node {
 		nodes = append(nodes, n.Callee)
 	}
 	for _, a := range n.Args {
+		nodes = append(nodes, a)
+	}
+	for _, a := range n.NamedArgs {
 		nodes = append(nodes, a)
 	}
 	return nodes
@@ -174,3 +183,111 @@ func (n *ParenExpr) Children() []Node {
 	return nil
 }
 func (n *ParenExpr) exprNode() {}
+
+// BitAccessExpr represents bit access on an integer or bit-string value
+// (e.g., w.3, ECT.X.q_wDigitalInputs.0). Index is normally an integer
+// literal; bit 0 is the least significant bit.
+type BitAccessExpr struct {
+	NodeBase
+	Target Expr `json:"target"`
+	Index  Expr `json:"index"`
+}
+
+func (n *BitAccessExpr) Children() []Node {
+	var nodes []Node
+	if n.Target != nil {
+		nodes = append(nodes, n.Target)
+	}
+	if n.Index != nil {
+		nodes = append(nodes, n.Index)
+	}
+	return nodes
+}
+func (n *BitAccessExpr) exprNode() {}
+
+// ThisExpr represents the THIS keyword (a pointer to the current FB
+// instance); THIS^ is a DerefExpr wrapping it.
+type ThisExpr struct {
+	NodeBase
+}
+
+func (n *ThisExpr) Children() []Node { return nil }
+func (n *ThisExpr) exprNode()        {}
+
+// SuperExpr represents the SUPER keyword (a pointer to the parent FB of
+// an EXTENDS chain); SUPER^ is a DerefExpr wrapping it.
+type SuperExpr struct {
+	NodeBase
+}
+
+func (n *SuperExpr) Children() []Node { return nil }
+func (n *SuperExpr) exprNode()        {}
+
+// StructInit represents a structure initialiser such as (a := 1, b := 'x').
+// It is an Expr so it can sit in any InitValue field.
+type StructInit struct {
+	NodeBase
+	Fields []*FieldInit `json:"fields,omitempty"`
+}
+
+func (n *StructInit) Children() []Node {
+	nodes := make([]Node, 0, len(n.Fields))
+	for _, f := range n.Fields {
+		nodes = append(nodes, f)
+	}
+	return nodes
+}
+func (n *StructInit) exprNode() {}
+
+// FieldInit is one name := value entry of a StructInit.
+type FieldInit struct {
+	NodeBase
+	Name  *Ident `json:"name"`
+	Value Expr   `json:"value"`
+}
+
+func (n *FieldInit) Children() []Node {
+	var nodes []Node
+	if n.Name != nil {
+		nodes = append(nodes, n.Name)
+	}
+	if n.Value != nil {
+		nodes = append(nodes, n.Value)
+	}
+	return nodes
+}
+
+// ArrayInit represents an array initialiser such as [1, 2, 3(0)].
+// It is an Expr so it can sit in any InitValue field.
+type ArrayInit struct {
+	NodeBase
+	Elements []*ArrayInitElem `json:"elements,omitempty"`
+}
+
+func (n *ArrayInit) Children() []Node {
+	nodes := make([]Node, 0, len(n.Elements))
+	for _, e := range n.Elements {
+		nodes = append(nodes, e)
+	}
+	return nodes
+}
+func (n *ArrayInit) exprNode() {}
+
+// ArrayInitElem is one element of an ArrayInit. Count is nil for a plain
+// element and holds N for the repetition form N(value).
+type ArrayInitElem struct {
+	NodeBase
+	Count Expr `json:"count,omitempty"`
+	Value Expr `json:"value"`
+}
+
+func (n *ArrayInitElem) Children() []Node {
+	var nodes []Node
+	if n.Count != nil {
+		nodes = append(nodes, n.Count)
+	}
+	if n.Value != nil {
+		nodes = append(nodes, n.Value)
+	}
+	return nodes
+}

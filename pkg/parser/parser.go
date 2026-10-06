@@ -60,6 +60,9 @@ type Parser struct {
 	source    string
 	diags     *diag.Collector
 	gvl       *ast.GVLDecl // the file's GVL once a top-level VAR_GLOBAL is seen
+	// stmtHead is true only while parseAssignOrCall parses the statement's
+	// leading expression, so fb(name := ...) there stays a CallStmt.
+	stmtHead bool
 }
 
 // peek returns the current token without consuming it.

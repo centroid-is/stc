@@ -38,6 +38,13 @@ type Interpreter struct {
 	// Each enum value map is uppercase enum member name -> integer value.
 	EnumTypes map[string]map[string]int64
 
+	// EnumDefs maps upper-case enum type names (inline VAR enums use
+	// <POU>.<VAR>) to their runtime definitions; see RegisterEnumDecl.
+	EnumDefs map[string]*EnumDef
+	// pendingEnums holds enums with a value that names a constant not yet
+	// registered; RegisterGVL numbers them again (see registerEnum).
+	pendingEnums []pendingEnum
+
 	// TypeDecls maps uppercase user-defined type names to their TypeSpec.
 	// Zero-value construction consults this so that a named STRUCT or ARRAY
 	// used as an array element or struct member resolves to the right shape
@@ -48,6 +55,10 @@ type Interpreter struct {
 	// declarations. FB instantiation consults this so that an FB-typed VAR
 	// inside another FB is created as a live nested instance.
 	FBDecls map[string]*ast.FunctionBlockDecl
+
+	// FuncDecls maps uppercase user-defined FUNCTION names to their
+	// declarations; see RegisterFunctionDecl and CallFunction.
+	FuncDecls map[string]*ast.FunctionDecl
 
 	// gvls holds the registered global variable lists; see RegisterGVL.
 	gvls gvlState
@@ -140,6 +151,12 @@ func (interp *Interpreter) evalExpr(env *Env, expr ast.Expr) (Value, error) {
 		return interp.evalMemberAccess(env, e)
 	case *ast.DerefExpr:
 		return interp.evalDeref(env, e)
+	case *ast.BitAccessExpr:
+		return interp.evalBitAccess(env, e)
+	case *ast.ThisExpr:
+		return interp.evalThis(env, e)
+	case *ast.SuperExpr:
+		return interp.evalSuper(env, e)
 	case *ast.ErrorNode:
 		return Value{}, &RuntimeError{Msg: "cannot evaluate error node"}
 	default:
@@ -295,14 +312,11 @@ func (interp *Interpreter) parseLitTyped(value string, prefix string) (Value, er
 		return interp.parseLitBool(value)
 	default:
 		// Check if this is an enum typed literal (e.g., Color#Green)
-		if interp.EnumTypes != nil {
-			if enumMap, ok := interp.EnumTypes[upper]; ok {
-				upperVal := strings.ToUpper(value)
-				if intVal, found := enumMap[upperVal]; found {
-					return Value{Kind: ValInt, Int: intVal, IECType: types.KindDINT}, nil
-				}
-				return Value{}, &RuntimeError{Msg: fmt.Sprintf("unknown enum value '%s' for type '%s'", value, prefix)}
+		if def, ok := interp.EnumDefs[upper]; ok {
+			if v, found := def.value(value); found {
+				return v, nil
 			}
+			return Value{}, &RuntimeError{Msg: fmt.Sprintf("unknown enum value '%s' for type '%s'", value, prefix)}
 		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported typed literal prefix: %s", prefix)}
 	}
@@ -315,13 +329,8 @@ func (interp *Interpreter) parseLitTyped(value string, prefix string) (Value, er
 func (interp *Interpreter) evalIdent(env *Env, id *ast.Ident) (Value, error) {
 	v, ok := env.Get(id.Name)
 	if !ok {
-		if interp.EnumTypes != nil {
-			upper := strings.ToUpper(id.Name)
-			for _, enumMap := range interp.EnumTypes {
-				if intVal, found := enumMap[upper]; found {
-					return Value{Kind: ValInt, Int: intVal, IECType: types.KindDINT}, nil
-				}
-			}
+		if ev, found := interp.lookupBareEnum(id.Name); found {
+			return ev, nil
 		}
 		return Value{}, &RuntimeError{
 			Msg: fmt.Sprintf("undefined variable: %s", id.Name),
@@ -329,13 +338,11 @@ func (interp *Interpreter) evalIdent(env *Env, id *ast.Ident) (Value, error) {
 		}
 	}
 	// Auto-dereference REFERENCE TO values
-	if v.Kind == ValReference && v.PtrEnv != nil && v.PtrVar != "" {
-		target, found := v.PtrEnv.Get(v.PtrVar)
-		if !found {
-			return Value{}, &RuntimeError{
-				Msg: fmt.Sprintf("dangling reference: variable '%s' no longer exists", v.PtrVar),
-				Pos: id.Span().Start,
-			}
+	if p, bound := refPathOf(v); bound {
+		target, err := readRef(p)
+		if err != nil {
+			err.(*RuntimeError).Pos = id.Span().Start
+			return Value{}, err
 		}
 		return target, nil
 	}
@@ -603,6 +610,8 @@ func (interp *Interpreter) execStmt(env *Env, stmt ast.Statement) error {
 		return nil
 	case *ast.CallStmt:
 		return interp.execCallStmt(env, s)
+	case *ast.RefAssignStmt:
+		return interp.execRefAssign(env, s)
 	case *ast.ErrorNode:
 		return &RuntimeError{Msg: fmt.Sprintf("cannot execute error node: %s", s.Message)}
 	default:
@@ -644,16 +653,22 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 	switch target := targetExpr.(type) {
 	case *ast.Ident:
 		// Check if this variable is a REFERENCE TO — if so, write through
-		if existing, ok := env.Get(target.Name); ok && existing.Kind == ValReference && existing.PtrEnv != nil && existing.PtrVar != "" {
-			// Check if the RHS is also a reference (REF assignment)
-			if val.Kind == ValReference {
-				// Assigning a new reference target
-				env.Set(target.Name, val)
-			} else {
-				// Write through the reference to the target variable
-				existing.PtrEnv.Set(existing.PtrVar, val)
+		if existing, ok := env.Get(target.Name); ok {
+			if p, bound := refPathOf(existing); bound {
+				// Check if the RHS is also a reference (REF assignment)
+				if val.Kind == ValReference {
+					// Assigning a new reference target
+					env.Set(target.Name, val)
+					return nil
+				}
+				// Write through the reference to its target
+				if err := writeRef(p, val); err != nil {
+					err.(*RuntimeError).Pos = target.Span().Start
+					return err
+				}
+				return nil
 			}
-			return nil
+			val = adoptEnumTag(existing, val)
 		}
 		// Check subrange constraints
 		if msg := env.CheckSubrange(target.Name, val); msg != "" {
@@ -670,6 +685,8 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 		return interp.execAssignMember(env, target, val)
 	case *ast.DerefExpr:
 		return interp.execAssignDeref(env, target, val)
+	case *ast.BitAccessExpr:
+		return interp.assignBit(env, target, val)
 	default:
 		return &RuntimeError{Msg: fmt.Sprintf("unsupported assignment target: %T", targetExpr)}
 	}
@@ -680,7 +697,7 @@ func (interp *Interpreter) assignToTarget(env *Env, targetExpr ast.Expr, val Val
 // to: a literal or a computed expression has not, and is skipped silently.
 func isAssignable(e ast.Expr) bool {
 	switch e.(type) {
-	case *ast.Ident, *ast.IndexExpr, *ast.MemberAccessExpr, *ast.DerefExpr:
+	case *ast.Ident, *ast.IndexExpr, *ast.MemberAccessExpr, *ast.DerefExpr, *ast.BitAccessExpr:
 		return true
 	default:
 		return false
@@ -718,9 +735,11 @@ func (interp *Interpreter) execAssignIndex(env *Env, target *ast.IndexExpr, val 
 	if val.IsAggregate() {
 		val = val.Clone()
 	}
-	arr.Array[i] = val
+	arr.Array[i] = adoptEnumTag(arr.Array[i], val)
 	if id, ok := target.Object.(*ast.Ident); ok {
-		env.Set(id.Name, arr)
+		// Through assignToTarget, so a reference variable writes its target
+		// instead of being replaced by a copy of the array.
+		return interp.assignToTarget(env, id, arr)
 	}
 	return nil
 }
@@ -977,28 +996,34 @@ func valuesInRange(v, low, high Value) bool {
 func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 	// Resolve callee: a plain instance name, or a member path such as
 	// GVL.timer or s.fb that evaluates to an FB instance.
+	//
+	// Anything else -- a FUNCTION, METHOD or ACTION called with named
+	// arguments, THIS^.M(x := 1), SUPER^.M(x := 1) -- is the same call as the
+	// expression form and goes through evalCall.
 	var v Value
-	var calleeName string
+	asExpr := func() error {
+		_, err := interp.evalCall(env, &ast.CallExpr{NodeBase: s.NodeBase, Callee: s.Callee, NamedArgs: s.Args})
+		return err
+	}
 	switch c := s.Callee.(type) {
 	case *ast.Ident:
-		calleeName = c.Name
-		var found bool
-		v, found = env.Get(c.Name)
-		if !found {
-			return &RuntimeError{Msg: fmt.Sprintf("undefined: %s", c.Name)}
-		}
+		v, _ = env.Get(c.Name)
 	case *ast.MemberAccessExpr:
-		calleeName = c.Member.Name
+		// inst.M(x := 1): a method, not a member holding an FB instance.
+		if obj, err := interp.evalExpr(env, c.Object); err == nil && obj.Kind == ValFBInstance && obj.FBRef != nil && findMethod(obj.FBRef, c.Member.Name, interp) != nil {
+			return asExpr()
+		}
 		var err error
 		v, err = interp.evalMemberAccess(env, c)
 		if err != nil {
 			return err
 		}
-	default:
-		return &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", s.Callee)}
+		if v.Kind != ValFBInstance || v.FBRef == nil {
+			return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", c.Member.Name)}
+		}
 	}
 	if v.Kind != ValFBInstance || v.FBRef == nil {
-		return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", calleeName)}
+		return asExpr()
 	}
 
 	fbInst := v.FBRef
@@ -1063,17 +1088,12 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 			continue
 		}
 		outVal := fbInst.GetOutput(arg.Name.Name)
-		// The value expression should be an identifier to assign to
-		switch target := arg.Value.(type) {
-		case *ast.Ident:
-			if !env.Set(target.Name, outVal) {
-				env.Define(target.Name, outVal)
-			}
-		case *ast.MemberAccessExpr:
-			// q => GVL.flag or q => s.member
-			if err := interp.execAssignMember(env, target, outVal); err != nil {
-				return err
-			}
+		if outVal.IsAggregate() {
+			outVal = outVal.Clone()
+		}
+		// q => x, q => G.s.m, q => arr[1].w.0: any assignable target.
+		if err := interp.assignToTarget(env, arg.Value, outVal); err != nil {
+			return err
 		}
 	}
 
@@ -1084,6 +1104,10 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (Value, error) {
 	if g, gvl := interp.gvlRoot(env, e.Object); g != nil {
 		return evalGVLMember(g, gvl, e.Member)
+	}
+	// E.v with E an enum type that is neither a variable nor a GVL.
+	if v, handled, err := interp.qualifiedEnum(env, e); handled {
+		return v, err
 	}
 	obj, err := interp.evalExpr(env, e.Object)
 	if err != nil {
@@ -1099,8 +1123,8 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 		}
 		fbInst := obj.FBRef
 		// Check for property getter
-		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Getter != nil {
-			return interp.execPropertyGetter(fbInst, prop)
+		if prop, owner := findPropertyFrom(fbInst, memberName, interp); prop != nil && prop.Getter != nil {
+			return interp.execPropertyGetter(fbInst, prop, owner)
 		}
 		return fbInst.GetMember(memberName), nil
 	case ValStruct:
@@ -1111,6 +1135,12 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 			}
 		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("struct has no member '%s'", memberName)}
+	case ValInt:
+		// w.cBit with a constant integer cBit is a bit read (ruling A3).
+		if n, ok := constBitIndex(env, e); ok {
+			return readBit(obj, n, e.Span().Start)
+		}
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot access member '%s' on %s", memberName, obj.Kind)}
 	default:
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot access member '%s' on %s", memberName, obj.Kind)}
 	}
@@ -1135,22 +1165,31 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 		}
 		fbInst := obj.FBRef
 		// Check for property setter
-		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Setter != nil {
-			return interp.execPropertySetter(fbInst, prop, val)
+		if prop, owner := findPropertyFrom(fbInst, memberName, interp); prop != nil && prop.Setter != nil {
+			return interp.execPropertySetter(fbInst, prop, owner, val)
 		}
 		fbInst.SetInput(memberName, val)
 		return nil
 	case ValStruct:
 		if obj.Struct != nil {
 			key := strings.ToUpper(memberName)
-			obj.Struct[key] = val
-			// Write back the struct to the env
+			obj.Struct[key] = adoptEnumTag(obj.Struct[key], val)
+			// Write back the struct to the env; a reference variable
+			// writes its target instead of being replaced by a copy.
 			if objIdent, ok := target.Object.(*ast.Ident); ok {
-				env.Set(objIdent.Name, obj)
+				return interp.assignToTarget(env, objIdent, obj)
 			}
 			return nil
 		}
 		return &RuntimeError{Msg: fmt.Sprintf("struct has no member '%s'", memberName)}
+	case ValInt:
+		// w.cBit := v with a constant integer cBit is a bit write (ruling
+		// A3). obj is the current value of target.Object, so the object
+		// expression is evaluated only once.
+		if n, ok := constBitIndex(env, target); ok {
+			return interp.assignBitAt(env, target.Object, obj, n, val)
+		}
+		return &RuntimeError{Msg: fmt.Sprintf("cannot assign member '%s' on %s", memberName, obj.Kind)}
 	default:
 		return &RuntimeError{Msg: fmt.Sprintf("cannot assign member '%s' on %s", memberName, obj.Kind)}
 	}
@@ -1168,7 +1207,8 @@ func (interp *Interpreter) execAssignDeref(env *Env, target *ast.DerefExpr, val 
 	if ptr.PtrEnv == nil || ptr.PtrVar == "" {
 		return &RuntimeError{Msg: "nil pointer dereference"}
 	}
-	if !ptr.PtrEnv.Set(ptr.PtrVar, val) {
+	cur, _ := ptr.PtrEnv.Get(ptr.PtrVar)
+	if !ptr.PtrEnv.Set(ptr.PtrVar, adoptEnumTag(cur, val)) {
 		return &RuntimeError{Msg: fmt.Sprintf("dangling pointer: variable '%s' no longer exists", ptr.PtrVar)}
 	}
 	return nil
@@ -1183,6 +1223,10 @@ func (interp *Interpreter) evalDeref(env *Env, e *ast.DerefExpr) (Value, error) 
 	}
 	if ptr.Kind != ValPointer {
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot dereference non-pointer value of type %s", ptr.Kind)}
+	}
+	if ptr.FBRef != nil {
+		// THIS^ or SUPER^: the FB instance itself.
+		return Value{Kind: ValFBInstance, FBRef: ptr.FBRef, superDecl: ptr.superDecl}, nil
 	}
 	if ptr.PtrEnv == nil || ptr.PtrVar == "" {
 		return Value{}, &RuntimeError{Msg: "nil pointer dereference"}
@@ -1199,7 +1243,7 @@ func (interp *Interpreter) evalDeref(env *Env, e *ast.DerefExpr) (Value, error) 
 func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 	// Handle method calls: fb.Method()
 	if memberAccess, ok := e.Callee.(*ast.MemberAccessExpr); ok {
-		return interp.evalMethodCall(env, memberAccess, e.Args)
+		return interp.evalMethodCall(env, memberAccess, e.Args, e.NamedArgs)
 	}
 
 	// Resolve callee name
@@ -1208,18 +1252,26 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 	case *ast.Ident:
 		calleeName = strings.ToUpper(c.Name)
 	default:
-		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", e.Callee)}
+		return interp.evalInstanceCall(env, e)
 	}
 
 	// ACTION of the enclosing POU: A1(); runs against the owner's variables.
 	if act, owner := env.LookupAction(calleeName); act != nil {
-		if len(e.Args) > 0 {
+		if len(e.Args) > 0 || len(e.NamedArgs) > 0 {
 			return Value{}, &RuntimeError{
 				Msg: fmt.Sprintf("action %s takes no arguments", act.Name.Name),
 				Pos: e.Span().Start,
 			}
 		}
 		return Value{}, interp.execAction(owner, act, e.Span().Start)
+	}
+
+	// METHOD of the current FB instance, including inherited methods:
+	// Inc(); inside an FB body, ACTION or METHOD.
+	if inst := env.CurrentFB(); inst != nil {
+		if m, owner := findMethodFrom(inst, calleeName, interp, nil); m != nil {
+			return interp.callMethod(env, inst, m, owner, e.Args, e.NamedArgs, e.Span().Start)
+		}
 	}
 
 	// Handle ADR() specially: it needs the variable reference, not its value
@@ -1248,52 +1300,46 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		if len(e.Args) != 1 {
 			return Value{}, &RuntimeError{Msg: "REF requires exactly 1 argument"}
 		}
-		argIdent, ok := e.Args[0].(*ast.Ident)
-		if !ok {
-			return Value{}, &RuntimeError{Msg: "REF argument must be a variable name"}
-		}
-		targetEnv := env.FindOwner(argIdent.Name)
-		if targetEnv == nil {
-			return Value{}, &RuntimeError{Msg: fmt.Sprintf("REF: undefined variable '%s'", argIdent.Name)}
-		}
-		return Value{
-			Kind:   ValReference,
-			PtrEnv: targetEnv,
-			PtrVar: strings.ToUpper(argIdent.Name),
-		}, nil
+		// REF(x), REF(s.m), REF(arr[i]): the same path reference as REF=.
+		return interp.refTo(env, e.Args[0])
 	}
 
 	// Check LocalFunctions first (per-instance overrides for test assertions, etc.)
 	if interp.LocalFunctions != nil {
 		if fn, ok := interp.LocalFunctions[calleeName]; ok {
-			args := make([]Value, 0, len(e.Args))
-			for _, argExpr := range e.Args {
-				v, err := interp.evalExpr(env, argExpr)
-				if err != nil {
-					return Value{}, err
-				}
-				args = append(args, v)
+			args, err := interp.positionalArgs(env, e, calleeName)
+			if err != nil {
+				return Value{}, err
 			}
 			return fn(args, e.Span().Start)
 		}
 	}
 
+	// User-defined FUNCTION: named, positional and mixed arguments.
+	if decl, ok := interp.FuncDecls[calleeName]; ok {
+		return interp.CallFunction(env, decl, e.Args, e.NamedArgs, e.Span().Start)
+	}
+
 	// Check StdlibFunctions (math, string, conversion)
 	if fn, ok := StdlibFunctions[calleeName]; ok {
-		args := make([]Value, 0, len(e.Args))
-		for _, argExpr := range e.Args {
-			v, err := interp.evalExpr(env, argExpr)
-			if err != nil {
-				return Value{}, err
+		args, err := interp.positionalArgs(env, e, calleeName)
+		if err != nil {
+			return Value{}, err
+		}
+		// TO_STRING of a to_string enum value gives the value name; the
+		// stdlib function, which has no access to enum definitions,
+		// formats every other value.
+		if calleeName == "TO_STRING" && len(args) == 1 {
+			if s, ok := interp.enumString(args[0]); ok {
+				return StringValue(s), nil
 			}
-			args = append(args, v)
 		}
 		return fn(args)
 	}
 
 	// Zero-argument FB instance call written as an expression statement:
 	// fb(); runs the instance with its current inputs.
-	if len(e.Args) == 0 {
+	if len(e.Args) == 0 && len(e.NamedArgs) == 0 {
 		if v, ok := env.Get(calleeName); ok && v.Kind == ValFBInstance && v.FBRef != nil {
 			return Value{}, interp.runFBInstance(v.FBRef)
 		}
@@ -1304,12 +1350,23 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 
 // execAction runs an ACTION body in owner, the environment of the POU or FB
 // instance that owns the action. RETURN ends only the action.
+// An action of an FB instance runs in a child env whose selfDecl is the FB
+// that declares the action, so SUPER^ inside an inherited action resolves
+// relative to that FB and not to the instance's most-derived type.
 func (interp *Interpreter) execAction(owner *Env, act *ast.ActionDecl, pos ast.Pos) error {
 	if err := interp.EnterCall(act.Name.Name, pos); err != nil {
 		return err
 	}
 	defer interp.ExitCall()
-	if err := interp.execStatements(owner, act.Body); err != nil {
+	run := owner
+	if inst := owner.self; inst != nil && inst.Env == owner {
+		if decl := actionOwner(inst, act, interp); decl != nil {
+			run = NewEnv(owner)
+			run.self = inst
+			run.selfDecl = decl
+		}
+	}
+	if err := interp.execStatements(run, act.Body); err != nil {
 		if _, ok := err.(*ErrReturn); !ok {
 			return err
 		}
@@ -1365,11 +1422,24 @@ func findAction(inst *FBInstance, name string, interp *Interpreter) *ast.ActionD
 	return nil
 }
 
+// actionOwner returns the FB in inst's EXTENDS chain that declares act, or
+// nil when act is not part of any declaration in the chain.
+func actionOwner(inst *FBInstance, act *ast.ActionDecl, interp *Interpreter) *ast.FunctionBlockDecl {
+	for _, d := range fbDeclChain(inst, interp) {
+		if slices.Contains(d.Actions, act) {
+			return d
+		}
+	}
+	return nil
+}
+
 // evalMethodCall evaluates a method call on an object (e.g., fb.GetValue()).
 // It resolves the object, finds the method declaration, and executes it.
-func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAccessExpr, argExprs []ast.Expr) (Value, error) {
+// On SUPER^ the method comes from the base declaration and up.
+func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAccessExpr, posArgs []ast.Expr, named []*ast.CallArg) (Value, error) {
 	methodName := memberAccess.Member.Name
 	pos := memberAccess.Span().Start
+	noArgs := len(posArgs) == 0 && len(named) == 0
 
 	// GVL.fb(); runs an FB instance that lives in a GVL.
 	if g, gvl := interp.gvlRoot(env, memberAccess.Object); g != nil {
@@ -1377,7 +1447,7 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 		if err != nil {
 			return Value{}, err
 		}
-		if len(argExprs) == 0 && v.Kind == ValFBInstance && v.FBRef != nil {
+		if noArgs && v.Kind == ValFBInstance && v.FBRef != nil {
 			return Value{}, interp.runFBInstance(v.FBRef)
 		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s.%s is not callable", gvl.Name, methodName), Pos: pos}
@@ -1389,7 +1459,7 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 	}
 
 	// s.fb(); runs an FB instance held in a struct member.
-	if obj.Kind == ValStruct && len(argExprs) == 0 {
+	if obj.Kind == ValStruct && noArgs {
 		if v, ok := obj.Struct[strings.ToUpper(methodName)]; ok && v.Kind == ValFBInstance && v.FBRef != nil {
 			return Value{}, interp.runFBInstance(v.FBRef)
 		}
@@ -1402,122 +1472,191 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 	fbInst := obj.FBRef
 
 	// Find the method in the FB declaration (including inherited methods)
-	method := findMethod(fbInst, methodName, interp)
+	method, owner := findMethodFrom(fbInst, methodName, interp, obj.superDecl)
 	if method == nil {
+		if obj.superDecl != nil {
+			return Value{}, &RuntimeError{Msg: fmt.Sprintf("method '%s' not found in base FB '%s' (SUPER^)", methodName, obj.superDecl.Name.Name), Pos: pos}
+		}
 		// inst.A1(); runs the FB's ACTION in the instance env.
 		if act := findAction(fbInst, methodName, interp); act != nil {
-			if len(argExprs) > 0 {
+			if !noArgs {
 				return Value{}, &RuntimeError{Msg: fmt.Sprintf("action %s takes no arguments", act.Name.Name), Pos: pos}
 			}
 			return Value{}, interp.execAction(fbInst.Env, act, pos)
 		}
 		// outer.inner(); runs a nested FB instance.
-		if len(argExprs) == 0 && fbInst.Env != nil {
+		if noArgs && fbInst.Env != nil {
 			if v, ok := fbInst.Env.GetLocal(methodName); ok && v.Kind == ValFBInstance && v.FBRef != nil {
 				return Value{}, interp.runFBInstance(v.FBRef)
 			}
 		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("method '%s' not found on FB '%s'", methodName, fbInst.TypeName)}
 	}
+	return interp.callMethod(env, fbInst, method, owner, posArgs, named, pos)
+}
 
+// callMethod runs METHOD method, declared in FB owner, on instance inst.
+// Arguments bind through bindArgs, so methods take named, positional and
+// mixed arguments with defaults. The method env's parent is the instance env;
+// THIS^ and SUPER^ inside the body resolve against inst and owner.
+func (interp *Interpreter) callMethod(env *Env, inst *FBInstance, method *ast.MethodDecl, owner *ast.FunctionBlockDecl, posArgs []ast.Expr, named []*ast.CallArg, pos ast.Pos) (Value, error) {
 	if err := interp.EnterCall(method.Name.Name, pos); err != nil {
 		return Value{}, err
 	}
 	defer interp.ExitCall()
 
-	// Create method environment with access to FB instance variables
-	methodEnv := NewEnv(fbInst.Env)
+	methodEnv := NewEnv(inst.Env)
+	methodEnv.self = inst
+	methodEnv.selfDecl = owner
+	methodEnv.Define(method.Name.Name, zeroFromTypeSpecWith(method.ReturnType, interp.TypeResolverFunc(), 0))
 
-	// Define return variable (method name holds the return value)
-	retVal := ZeroFromTypeSpec(method.ReturnType)
-	methodEnv.Define(method.Name.Name, retVal)
-
-	// Map arguments to VAR_INPUT parameters
-	args := make([]Value, 0, len(argExprs))
-	for _, argExpr := range argExprs {
-		v, err := interp.evalExpr(env, argExpr)
-		if err != nil {
-			return Value{}, err
-		}
-		args = append(args, v)
-	}
-
-	argIdx := 0
-	for _, vb := range method.VarBlocks {
-		if vb.Section == ast.VarInput {
-			for _, vd := range vb.Declarations {
-				for _, n := range vd.Names {
-					if argIdx < len(args) {
-						methodEnv.Define(n.Name, args[argIdx])
-						argIdx++
-					} else {
-						methodEnv.Define(n.Name, ZeroFromTypeSpec(vd.Type))
-					}
-				}
-			}
-		} else {
-			for _, vd := range vb.Declarations {
-				val := ZeroFromTypeSpec(vd.Type)
-				if vd.InitValue != nil {
-					if iv, err := interp.evalExpr(methodEnv, vd.InitValue); err == nil {
-						val = iv
-					}
-				}
-				for _, n := range vd.Names {
-					methodEnv.Define(n.Name, val)
-				}
-			}
-		}
-	}
-
-	// Execute method body
-	err = interp.execStatements(methodEnv, method.Body)
+	bc, err := interp.bindArgs(env, methodEnv, method.VarBlocks, posArgs, named, method.Name.Name)
 	if err != nil {
+		return Value{}, err
+	}
+	if err := interp.execStatements(methodEnv, method.Body); err != nil {
 		if _, ok := err.(*ErrReturn); !ok {
 			return Value{}, err
 		}
 	}
+	if err := interp.writeBack(env, methodEnv, bc); err != nil {
+		return Value{}, err
+	}
+	v, _ := methodEnv.GetLocal(method.Name.Name)
+	return v, nil
+}
 
-	// Read return value
-	if method.Name != nil {
-		if v, ok := methodEnv.Get(method.Name.Name); ok {
-			return v, nil
+// evalInstanceCall handles a call whose callee is an expression rather than
+// a name: THIS^() runs the current instance, SUPER^() runs the base FB's
+// body against the current instance.
+func (interp *Interpreter) evalInstanceCall(env *Env, e *ast.CallExpr) (Value, error) {
+	v, err := interp.evalExpr(env, e.Callee)
+	if err != nil {
+		return Value{}, err
+	}
+	if v.Kind != ValFBInstance || v.FBRef == nil {
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", e.Callee), Pos: e.Span().Start}
+	}
+	what := "THIS^()"
+	if v.superDecl != nil {
+		what = "SUPER^()"
+	}
+	if len(e.Args) > 0 || len(e.NamedArgs) > 0 {
+		return Value{}, &RuntimeError{Msg: what + " takes no arguments", Pos: e.Span().Start}
+	}
+	if v.superDecl == nil {
+		return Value{}, interp.runFBInstance(v.FBRef)
+	}
+	return Value{}, interp.runBaseBody(v.FBRef, v.superDecl, e.Span().Start)
+}
+
+// runBaseBody runs the body of base, an FB that inst's type EXTENDS, against
+// inst's variables.
+func (interp *Interpreter) runBaseBody(inst *FBInstance, base *ast.FunctionBlockDecl, pos ast.Pos) error {
+	if err := interp.EnterCall(base.Name.Name, pos); err != nil {
+		return err
+	}
+	defer interp.ExitCall()
+	benv := NewEnv(inst.Env)
+	benv.self = inst
+	benv.selfDecl = base
+	if err := interp.execStatements(benv, base.Body); err != nil {
+		if _, ok := err.(*ErrReturn); !ok {
+			return err
 		}
 	}
+	return nil
+}
 
-	return retVal, nil
+// evalThis evaluates THIS: a pointer to the current FB instance.
+func (interp *Interpreter) evalThis(env *Env, e *ast.ThisExpr) (Value, error) {
+	inst := env.CurrentFB()
+	if inst == nil {
+		return Value{}, &RuntimeError{Msg: "THIS used outside a function block", Pos: e.Span().Start}
+	}
+	return Value{Kind: ValPointer, FBRef: inst}, nil
+}
+
+// evalSuper evaluates SUPER: a pointer to the current FB instance viewed as
+// the FB that the running code's declaring FB EXTENDS.
+func (interp *Interpreter) evalSuper(env *Env, e *ast.SuperExpr) (Value, error) {
+	cur := env.currentFBDecl()
+	if cur == nil {
+		return Value{}, &RuntimeError{Msg: "SUPER used outside a function block", Pos: e.Span().Start}
+	}
+	inst := env.CurrentFB()
+	chain := fbDeclChain(inst, interp)
+	for i, d := range chain {
+		if d == cur && i+1 < len(chain) {
+			return Value{Kind: ValPointer, FBRef: inst, superDecl: chain[i+1]}, nil
+		}
+	}
+	return Value{}, &RuntimeError{Msg: fmt.Sprintf("SUPER used in %s, which does not EXTEND another function block", inst.TypeName), Pos: e.Span().Start}
 }
 
 // findMethod looks up a method by name in the FB declaration hierarchy: the
 // FB's own methods first, then each FB up the EXTENDS chain.
 func findMethod(inst *FBInstance, name string, interp *Interpreter) *ast.MethodDecl {
+	m, _ := findMethodFrom(inst, name, interp, nil)
+	return m
+}
+
+// findMethodFrom looks up a method like findMethod and also returns the FB
+// that declares it. A non-nil start skips the declarations before it in the
+// chain, so SUPER^.M() finds the base FB's M and not the override.
+func findMethodFrom(inst *FBInstance, name string, interp *Interpreter, start *ast.FunctionBlockDecl) (*ast.MethodDecl, *ast.FunctionBlockDecl) {
+	skipping := start != nil
 	for _, d := range fbDeclChain(inst, interp) {
+		if skipping {
+			if d != start {
+				continue
+			}
+			skipping = false
+		}
 		for _, m := range d.Methods {
 			if m.Name != nil && strings.EqualFold(m.Name.Name, name) {
-				return m
+				return m, d
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // findProperty looks up a property by name in the FB declaration hierarchy:
 // the FB's own properties first, then each FB up the EXTENDS chain.
 func findProperty(inst *FBInstance, name string, interp *Interpreter) *ast.PropertyDecl {
+	p, _ := findPropertyFrom(inst, name, interp)
+	return p
+}
+
+// findPropertyFrom looks up a property like findProperty and also returns
+// the FB that declares it.
+func findPropertyFrom(inst *FBInstance, name string, interp *Interpreter) (*ast.PropertyDecl, *ast.FunctionBlockDecl) {
 	for _, d := range fbDeclChain(inst, interp) {
 		for _, p := range d.Properties {
 			if p.Name != nil && strings.EqualFold(p.Name.Name, name) {
-				return p
+				return p, d
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-// execPropertyGetter executes a property's GET accessor and returns the result.
-func (interp *Interpreter) execPropertyGetter(inst *FBInstance, prop *ast.PropertyDecl) (Value, error) {
+// accessorEnv returns the env a property accessor declared in owner runs
+// in: a child of the instance env, with THIS^ and SUPER^ resolved against
+// inst and owner.
+func accessorEnv(inst *FBInstance, owner *ast.FunctionBlockDecl) *Env {
+	env := NewEnv(inst.Env)
+	env.self = inst
+	env.selfDecl = owner
+	return env
+}
+
+// execPropertyGetter executes a property's GET accessor, declared in FB
+// owner, and returns the result.
+func (interp *Interpreter) execPropertyGetter(inst *FBInstance, prop *ast.PropertyDecl, owner *ast.FunctionBlockDecl) (Value, error) {
 	getter := prop.Getter
-	getterEnv := NewEnv(inst.Env)
+	getterEnv := accessorEnv(inst, owner)
 
 	// Define return variable (getter method name, typically "GET" or the property name)
 	retVal := ZeroFromTypeSpec(prop.Type)
@@ -1565,10 +1704,11 @@ func (interp *Interpreter) execPropertyGetter(inst *FBInstance, prop *ast.Proper
 	return retVal, nil
 }
 
-// execPropertySetter executes a property's SET accessor with the given value.
-func (interp *Interpreter) execPropertySetter(inst *FBInstance, prop *ast.PropertyDecl, val Value) error {
+// execPropertySetter executes a property's SET accessor, declared in FB
+// owner, with the given value.
+func (interp *Interpreter) execPropertySetter(inst *FBInstance, prop *ast.PropertyDecl, owner *ast.FunctionBlockDecl, val Value) error {
 	setter := prop.Setter
-	setterEnv := NewEnv(inst.Env)
+	setterEnv := accessorEnv(inst, owner)
 
 	// Define the property name variable for assignment
 	if prop.Name != nil {

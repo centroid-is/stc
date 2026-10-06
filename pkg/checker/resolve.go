@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"math"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -37,6 +38,67 @@ type Resolver struct {
 	// typed with a DUT from a later file gets the real struct type instead of
 	// resolveTypeSpec's placeholder FunctionBlockType.
 	pendingGVLs []pendingGVL
+
+	// shells maps each FB, PROGRAM, FUNCTION, INTERFACE and STRUCT or enum
+	// TYPE declaration to a type object allocated before any declaration is
+	// resolved. The resolveX functions fill these objects in place, so a
+	// type resolved before its declaration in file order is the final one.
+	shells map[ast.Declaration]types.Type
+	// aliases holds the resolved type of each winning alias-like TYPE
+	// declaration (named, ARRAY, POINTER, REFERENCE, subrange, STRING spec).
+	aliases map[ast.Declaration]types.Type
+	// forward maps an upper-cased type name to the type of the declaration
+	// that ends up owning the name: the first user or mock declaration,
+	// otherwise the first library declaration.
+	forward map[string]types.Type
+	// notTypes marks forward names owned by a PROGRAM or FUNCTION: they
+	// have a shell for call checking but are not variable types.
+	notTypes map[string]bool
+
+	// probing makes resolveTypeSpec record an unknown name in missed instead
+	// of reporting it. Used by the alias fixpoint sweep.
+	probing bool
+	missed  bool
+
+	// inLibrary is set while library declarations are resolved: unknown
+	// type names inside vendor stubs are not reported.
+	inLibrary bool
+	// reportedTypes deduplicates SEMA037: resolveTypeSpec runs twice on the
+	// var declarations of FBs and FUNCTIONs (scope and parameter passes).
+	reportedTypes map[*ast.NamedType]bool
+
+	// std maps an upper-cased standard FB name to its symbol.
+	std map[string]*symbols.Symbol
+	// fbs maps an upper-cased FUNCTION_BLOCK name to the declaration that
+	// owns it, in registration order (fbOrder), for the EXTENDS pass.
+	fbs     map[string]*fbEntry
+	fbOrder []string
+
+	// enums caches the resolved type of each enum spec, so the scope and
+	// parameter passes over one var declaration share a single EnumType
+	// (and report its diagnostics once). TYPE enums map to their shell.
+	enums map[*ast.EnumType]*types.EnumType
+
+	// consts maps an upper-cased GVL constant name to its integer value:
+	// G.C for every VAR_GLOBAL CONSTANT, and bare C when the GVL is not
+	// qualified_only. Enum values initialised from a constant use it.
+	consts map[string]int64
+	// constScope is the POU scope whose earlier VAR CONSTANT entries an
+	// inline enum's values may name, or nil outside a POU.
+	constScope *symbols.Scope
+}
+
+type fbEntry struct {
+	decl      *ast.FunctionBlockDecl
+	scope     *symbols.Scope
+	typ       *types.FunctionBlockType
+	isLibrary bool
+}
+
+// fileGroup is a set of source files that share an IsLibrary flag.
+type fileGroup struct {
+	files     []*ast.SourceFile
+	isLibrary bool
 }
 
 type pendingGVL struct {
@@ -46,7 +108,12 @@ type pendingGVL struct {
 
 // NewResolver creates a new Resolver that populates the given symbol table.
 func NewResolver(table *symbols.Table, diags *diag.Collector) *Resolver {
-	return &Resolver{table: table, diags: diags}
+	return &Resolver{
+		table:         table,
+		diags:         diags,
+		reportedTypes: make(map[*ast.NamedType]bool),
+		enums:         make(map[*ast.EnumType]*types.EnumType),
+	}
 }
 
 // CollectDeclarations walks all source files and registers POU declarations,
@@ -55,30 +122,180 @@ func NewResolver(table *symbols.Table, diags *diag.Collector) *Resolver {
 // no opts. When opts are provided, LibraryFiles are registered first with
 // IsLibrary=true, before user code is processed.
 func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveOpts) {
-	// Register library files first (if provided)
-	if len(opts) > 0 && opts[0].LibraryFiles != nil {
-		for _, libFile := range opts[0].LibraryFiles {
-			r.collectFileDeclarations(libFile, true)
-		}
+	var opt ResolveOpts
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	// Library files first, then user files, then mock files (highest
+	// priority, they override library symbols).
+	groups := []fileGroup{
+		{files: opt.LibraryFiles, isLibrary: true},
+		{files: files},
+		{files: opt.MockFiles},
 	}
 
-	// Register user files
-	for _, file := range files {
-		r.collectFileDeclarations(file, false)
-	}
+	// The IEC standard FBs come before any library file, as library
+	// symbols, so stubs and user code can redeclare them.
+	r.registerStdFBs()
+	r.collectConsts(groups)
 
-	// Register mock files (highest priority, override library symbols)
-	if len(opts) > 0 && opts[0].MockFiles != nil {
-		for _, mockFile := range opts[0].MockFiles {
-			r.collectFileDeclarations(mockFile, false) // false = not library
+	// Pass 0: allocate a type object for every named type so forward
+	// references resolve to the object that is filled later.
+	r.preRegister(groups)
+
+	r.fbs = make(map[string]*fbEntry)
+	for _, g := range groups {
+		r.inLibrary = g.isLibrary
+		for _, file := range g.files {
+			r.collectFileDeclarations(file, g.isLibrary)
 		}
 	}
+	r.inLibrary = false
+
+	// Inherited scope: every FB now has its own members filled in.
+	r.resolveExtends()
 
 	// Second pass: GVLs, now that every TYPE is in the global scope.
 	for _, pg := range r.pendingGVLs {
 		r.resolveGVL(pg.decl, pg.isLibrary)
 	}
 	r.pendingGVLs = nil
+}
+
+// preRegister allocates the shell type of every declaration, chooses the
+// declaration that owns each name (mirroring the redeclaration rules of the
+// resolveX functions) and resolves alias-like TYPE declarations in a
+// fixpoint sweep.
+func (r *Resolver) preRegister(groups []fileGroup) {
+	r.shells = make(map[ast.Declaration]types.Type)
+	r.aliases = make(map[ast.Declaration]types.Type)
+	r.forward = make(map[string]types.Type)
+	r.notTypes = make(map[string]bool)
+
+	type owner struct {
+		decl      ast.Declaration
+		isLibrary bool
+	}
+	owners := make(map[string]owner)
+	var order []string
+	for _, g := range groups {
+		for _, file := range g.files {
+			for _, decl := range file.Declarations {
+				name, shell := declShell(decl)
+				if name == "" {
+					continue
+				}
+				if shell != nil {
+					r.shells[decl] = shell
+				}
+				key := strings.ToUpper(name)
+				prev, seen := owners[key]
+				if !seen {
+					order = append(order, key)
+				}
+				if !seen || (prev.isLibrary && !g.isLibrary) {
+					owners[key] = owner{decl: decl, isLibrary: g.isLibrary}
+				}
+			}
+		}
+	}
+
+	var pending []*ast.TypeDecl
+	library := make(map[*ast.TypeDecl]bool)
+	for _, key := range order {
+		o := owners[key]
+		if shell, ok := r.shells[o.decl]; ok {
+			r.forward[key] = shell
+			switch o.decl.(type) {
+			case *ast.ProgramDecl, *ast.FunctionDecl:
+				r.notTypes[key] = true
+			}
+		} else if td, ok := o.decl.(*ast.TypeDecl); ok {
+			pending = append(pending, td)
+			library[td] = o.isLibrary
+		}
+	}
+
+	// Alias chains may point forward (TYPE T1 : T2; ... TYPE T2 : INT;).
+	// Each sweep resolves every alias whose names are all known; stop when
+	// a sweep makes no progress. Aliases left over (self-referential,
+	// mutually recursive, or naming an unknown type) resolve with
+	// diagnostics in resolveTypeDecl.
+	for len(pending) > 0 {
+		before := len(pending)
+		var next []*ast.TypeDecl
+		for _, td := range pending {
+			if typ, ok := r.probe(td.Type); ok {
+				r.aliases[td] = typ
+				r.forward[strings.ToUpper(td.Name.Name)] = typ
+			} else {
+				next = append(next, td)
+			}
+		}
+		pending = next
+		if len(next) == before {
+			break
+		}
+	}
+
+	// Leftover aliases resolve with diagnostics now, so the root cause is
+	// reported once at the alias declaration and later uses of the alias
+	// get its (possibly Invalid) type silently.
+	for _, td := range pending {
+		r.inLibrary = library[td]
+		typ := r.resolveTypeSpec(td.Type)
+		r.aliases[td] = typ
+		r.forward[strings.ToUpper(td.Name.Name)] = typ
+	}
+	r.inLibrary = false
+}
+
+// declShell returns the declared name and a fresh, empty type object for a
+// declaration. Alias-like TYPE declarations return a nil shell; GVLs and
+// unnamed declarations return an empty name.
+func declShell(decl ast.Declaration) (string, types.Type) {
+	switch d := decl.(type) {
+	case *ast.ProgramDecl:
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionBlockType{Name: d.Name.Name}
+		}
+	case *ast.FunctionBlockDecl:
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionBlockType{Name: d.Name.Name}
+		}
+	case *ast.FunctionDecl:
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionType{Name: d.Name.Name}
+		}
+	case *ast.InterfaceDecl:
+		// Interfaces have no type of their own yet; a variable of interface
+		// type resolves to an empty FB type carrying the interface name.
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionBlockType{Name: d.Name.Name}
+		}
+	case *ast.TypeDecl:
+		if d.Name == nil {
+			return "", nil
+		}
+		switch d.Type.(type) {
+		case *ast.StructType:
+			return d.Name.Name, &types.StructType{Name: d.Name.Name}
+		case *ast.EnumType:
+			return d.Name.Name, &types.EnumType{Name: d.Name.Name, BaseType: types.KindINT}
+		}
+		return d.Name.Name, nil
+	}
+	return "", nil
+}
+
+// probe resolves ts without reporting diagnostics. ok is false when any
+// named type inside ts is unknown.
+func (r *Resolver) probe(ts ast.TypeSpec) (typ types.Type, ok bool) {
+	r.probing, r.missed = true, false
+	typ = r.resolveTypeSpec(ts)
+	ok = !r.missed
+	r.probing, r.missed = false, false
+	return typ, ok
 }
 
 // collectFileDeclarations processes a single source file's declarations.
@@ -119,6 +336,7 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 	// POU: a single main.st holding VAR_GLOBAL and PROGRAM Main is a normal
 	// layout, so the variables still register bare and only GVL.x is lost.
 	registerQualified := true
+	r.yieldStdFB(name)
 	if existing := r.table.LookupGlobal(name); existing != nil {
 		switch {
 		case isLibrary && existing.IsLibrary:
@@ -170,6 +388,7 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 						IsLibrary:  isLibrary,
 						IsConstant: vb.IsConstant,
 					})
+					setConstInt(bare[len(bare)-1], vb, vd)
 				}
 			}
 		}
@@ -186,6 +405,7 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 		})
 	}
 	for _, sym := range bare {
+		r.yieldStdFB(sym.Name)
 		if err := global.Insert(sym); err != nil {
 			r.diags.Errorf(sym.Pos, CodeRedeclared, "%s", err.Error())
 		}
@@ -216,12 +436,13 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 
 	// Check for redeclaration
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			// Duplicate library symbol -- silently ignore (first library wins)
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			// User code overrides library symbol -- remove library entry
+		if existing.IsLibrary {
+			// User code (or a library stub over a standard FB) overrides
+			// the library symbol -- remove library entry
 			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
@@ -234,11 +455,11 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 
 	// Set type on the global symbol
 	if sym := r.table.LookupGlobal(name); sym != nil {
-		sym.Type = &types.FunctionBlockType{Name: name}
+		sym.Type = r.fbShell(d, name)
 		sym.IsLibrary = isLibrary
 	}
 
-	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveVarBlocksInScope(name, d.VarBlocks, pouScope)
 	r.resolveActions(d.Actions, pouScope)
 }
 
@@ -264,6 +485,7 @@ func (r *Resolver) resolveMethods(methods []*ast.MethodDecl, scope *symbols.Scop
 		}
 		fn := &types.FunctionType{Name: m.Name.Name, ReturnType: ret}
 		fn.Params = r.callParams(m.VarBlocks)
+		fn.Outputs = r.callOutputs(m.VarBlocks)
 		r.insertCallable(scope, m.Name, symbols.KindMethod, fn)
 	}
 }
@@ -292,6 +514,24 @@ func (r *Resolver) callParams(blocks []*ast.VarBlock) []types.Parameter {
 	return params
 }
 
+// callOutputs lists the VAR_OUTPUT parameters of a callable in declaration
+// order, so name => target arguments can bind to them.
+func (r *Resolver) callOutputs(blocks []*ast.VarBlock) []types.Parameter {
+	var outs []types.Parameter
+	for _, vb := range blocks {
+		if vb.Section != ast.VarOutput {
+			continue
+		}
+		for _, vd := range vb.Declarations {
+			typ := r.resolveTypeSpec(vd.Type)
+			for _, n := range vd.Names {
+				outs = append(outs, types.Parameter{Name: n.Name, Type: typ, Direction: types.DirOutput})
+			}
+		}
+	}
+	return outs
+}
+
 func (r *Resolver) insertCallable(scope *symbols.Scope, name *ast.Ident, kind symbols.SymbolKind, fn *types.FunctionType) {
 	pos := astPosToSource(name.Span().Start)
 	sym := &symbols.Symbol{Name: name.Name, Kind: kind, Pos: pos, Type: fn}
@@ -308,12 +548,13 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			// Duplicate library symbol -- silently ignore (first library wins)
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			// User code overrides library symbol -- remove library entry
+		if existing.IsLibrary {
+			// User code (or a library stub over a standard FB) overrides
+			// the library symbol -- remove library entry
 			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
@@ -324,10 +565,10 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 
 	pouScope := r.table.RegisterPOU(name, symbols.KindFunctionBlock, pos)
 
-	// Build the FunctionBlockType from var blocks
-	fbType := &types.FunctionBlockType{Name: name}
+	// Fill the pre-registered FunctionBlockType from the var blocks
+	fbType := r.fbShell(d, name)
 
-	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveVarBlocksInScope(name, d.VarBlocks, pouScope)
 	r.resolveMethods(d.Methods, pouScope)
 	r.resolveActions(d.Actions, pouScope)
 
@@ -360,6 +601,100 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 		sym.Type = fbType
 		sym.IsLibrary = isLibrary
 	}
+
+	key := strings.ToUpper(name)
+	if _, seen := r.fbs[key]; !seen {
+		r.fbOrder = append(r.fbOrder, key)
+	}
+	r.fbs[key] = &fbEntry{decl: d, scope: pouScope, typ: fbType, isLibrary: isLibrary}
+}
+
+// resolveExtends gives every FUNCTION_BLOCK with EXTENDS the members of its
+// base chain. The derived POU scope is re-parented onto the base POU scope,
+// so the body, actions and methods of the derived FB see inherited
+// variables, methods and actions through the ordinary scope walk, and
+// usage marks the base symbol itself. Base inputs, outputs and in-outs are
+// prepended to the derived FunctionBlockType in place. A derived variable
+// that redeclares a base variable is a redeclaration error. Cycles are
+// left unlinked, so lookups always terminate.
+func (r *Resolver) resolveExtends() {
+	done := make(map[string]bool)
+	var visit func(key string)
+	visit = func(key string) {
+		if done[key] {
+			return
+		}
+		done[key] = true
+		e := r.fbs[key]
+		if e == nil || e.decl.Extends == nil {
+			return
+		}
+		baseName := e.decl.Extends.Name
+		baseKey := strings.ToUpper(baseName)
+		visit(baseKey) // the base inherits first (no-op on a cycle)
+
+		baseScope := r.table.LookupPOU(baseName)
+		baseSym := r.table.LookupGlobal(baseName)
+		if baseScope == nil || baseSym == nil {
+			if !e.isLibrary {
+				r.diags.Errorf(astPosToSource(e.decl.Extends.Span().Start), CodeUndeclaredType,
+					"undeclared type '%s'", baseName)
+			}
+			return
+		}
+		baseType, ok := baseSym.Type.(*types.FunctionBlockType)
+		if !ok {
+			return
+		}
+		for s := baseScope; s != nil; s = s.Parent {
+			if s == e.scope {
+				return // EXTENDS cycle
+			}
+		}
+
+		own := make(map[string]bool)
+		for _, vb := range e.decl.VarBlocks {
+			for _, vd := range vb.Declarations {
+				for _, n := range vd.Names {
+					own[strings.ToUpper(n.Name)] = true
+					if prev := lookupInPOUChain(baseScope, n.Name); prev != nil && prev.Kind == symbols.KindVariable {
+						pos := astPosToSource(n.Span().Start)
+						r.diags.Errorf(pos, CodeRedeclared,
+							"redeclaration of %q (inherited from %s, declared at %s)", n.Name, baseType.Name, prev.Pos)
+					}
+				}
+			}
+		}
+		e.scope.Parent = baseScope
+		e.typ.Inputs = append(inheritParams(baseType.Inputs, own), e.typ.Inputs...)
+		e.typ.Outputs = append(inheritParams(baseType.Outputs, own), e.typ.Outputs...)
+		e.typ.InOuts = append(inheritParams(baseType.InOuts, own), e.typ.InOuts...)
+	}
+	for _, key := range r.fbOrder {
+		visit(key)
+	}
+}
+
+// lookupInPOUChain looks name up in scope and its POU-scope ancestors,
+// stopping before the global scope.
+func lookupInPOUChain(scope *symbols.Scope, name string) *symbols.Symbol {
+	for s := scope; s != nil && s.Kind == symbols.ScopePOU; s = s.Parent {
+		if sym := s.LookupLocal(name); sym != nil {
+			return sym
+		}
+	}
+	return nil
+}
+
+// inheritParams copies the base parameters the derived FB does not redeclare.
+func inheritParams(base []types.Parameter, own map[string]bool) []types.Parameter {
+	var out []types.Parameter
+	for _, p := range base {
+		if !own[strings.ToUpper(p.Name)] {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
@@ -370,10 +705,10 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
+		if existing.IsLibrary {
 			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
@@ -390,12 +725,13 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 		retType = r.resolveTypeSpec(d.ReturnType)
 	}
 
-	fnType := &types.FunctionType{
-		Name:       name,
-		ReturnType: retType,
+	fnType, ok := r.shells[d].(*types.FunctionType)
+	if !ok {
+		fnType = &types.FunctionType{Name: name}
 	}
+	fnType.ReturnType = retType
 
-	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveVarBlocksInScope(name, d.VarBlocks, pouScope)
 
 	// Collect parameters
 	for _, vb := range d.VarBlocks {
@@ -412,6 +748,7 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 					fnType.Params = append(fnType.Params, param)
 				case ast.VarOutput:
 					param.Direction = types.DirOutput
+					fnType.Outputs = append(fnType.Outputs, param)
 				case ast.VarInOut:
 					param.Direction = types.DirInOut
 					fnType.Params = append(fnType.Params, param)
@@ -435,11 +772,11 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			r.table.GlobalScope().Delete(name)
+		if existing.IsLibrary {
+			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
 				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
@@ -447,7 +784,7 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 		}
 	}
 
-	resolvedType := r.resolveTypeSpec(d.Type)
+	resolvedType := r.typeDeclType(d)
 
 	// Set the name on struct types that don't have one
 	if st, ok := resolvedType.(*types.StructType); ok && st.Name == "" {
@@ -467,8 +804,20 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 	}
 	_ = r.table.GlobalScope().Insert(sym)
 
-	// For enum types, register each enum value in the global scope
-	if et, ok := resolvedType.(*types.EnumType); ok {
+	// An enum TYPE records its attributes (DIAL-07). Its values are
+	// inserted into the global scope unless the enum is qualified_only:
+	// then only E.v names them, so a GVL or POU variable may reuse a value
+	// name. Aliases of an enum share its EnumType and leave the flags alone.
+	et, ok := resolvedType.(*types.EnumType)
+	if !ok {
+		return
+	}
+	if _, spec := d.Type.(*ast.EnumType); spec {
+		et.Qualified = ast.HasAttribute(d.Attributes, "qualified_only")
+		et.Strict = ast.HasAttribute(d.Attributes, "strict")
+		et.ToString = ast.HasAttribute(d.Attributes, "to_string")
+	}
+	if !et.Qualified {
 		for _, val := range et.Values {
 			enumSym := &symbols.Symbol{
 				Name: val,
@@ -476,9 +825,40 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 				Pos:  pos,
 				Type: resolvedType,
 			}
+			r.yieldStdFB(val)
 			_ = r.table.GlobalScope().Insert(enumSym)
 		}
 	}
+}
+
+// fbShell returns the pre-registered FunctionBlockType of a PROGRAM or
+// FUNCTION_BLOCK declaration, or a new one when the declaration has none.
+func (r *Resolver) fbShell(d ast.Declaration, pouName string) *types.FunctionBlockType {
+	if fb, ok := r.shells[d].(*types.FunctionBlockType); ok {
+		return fb
+	}
+	return &types.FunctionBlockType{Name: pouName}
+}
+
+// typeDeclType resolves a TYPE declaration's spec. STRUCT and enum specs
+// fill the pre-registered shell in place; aliases resolved by the fixpoint
+// sweep reuse that result; anything else resolves now.
+func (r *Resolver) typeDeclType(d *ast.TypeDecl) types.Type {
+	if typ, ok := r.aliases[d]; ok {
+		return typ
+	}
+	if sh, ok := r.shells[d].(*types.EnumType); ok {
+		// An enum shell exists only for an enum spec.
+		return r.resolveEnumSpec(d.Type.(*ast.EnumType), sh)
+	}
+	resolved := r.resolveTypeSpec(d.Type)
+	// A STRUCT shell exists only for a STRUCT spec, which resolveTypeSpec
+	// always turns into a StructType.
+	if sh, ok := r.shells[d].(*types.StructType); ok {
+		sh.Members = resolved.(*types.StructType).Members
+		return sh
+	}
+	return resolved
 }
 
 func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
@@ -489,11 +869,11 @@ func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
 	pos := astPosToSource(d.Name.Span().Start)
 
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		if isLibrary && existing.IsLibrary && !r.isStdFB(existing) {
 			return
 		}
-		if !isLibrary && existing.IsLibrary {
-			r.table.GlobalScope().Delete(name)
+		if existing.IsLibrary {
+			r.table.RemovePOU(name)
 		} else {
 			r.diags.Errorf(pos, CodeRedeclared,
 				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
@@ -511,11 +891,21 @@ func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
 }
 
 // resolveVarBlocksInScope registers variable declarations directly
-// into the given scope (bypassing the table's scope stack).
-func (r *Resolver) resolveVarBlocksInScope(blocks []*ast.VarBlock, scope *symbols.Scope) {
+// into the given scope (bypassing the table's scope stack). An inline enum
+// (eStep : (E_IDLE, E_RUN);) is named <POU>.<var> and its values are
+// inserted into the POU scope, so two POUs may reuse value names.
+func (r *Resolver) resolveVarBlocksInScope(pouName string, blocks []*ast.VarBlock, scope *symbols.Scope) {
+	r.constScope = scope
+	defer func() { r.constScope = nil }()
 	for _, vb := range blocks {
 		for _, vd := range vb.Declarations {
 			resolvedType := r.resolveTypeSpec(vd.Type)
+			if et, ok := resolvedType.(*types.EnumType); ok && len(vd.Names) > 0 {
+				if _, inline := vd.Type.(*ast.EnumType); inline {
+					et.Name = pouName + "." + vd.Names[0].Name
+					r.insertInlineEnumValues(vd.Type.(*ast.EnumType), et, scope)
+				}
+			}
 			for _, name := range vd.Names {
 				pos := astPosToSource(name.Span().Start)
 				sym := &symbols.Symbol{
@@ -525,12 +915,199 @@ func (r *Resolver) resolveVarBlocksInScope(blocks []*ast.VarBlock, scope *symbol
 					ParamDir: vb.Section,
 					Type:     resolvedType,
 				}
+				setConstInt(sym, vb, vd)
 				if err := scope.Insert(sym); err != nil {
 					r.diags.Errorf(pos, CodeRedeclared, "%s", err.Error())
 				}
 			}
 		}
 	}
+}
+
+// setConstInt records the value of a CONSTANT variable whose initialiser is
+// an integer literal.
+func setConstInt(sym *symbols.Symbol, vb *ast.VarBlock, vd *ast.VarDecl) {
+	if !vb.IsConstant || vd.InitValue == nil {
+		return
+	}
+	sym.ConstInt, sym.HasConstInt = ast.IntLiteralValue(vd.InitValue)
+}
+
+// insertInlineEnumValues inserts the values of an inline enum into the POU
+// scope. A value that clashes with a variable is a redeclaration.
+func (r *Resolver) insertInlineEnumValues(spec *ast.EnumType, et *types.EnumType, scope *symbols.Scope) {
+	for _, v := range spec.Values {
+		if v == nil || v.Name == nil {
+			continue
+		}
+		pos := astPosToSource(v.Name.Span().Start)
+		sym := &symbols.Symbol{Name: v.Name.Name, Kind: symbols.KindEnumValue, Pos: pos, Type: et}
+		if err := scope.Insert(sym); err != nil {
+			r.diags.Errorf(pos, CodeRedeclared, "%s", err.Error())
+		}
+	}
+}
+
+// resolveEnumSpec resolves an enum spec into an EnumType: the base type
+// (an integer or bit-string type, INT when omitted) and the value ordinals
+// (ast.EnumOrdinals, previous+1 rule). into is the pre-registered shell of
+// a TYPE declaration, or nil for an inline enum. A non-integer base type
+// and a known ordinal outside the base type's range report SEMA036.
+func (r *Resolver) resolveEnumSpec(t *ast.EnumType, into *types.EnumType) *types.EnumType {
+	if et, ok := r.enums[t]; ok {
+		return et
+	}
+	et := into
+	if et == nil {
+		et = &types.EnumType{}
+	}
+	et.BaseType = types.KindINT
+	if t.BaseType != nil {
+		bt := r.resolveTypeSpec(t.BaseType)
+		if _, _, ok := intKindRange(bt.Kind()); ok {
+			et.BaseType = bt.Kind()
+		} else if bt != types.Invalid && !r.probing {
+			r.diags.Errorf(astPosToSource(t.BaseType.Span().Start), CodeEnumRule,
+				"enum base type must be an integer type, got %s", bt)
+		}
+	}
+
+	ords := ast.EnumOrdinalsWith(t, r.enumConst)
+	et.Values = make([]string, len(ords))
+	et.Ordinals = make([]int64, len(ords))
+	lo, hi, _ := intKindRange(et.BaseType)
+	i := 0
+	for _, v := range t.Values {
+		if v == nil {
+			continue
+		}
+		o := ords[i]
+		et.Values[i], et.Ordinals[i] = o.Name, o.Value
+		if o.Known && (o.Value < lo || o.Value > hi) && !r.probing {
+			r.diags.Errorf(astPosToSource(v.Span().Start), CodeEnumRule,
+				"enum value %s = %d is out of range for %s (%d..%d)", o.Name, o.Value, et.BaseType, lo, hi)
+		}
+		if !o.Known && v.Value != nil && !r.probing {
+			r.diags.Errorf(astPosToSource(v.Value.Span().Start), CodeEnumRule,
+				"enum value %s must be a constant integer expression", o.Name)
+		}
+		i++
+	}
+	if !r.probing {
+		r.enums[t] = et
+	}
+	return et
+}
+
+// collectConsts fills r.consts from the VAR_GLOBAL CONSTANT blocks of every
+// GVL in groups. A constant may be defined from an earlier one, so values
+// are evaluated in sweeps until a sweep resolves nothing new.
+func (r *Resolver) collectConsts(groups []fileGroup) {
+	r.consts = make(map[string]int64)
+	type entry struct {
+		keys []string
+		init ast.Expr
+	}
+	var pending []entry
+	for _, g := range groups {
+		for _, file := range g.files {
+			for _, decl := range file.Declarations {
+				d, ok := decl.(*ast.GVLDecl)
+				if !ok || d.Name == nil {
+					continue
+				}
+				gvl := strings.ToUpper(d.Name.Name)
+				qualified := ast.HasAttribute(d.Attributes, "qualified_only")
+				for _, vb := range d.Blocks {
+					qualified = qualified || ast.HasAttribute(vb.Attributes, "qualified_only")
+				}
+				for _, vb := range d.Blocks {
+					if !vb.IsConstant {
+						continue
+					}
+					for _, vd := range vb.Declarations {
+						if vd.InitValue == nil {
+							continue
+						}
+						for _, id := range vd.Names {
+							keys := []string{gvl + "." + strings.ToUpper(id.Name)}
+							if !qualified {
+								keys = append(keys, strings.ToUpper(id.Name))
+							}
+							pending = append(pending, entry{keys: keys, init: vd.InitValue})
+						}
+					}
+				}
+			}
+		}
+	}
+	for progress := true; progress; {
+		progress = false
+		next := pending[:0]
+		for _, e := range pending {
+			n, ok := ast.ConstIntValue(e.init, r.globalConst)
+			if !ok {
+				next = append(next, e)
+				continue
+			}
+			for _, k := range e.keys {
+				if _, dup := r.consts[k]; !dup {
+					r.consts[k] = n
+				}
+			}
+			progress = true
+		}
+		pending = next
+	}
+}
+
+// globalConst looks up a GVL constant collected by collectConsts.
+func (r *Resolver) globalConst(qual, name string) (int64, bool) {
+	key := strings.ToUpper(name)
+	if qual != "" {
+		key = strings.ToUpper(qual) + "." + key
+	}
+	n, ok := r.consts[key]
+	return n, ok
+}
+
+// enumConst evaluates an enum value that is not an integer literal: a
+// constant expression over GVL constants and, inside a POU, the POU's
+// earlier VAR CONSTANT entries.
+func (r *Resolver) enumConst(x ast.Expr) (int64, bool) {
+	return ast.ConstIntValue(x, func(qual, name string) (int64, bool) {
+		if qual == "" && r.constScope != nil {
+			if sym := r.constScope.LookupLocal(name); sym != nil && sym.HasConstInt {
+				return sym.ConstInt, true
+			}
+		}
+		return r.globalConst(qual, name)
+	})
+}
+
+// intKindRange returns the value range of an integer or bit-string kind.
+// ok is false for every other kind (BOOL included). The 64-bit unsigned
+// kinds are capped at MaxInt64, the largest ordinal an int64 holds.
+func intKindRange(k types.TypeKind) (lo, hi int64, ok bool) {
+	switch k {
+	case types.KindSINT:
+		return math.MinInt8, math.MaxInt8, true
+	case types.KindINT:
+		return math.MinInt16, math.MaxInt16, true
+	case types.KindDINT:
+		return math.MinInt32, math.MaxInt32, true
+	case types.KindLINT:
+		return math.MinInt64, math.MaxInt64, true
+	case types.KindUSINT, types.KindBYTE:
+		return 0, math.MaxUint8, true
+	case types.KindUINT, types.KindWORD:
+		return 0, math.MaxUint16, true
+	case types.KindUDINT, types.KindDWORD:
+		return 0, math.MaxUint32, true
+	case types.KindULINT, types.KindLWORD:
+		return 0, math.MaxInt64, true
+	}
+	return 0, 0, false
 }
 
 // resolveTypeSpec converts an AST type specification to a types.Type.
@@ -545,29 +1122,41 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 			return types.Invalid
 		}
 		name := t.Name.Name
-		// Try elementary type first
+		// Lib.Type: the qualified name first, then the bare name.
+		if t.Namespace != nil {
+			if typ, ok := r.lookupTypeName(t.Namespace.Name + "." + name); ok {
+				return typ
+			}
+		}
 		if typ, ok := types.LookupElementaryType(name); ok {
 			return typ
 		}
-		// Look up user-defined type in table
-		if sym := r.table.GlobalScope().Lookup(name); sym != nil {
-			if sym.Type != nil {
-				if typ, ok := sym.Type.(types.Type); ok {
-					return typ
-				}
-			}
+		if typ, ok := r.lookupTypeName(name); ok {
+			return typ
 		}
-		// Forward reference -- create a placeholder FunctionBlockType.
-		// This handles cases where an FB is referenced before its declaration.
-		return &types.FunctionBlockType{Name: name}
+		if r.probing {
+			r.missed = true
+			return types.Invalid
+		}
+		r.reportUndeclaredType(t)
+		return types.Invalid
 
 	case *ast.ArrayType:
 		elemType := r.resolveTypeSpec(t.ElementType)
 		dims := make([]types.ArrayDimension, len(t.Ranges))
 		for i, rng := range t.Ranges {
-			low := evalConstInt(rng.Low)
-			high := evalConstInt(rng.High)
-			dims[i] = types.ArrayDimension{Low: low, High: high}
+			if rng == nil {
+				continue
+			}
+			// Bounds may name constants (ARRAY[1..GVL.N]); see enumConst.
+			low, lowOK := r.enumConst(rng.Low)
+			high, highOK := r.enumConst(rng.High)
+			if lowOK && highOK {
+				dims[i] = types.ArrayDimension{Low: int(low), High: int(high), Known: true}
+				continue
+			}
+			dims[i] = types.ArrayDimension{Low: evalConstInt(rng.Low), High: evalConstInt(rng.High),
+				Text: boundText(rng.Low) + ".." + boundText(rng.High)}
 		}
 		return &types.ArrayType{ElementType: elemType, Dimensions: dims}
 
@@ -584,16 +1173,7 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 		return &types.StructType{Members: members}
 
 	case *ast.EnumType:
-		values := make([]string, len(t.Values))
-		for i, v := range t.Values {
-			if v.Name != nil {
-				values[i] = v.Name.Name
-			}
-		}
-		return &types.EnumType{
-			BaseType: types.KindINT,
-			Values:   values,
-		}
+		return r.resolveEnumSpec(t, nil)
 
 	case *ast.PointerType:
 		baseType := r.resolveTypeSpec(t.BaseType)
@@ -617,6 +1197,72 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 	}
 
 	return types.Invalid
+}
+
+// lookupTypeName finds a declared type by name: the pre-registered object
+// of the declaration that owns the name (so forward references get the
+// final, filled type), else any global symbol with a type (library symbols
+// registered outside the pre-pass, such as the standard FBs).
+func (r *Resolver) lookupTypeName(name string) (types.Type, bool) {
+	key := strings.ToUpper(name)
+	if typ, ok := r.forward[key]; ok && !r.notTypes[key] {
+		return typ, true
+	}
+	if sym := r.table.GlobalScope().Lookup(name); sym != nil && isTypeKind(sym.Kind) {
+		if typ, ok := sym.Type.(types.Type); ok {
+			return typ, true
+		}
+	}
+	return nil, false
+}
+
+// isTypeKind reports whether a global symbol of kind k names a type a
+// variable may be declared with: a TYPE, a FUNCTION_BLOCK (the standard FBs
+// included) or an INTERFACE. Enum values, FUNCTIONs, PROGRAMs, GVLs and
+// variables do not.
+func isTypeKind(k symbols.SymbolKind) bool {
+	switch k {
+	case symbols.KindType, symbols.KindFunctionBlock, symbols.KindInterface:
+		return true
+	}
+	return false
+}
+
+// reportUndeclaredType reports SEMA037 once per type reference. Names inside
+// library declarations are not reported: a stub may name a type from a
+// library that is not loaded, and the user cannot fix the stub.
+func (r *Resolver) reportUndeclaredType(t *ast.NamedType) {
+	if r.inLibrary || r.reportedTypes[t] {
+		return
+	}
+	r.reportedTypes[t] = true
+	name := t.Name.Name
+	if t.Namespace != nil {
+		name = t.Namespace.Name + "." + name
+	}
+	r.diags.Errorf(astPosToSource(t.Span().Start), CodeUndeclaredType, "undeclared type '%s'", name)
+}
+
+// boundText is a canonical source form of an array bound expression, used to
+// compare bounds whose value is not known. Unsupported expressions give "?".
+func boundText(x ast.Expr) string {
+	switch v := x.(type) {
+	case *ast.Ident:
+		return strings.ToUpper(v.Name)
+	case *ast.Literal:
+		return v.Value
+	case *ast.MemberAccessExpr:
+		if v.Member != nil {
+			return boundText(v.Object) + "." + strings.ToUpper(v.Member.Name)
+		}
+	case *ast.ParenExpr:
+		return boundText(v.Inner)
+	case *ast.UnaryExpr:
+		return v.Op.Text + boundText(v.Operand)
+	case *ast.BinaryExpr:
+		return "(" + boundText(v.Left) + v.Op.Text + boundText(v.Right) + ")"
+	}
+	return "?"
 }
 
 // evalConstInt evaluates a constant integer expression from an AST node.

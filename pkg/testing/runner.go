@@ -108,6 +108,8 @@ type externalContext struct {
 	// typeDecls maps uppercase TYPE names to their specs, so that structs
 	// and enums declared next to mock/library FBs resolve in tests too
 	typeDecls map[string]ast.TypeSpec
+	// typeAttrs maps uppercase TYPE names to their declaration attributes
+	typeAttrs map[string][]*ast.Attribute
 	// funcDecls maps uppercase FUNCTION names to their declarations
 	funcDecls map[string]*ast.FunctionDecl
 }
@@ -118,6 +120,7 @@ func buildExternalContext(opts RunOpts) *externalContext {
 		libraryFBs: make(map[string]*ast.FunctionBlockDecl),
 		mockFBs:    make(map[string]*ast.FunctionBlockDecl),
 		typeDecls:  make(map[string]ast.TypeSpec),
+		typeAttrs:  make(map[string][]*ast.Attribute),
 		funcDecls:  make(map[string]*ast.FunctionDecl),
 	}
 
@@ -139,6 +142,7 @@ func buildExternalContext(opts RunOpts) *externalContext {
 			case *ast.TypeDecl:
 				if d.Name != nil {
 					ext.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
+					ext.typeAttrs[strings.ToUpper(d.Name.Name)] = d.Attributes
 				}
 			case *ast.FunctionDecl:
 				if d.Name != nil {
@@ -156,6 +160,9 @@ func buildExternalContext(opts RunOpts) *externalContext {
 type fileContext struct {
 	// typeDecls maps upper-case type names to their TypeSpec from TYPE blocks.
 	typeDecls map[string]ast.TypeSpec
+	// typeAttrs maps upper-case type names to the attributes on their TYPE
+	// declaration ({attribute 'to_string'} and friends).
+	typeAttrs map[string][]*ast.Attribute
 	// fbDecls maps upper-case FB names to their FunctionBlockDecl.
 	fbDecls map[string]*ast.FunctionBlockDecl
 	// funcDecls maps upper-case function names to their FunctionDecl.
@@ -190,6 +197,7 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 	// Build file context: collect TYPE, FUNCTION_BLOCK, and FUNCTION declarations
 	ctx := &fileContext{
 		typeDecls:  make(map[string]ast.TypeSpec),
+		typeAttrs:  make(map[string][]*ast.Attribute),
 		fbDecls:    make(map[string]*ast.FunctionBlockDecl),
 		funcDecls:  make(map[string]*ast.FunctionDecl),
 		ifaceDecls: make(map[string]*ast.InterfaceDecl),
@@ -203,6 +211,7 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 		case *ast.TypeDecl:
 			if d.Name != nil {
 				ctx.typeDecls[strings.ToUpper(d.Name.Name)] = d.Type
+				ctx.typeAttrs[strings.ToUpper(d.Name.Name)] = d.Attributes
 			}
 		case *ast.FunctionBlockDecl:
 			if d.Name != nil {
@@ -228,6 +237,7 @@ func runFileWithOpts(filePath, baseDir string, extCtx *externalContext, defines 
 		for name, spec := range extCtx.typeDecls {
 			if _, exists := ctx.typeDecls[name]; !exists {
 				ctx.typeDecls[name] = spec
+				ctx.typeAttrs[name] = extCtx.typeAttrs[name]
 			}
 		}
 		// FUNCTION declarations likewise
@@ -314,7 +324,9 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	// so their variables resolve as bare names.
 	env := interp.NewEnv(interpreter.GlobalParent())
 
-	// Initialize variables from VarBlocks
+	// Initialize variables from VarBlocks; inline VAR enums first so their
+	// values resolve in initialisers and the body.
+	interpreter.RegisterInlineEnums(tc.Name, tc.VarBlocks)
 	initializeTestEnv(interpreter, env, tc.VarBlocks, ctx)
 
 	// Execute test body
@@ -352,90 +364,13 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 	return tr
 }
 
-// registerUserFunctions registers user-defined FUNCTION declarations as
-// callable functions in the interpreter.
+// registerUserFunctions registers the file's FUNCTION declarations with the
+// interpreter, which binds named, positional and mixed arguments and applies
+// declared defaults (see interp.CallFunction).
 func registerUserFunctions(interpreter *interp.Interpreter, ctx *fileContext) {
-	for name, decl := range ctx.funcDecls {
-		funcDecl := decl // capture for closure
-		funcName := name
-		interpreter.RegisterFunction(funcName, func(args []interp.Value, pos ast.Pos) (interp.Value, error) {
-			// A recursive FUNCTION fails at MaxCallDepth instead of
-			// overflowing the Go stack.
-			if err := interpreter.EnterCall(funcName, pos); err != nil {
-				return interp.Value{}, err
-			}
-			defer interpreter.ExitCall()
-			return callUserFunction(interpreter, funcDecl, args)
-		})
+	for _, decl := range ctx.funcDecls {
+		interpreter.RegisterFunctionDecl(decl)
 	}
-}
-
-// callUserFunction executes a user-defined FUNCTION with the given arguments.
-func callUserFunction(parentInterp *interp.Interpreter, decl *ast.FunctionDecl, args []interp.Value) (interp.Value, error) {
-	// Create a new environment for the function call. Its parent is the
-	// chain of non qualified_only GVLs, so bare GVL names resolve.
-	env := interp.NewEnv(parentInterp.GlobalParent())
-
-	// Initialize return variable (function name holds the return value)
-	retTypeName := ""
-	if decl.ReturnType != nil {
-		retTypeName = typeNameFromSpec(decl.ReturnType)
-	}
-	retVal := interp.ZeroFromTypeSpec(decl.ReturnType)
-	if decl.Name != nil {
-		env.Define(decl.Name.Name, retVal)
-	}
-
-	// Map arguments to VAR_INPUT parameters
-	argIdx := 0
-	for _, vb := range decl.VarBlocks {
-		if vb.Section == ast.VarInput {
-			for _, vd := range vb.Declarations {
-				for _, n := range vd.Names {
-					if argIdx < len(args) {
-						env.Define(n.Name, args[argIdx])
-						argIdx++
-					} else {
-						env.Define(n.Name, interp.ZeroFromTypeSpec(vd.Type))
-					}
-				}
-			}
-		} else {
-			// Initialize other var blocks
-			for _, vd := range vb.Declarations {
-				val := interp.ZeroFromTypeSpec(vd.Type)
-				if vd.InitValue != nil {
-					if iv, err := parentInterp.EvalExpr(env, vd.InitValue); err == nil {
-						val = iv
-					}
-				}
-				for _, n := range vd.Names {
-					env.Define(n.Name, val)
-				}
-			}
-		}
-	}
-
-	// Execute function body
-	err := parentInterp.ExecStatements(env, decl.Body)
-	if err != nil {
-		// ErrReturn is normal function termination
-		if err.Error() == "RETURN" {
-			// Normal return
-		} else {
-			return interp.Value{}, err
-		}
-	}
-
-	// Read return value from the function name variable
-	if decl.Name != nil {
-		if v, ok := env.Get(decl.Name.Name); ok {
-			return v, nil
-		}
-	}
-
-	_ = retTypeName
-	return retVal, nil
 }
 
 // initializeTestEnv populates the environment from VarBlocks, following the
@@ -499,6 +434,11 @@ func initializeTestEnv(interpreter *interp.Interpreter, env *interp.Env, varBloc
 						if iv, err := interpreter.EvalExpr(env, vd.InitValue); err == nil {
 							val = iv
 						}
+					}
+					// An enum variable's value carries the enum tag, so
+					// later stores into it keep the tag (TO_STRING).
+					if _, isEnum := typeSpec.(*ast.EnumType); isEnum && val.Kind == interp.ValInt {
+						val.Enum = upperTypeName
 					}
 					for _, n := range vd.Names {
 						env.Define(n.Name, val)
@@ -606,43 +546,15 @@ func registerTypeDecls(interpreter *interp.Interpreter, ctx *fileContext) {
 }
 
 // registerEnumTypes registers enum type declarations from the file context
-// with the interpreter so that typed enum literals (e.g., Color#Green) can
-// be resolved at runtime.
+// with the interpreter, numbered with the shared IEC previous+1 rule and
+// typed by their base type, so qualified (E.v), bare and typed (E#v) enum
+// values resolve at runtime and TO_STRING honours {attribute 'to_string'}.
 func registerEnumTypes(interpreter *interp.Interpreter, ctx *fileContext) {
 	for typeName, typeSpec := range ctx.typeDecls {
 		if enumType, ok := typeSpec.(*ast.EnumType); ok {
-			values := make(map[string]int64)
-			for i, ev := range enumType.Values {
-				if ev.Name == nil {
-					continue
-				}
-				memberName := strings.ToUpper(ev.Name.Name)
-				// Use explicit init value if present, otherwise use position index
-				if ev.Value != nil {
-					if lit, ok := ev.Value.(*ast.Literal); ok && lit.LitKind == ast.LitInt {
-						if n, err := parseInt(lit.Value); err == nil {
-							values[memberName] = n
-							continue
-						}
-					}
-				}
-				values[memberName] = int64(i)
-			}
-			interpreter.RegisterEnumType(typeName, values)
+			interpreter.RegisterEnumDecl(typeName, enumType, ctx.typeAttrs[typeName])
 		}
 	}
-}
-
-// parseInt parses an integer string, used for enum init values.
-func parseInt(s string) (int64, error) {
-	s = strings.ReplaceAll(s, "_", "")
-	n := int64(0)
-	for _, ch := range s {
-		if ch >= '0' && ch <= '9' {
-			n = n*10 + int64(ch-'0')
-		}
-	}
-	return n, nil
 }
 
 // parseIOArea converts a string area identifier to an iomap.Area.

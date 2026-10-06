@@ -127,9 +127,22 @@ type Parameter struct {
 }
 
 // ArrayDimension represents a single array dimension with low and high bounds.
+// Known is set when both bounds are integer literals; a bound such as
+// GVL.MAX is not evaluated yet and leaves Known false (Low and High 0).
 type ArrayDimension struct {
-	Low  int
-	High int
+	Low   int
+	High  int
+	Known bool
+	// Text is the source form of the bounds ("1..GVL.N") when they are
+	// not Known, so two unknown dimensions compare by their expressions.
+	Text string
+}
+
+// sameDimension reports whether two array dimensions denote the same
+// range: equal bounds, both Known or both unknown, and for unknown bounds
+// the same bound expressions. A Known dimension never equals an unknown one.
+func sameDimension(a, b ArrayDimension) bool {
+	return a.Known == b.Known && a.Low == b.Low && a.High == b.High && a.Text == b.Text
 }
 
 // StructMember represents a named member of a struct type.
@@ -179,7 +192,7 @@ func (t *ArrayType) Equal(o Type) bool {
 		return false
 	}
 	for i, d := range t.Dimensions {
-		if d.Low != a.Dimensions[i].Low || d.High != a.Dimensions[i].High {
+		if !sameDimension(d, a.Dimensions[i]) {
 			return false
 		}
 	}
@@ -205,8 +218,16 @@ func (t *StructType) Equal(o Type) bool {
 // EnumType represents an enumeration type.
 type EnumType struct {
 	Name     string
-	BaseType TypeKind
+	BaseType TypeKind // integer or bit-string kind; INT when not declared
 	Values   []string
+	// Ordinals holds the numeric value of each entry of Values (same
+	// index), numbered with the IEC previous+1 rule.
+	Ordinals []int64
+	// Qualified, Strict and ToString record the {attribute 'qualified_only'},
+	// {attribute 'strict'} and {attribute 'to_string'} pragmas on the TYPE.
+	Qualified bool
+	Strict    bool
+	ToString  bool
 }
 
 func (t *EnumType) Kind() TypeKind { return KindEnum }
@@ -225,6 +246,10 @@ type FunctionBlockType struct {
 	Inputs  []Parameter
 	Outputs []Parameter
 	InOuts  []Parameter
+	// ParamAliases maps an upper-cased alternative input name to the
+	// canonical input it sets (the IEC R of CTU sets RESET). Only the
+	// standard FBs have aliases.
+	ParamAliases map[string]string
 }
 
 func (t *FunctionBlockType) Kind() TypeKind { return KindFunctionBlock }
@@ -241,7 +266,11 @@ func (t *FunctionBlockType) Equal(o Type) bool {
 type FunctionType struct {
 	Name       string
 	ReturnType Type
-	Params     []Parameter
+	// Params lists the VAR_INPUT and VAR_IN_OUT parameters in declaration
+	// order; positional arguments bind to them by index.
+	Params []Parameter
+	// Outputs lists the VAR_OUTPUT parameters, bound with name => target.
+	Outputs []Parameter
 }
 
 func (t *FunctionType) Kind() TypeKind { return KindFunction }

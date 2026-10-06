@@ -187,6 +187,9 @@ func nodeToMap(n Node) map[string]interface{} {
 		if v.Type != nil {
 			m["type"] = nodeToMap(v.Type)
 		}
+		if v.InitValue != nil {
+			m["init_value"] = nodeToMap(v.InitValue)
+		}
 
 	case *ActionDecl:
 		m["span"] = v.NodeSpan
@@ -221,6 +224,17 @@ func nodeToMap(n Node) map[string]interface{} {
 
 	// Statements
 	case *AssignStmt:
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		if v.Target != nil {
+			m["target"] = nodeToMap(v.Target)
+		}
+		if v.Value != nil {
+			m["value"] = nodeToMap(v.Value)
+		}
+
+	case *RefAssignStmt:
+		m["kind"] = KindRefAssignStmt.String()
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
 		if v.Target != nil {
@@ -342,6 +356,80 @@ func nodeToMap(n Node) map[string]interface{} {
 			}
 			m["args"] = args
 		}
+		if len(v.NamedArgs) > 0 {
+			named := make([]interface{}, len(v.NamedArgs))
+			for i, a := range v.NamedArgs {
+				named[i] = nodeToMap(a)
+			}
+			m["named_args"] = named
+		}
+
+	case *BitAccessExpr:
+		m["kind"] = KindBitAccessExpr.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		if v.Target != nil {
+			m["target"] = nodeToMap(v.Target)
+		}
+		if v.Index != nil {
+			m["index"] = nodeToMap(v.Index)
+		}
+
+	case *ThisExpr:
+		m["kind"] = KindThisExpr.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+
+	case *SuperExpr:
+		m["kind"] = KindSuperExpr.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+
+	case *StructInit:
+		m["kind"] = KindStructInit.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		if len(v.Fields) > 0 {
+			fields := make([]interface{}, len(v.Fields))
+			for i, f := range v.Fields {
+				fields[i] = nodeToMap(f)
+			}
+			m["fields"] = fields
+		}
+
+	case *FieldInit:
+		m["kind"] = KindFieldInit.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		if v.Name != nil {
+			m["name"] = nodeToMap(v.Name)
+		}
+		if v.Value != nil {
+			m["value"] = nodeToMap(v.Value)
+		}
+
+	case *ArrayInit:
+		m["kind"] = KindArrayInit.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		if len(v.Elements) > 0 {
+			elems := make([]interface{}, len(v.Elements))
+			for i, e := range v.Elements {
+				elems[i] = nodeToMap(e)
+			}
+			m["elements"] = elems
+		}
+
+	case *ArrayInitElem:
+		m["kind"] = KindArrayInitElem.String()
+		m["span"] = v.NodeSpan
+		marshalTrivia(m, &v.NodeBase)
+		if v.Count != nil {
+			m["count"] = nodeToMap(v.Count)
+		}
+		if v.Value != nil {
+			m["value"] = nodeToMap(v.Value)
+		}
 
 	case *MemberAccessExpr:
 		m["span"] = v.NodeSpan
@@ -378,6 +466,9 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *NamedType:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		if v.Namespace != nil {
+			m["namespace"] = nodeToMap(v.Namespace)
+		}
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -544,6 +635,9 @@ func nodeToMap(n Node) map[string]interface{} {
 		}
 
 	case *CallArg:
+		// Forced like Pragma/Attribute: parsers before Phase 20 left
+		// NodeKind unset, which serialised as "SourceFile".
+		m["kind"] = KindCallArg.String()
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
 		if v.Name != nil {

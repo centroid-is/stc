@@ -433,13 +433,15 @@ func (f *formatter) emitTypeDecl(d *ast.TypeDecl) {
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.writef("%s %s :", f.kw("TYPE"), d.Name.Name)
 	f.newline()
-	f.emitTypeBody(d.Type)
+	f.emitTypeBody(d.Type, d.InitValue)
 	f.write(f.kw("END_TYPE"))
 	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
 }
 
-func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
+// emitTypeBody prints the body of a TYPE declaration. init is the type's
+// default value (TYPE E : (a, b) := b;), printed before the semicolon.
+func (f *formatter) emitTypeBody(ts ast.TypeSpec, init ast.Expr) {
 	switch t := ts.(type) {
 	case *ast.StructType:
 		f.write(f.kw("STRUCT"))
@@ -471,12 +473,32 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 		}
 		f.emitAttrs(t.EndAttributes, t.EndPragmas)
 		f.indent--
-		f.write(");")
+		f.write(")")
+		f.emitEnumBase(t)
+		f.emitTypeInit(init)
+		f.write(";")
 		f.newline()
 	default:
 		f.emitTypeSpec(ts)
+		f.emitTypeInit(init)
 		f.write(";")
 		f.newline()
+	}
+}
+
+// emitEnumBase prints an enumeration's base type, as in (a, b) UINT.
+func (f *formatter) emitEnumBase(t *ast.EnumType) {
+	if t.BaseType != nil {
+		f.write(" ")
+		f.emitTypeSpec(t.BaseType)
+	}
+}
+
+// emitTypeInit prints " := value" for a TYPE default value.
+func (f *formatter) emitTypeInit(init ast.Expr) {
+	if init != nil {
+		f.write(" := ")
+		f.emitExpr(init)
 	}
 }
 
@@ -583,6 +605,9 @@ func (f *formatter) emitTypeSpec(ts ast.TypeSpec) {
 	}
 	switch t := ts.(type) {
 	case *ast.NamedType:
+		if t.Namespace != nil {
+			f.write(t.Namespace.Name + ".")
+		}
 		f.write(t.Name.Name)
 	case *ast.ArrayType:
 		f.write(f.kw("ARRAY") + "[")
@@ -635,6 +660,7 @@ func (f *formatter) emitTypeSpec(ts ast.TypeSpec) {
 		}
 		f.emitInlineEndAttrs(t.EndAttributes, t.EndPragmas)
 		f.write(")")
+		f.emitEnumBase(t)
 	case *ast.StructType:
 		f.write(f.kw("STRUCT"))
 		f.newline()
@@ -684,6 +710,12 @@ func (f *formatter) emitStmt(s ast.Statement) {
 		f.emitAssignStmt(st)
 	case *ast.CallStmt:
 		f.emitCallStmt(st)
+	case *ast.RefAssignStmt:
+		f.emitExpr(st.Target)
+		f.writef(" %s ", f.kw("REF="))
+		f.emitExpr(st.Value)
+		f.write(";")
+		f.newline()
 	case *ast.IfStmt:
 		f.emitIfStmt(st)
 	case *ast.CaseStmt:
@@ -730,23 +762,32 @@ func (f *formatter) emitCallStmt(s *ast.CallStmt) {
 		if i > 0 {
 			f.write(", ")
 		}
-		if arg.Name != nil {
-			f.write(arg.Name.Name)
-			op := " :="
-			if arg.IsOutput {
-				op = " =>"
-			}
-			f.write(op)
-			if arg.Value == nil {
-				// Empty argument: print "name :=" with no trailing space.
-				continue
-			}
-			f.write(" ")
-		}
-		f.emitExpr(arg.Value)
+		f.emitCallArg(arg)
 	}
 	f.write(");")
 	f.newline()
+}
+
+// emitCallArg prints one call argument: "name := v", "name => v", the
+// empty form "name :=", or a bare positional value when Name is nil.
+func (f *formatter) emitCallArg(arg *ast.CallArg) {
+	if arg == nil {
+		return
+	}
+	if arg.Name != nil {
+		f.write(arg.Name.Name)
+		op := " :="
+		if arg.IsOutput {
+			op = " =>"
+		}
+		f.write(op)
+		if arg.Value == nil {
+			// Empty argument: print "name :=" with no trailing space.
+			return
+		}
+		f.write(" ")
+	}
+	f.emitExpr(arg.Value)
 }
 
 func (f *formatter) emitIfStmt(s *ast.IfStmt) {
@@ -914,13 +955,71 @@ func (f *formatter) emitExpr(expr ast.Expr) {
 	case *ast.CallExpr:
 		f.emitExpr(x.Callee)
 		f.write("(")
-		for i, arg := range x.Args {
-			if i > 0 {
+		n := 0
+		for _, arg := range x.Args {
+			if n > 0 {
 				f.write(", ")
 			}
 			f.emitExpr(arg)
+			n++
+		}
+		for _, arg := range x.NamedArgs {
+			if arg == nil {
+				continue
+			}
+			if n > 0 {
+				f.write(", ")
+			}
+			f.emitCallArg(arg)
+			n++
 		}
 		f.write(")")
+	case *ast.BitAccessExpr:
+		f.emitExpr(x.Target)
+		f.write(".")
+		f.emitExpr(x.Index)
+	case *ast.ThisExpr:
+		f.write(f.kw("THIS"))
+	case *ast.SuperExpr:
+		f.write(f.kw("SUPER"))
+	case *ast.StructInit:
+		f.write("(")
+		n := 0
+		for _, fi := range x.Fields {
+			if fi == nil {
+				continue
+			}
+			if n > 0 {
+				f.write(", ")
+			}
+			if fi.Name != nil {
+				f.write(fi.Name.Name + " := ")
+			}
+			f.emitExpr(fi.Value)
+			n++
+		}
+		f.write(")")
+	case *ast.ArrayInit:
+		f.write("[")
+		n := 0
+		for _, el := range x.Elements {
+			if el == nil {
+				continue
+			}
+			if n > 0 {
+				f.write(", ")
+			}
+			if el.Count != nil {
+				f.emitExpr(el.Count)
+				f.write("(")
+				f.emitExpr(el.Value)
+				f.write(")")
+			} else {
+				f.emitExpr(el.Value)
+			}
+			n++
+		}
+		f.write("]")
 	case *ast.MemberAccessExpr:
 		f.emitExpr(x.Object)
 		f.write(".")
@@ -981,6 +1080,8 @@ func (f *formatter) nodeBase(s ast.Statement) *ast.NodeBase {
 	case *ast.AssignStmt:
 		return &st.NodeBase
 	case *ast.CallStmt:
+		return &st.NodeBase
+	case *ast.RefAssignStmt:
 		return &st.NodeBase
 	case *ast.IfStmt:
 		return &st.NodeBase

@@ -264,3 +264,27 @@ func TestGVL(t *testing.T) {
 		assert.True(t, strings.EqualFold(st.Members[0].Name, "X"))
 	})
 }
+
+// TestArrayBoundsFromConstants covers review LO-08: array bounds that name
+// constants are resolved, and dimensions whose bounds are unknown compare
+// by their bound expressions, never equal to a known dimension.
+func TestArrayBoundsFromConstants(t *testing.T) {
+	gvl := gvlFile{"GVL.st", "VAR_GLOBAL CONSTANT\n\tA : INT := 3;\n\tB : INT := 4;\n\tA2 : INT := 3;\nEND_VAR\nVAR_GLOBAL\n\tv : INT;\n\tw : INT;\nEND_VAR\n"}
+	prog := func(decls, body string) gvlFile {
+		return gvlFile{"main.st", "PROGRAM P\nVAR\n" + decls + "END_VAR\n" + body + "\nEND_PROGRAM\n"}
+	}
+	for _, tc := range []struct {
+		name, decls string
+		errs       int
+	}{
+		{"same constant value", "\ta : ARRAY[1..GVL.A] OF INT;\n\tb : ARRAY[1..A2] OF INT;\n\tc : ARRAY[1..3] OF INT;\n", 0},
+		{"different constant values", "\ta : ARRAY[1..GVL.A] OF INT;\n\tb : ARRAY[1..GVL.B] OF INT;\n\tc : ARRAY[1..4] OF INT;\n", 2},
+		{"same unknown bound", "\ta : ARRAY[1..v] OF INT;\n\tb : ARRAY[1..V] OF INT;\n\tc : ARRAY[1..v] OF INT;\n", 0},
+		{"different unknown bounds", "\ta : ARRAY[1..v] OF INT;\n\tb : ARRAY[1..w] OF INT;\n\tc : ARRAY[1..0] OF INT;\n", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ds, _ := runGVL(t, []gvlFile{gvl, prog(tc.decls, "a := b; a := c;")})
+			assert.Len(t, errorsOf(ds), tc.errs, "%v", errorsOf(ds))
+		})
+	}
+}

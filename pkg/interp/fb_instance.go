@@ -71,6 +71,7 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 		Decl:     decl,
 		Env:      env,
 	}
+	env.self = inst
 
 	// EXTENDS chain known to the FBDecls registry, base-most first, so the
 	// instance env also holds every inherited variable and ACTION, and a
@@ -82,6 +83,11 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 	for _, d := range chain {
 		for _, a := range d.Actions {
 			env.DefineAction(a)
+		}
+		// Inline VAR enums: their bare values must resolve before the
+		// initialisers below are evaluated.
+		if interp != nil && d.Name != nil {
+			interp.RegisterInlineEnums(d.Name.Name, d.VarBlocks)
 		}
 	}
 
@@ -141,6 +147,26 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 	}
 
 	return inst
+}
+
+// RegisterInlineEnums registers every anonymous enumeration declared in
+// blocks as <pou>.<var>, so its bare values resolve inside the POU.
+func (interp *Interpreter) RegisterInlineEnums(pou string, blocks []*ast.VarBlock) {
+	local := interp.blockConsts(blocks)
+	for _, vb := range blocks {
+		if vb == nil {
+			continue
+		}
+		for _, vd := range vb.Declarations {
+			et, ok := vd.Type.(*ast.EnumType)
+			if !ok {
+				continue
+			}
+			for _, n := range vd.Names {
+				interp.registerEnum(pou+"."+n.Name, et, vd.Attributes, local)
+			}
+		}
+	}
 }
 
 // fbExtendsChain returns decl and the FBs it EXTENDS that the interpreter's
@@ -205,6 +231,11 @@ func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) error {
 	}
 	// User-defined FB: execute body statements
 	if interp != nil && inst.Decl != nil && inst.Env != nil {
+		if inst.Env.self == nil {
+			// Hand-built instance: THIS^ and unqualified METHOD calls in
+			// its body still need to find it.
+			inst.Env.self = inst
+		}
 		if err := interp.EnterCall(inst.TypeName, ast.Pos{}); err != nil {
 			return err
 		}
@@ -230,6 +261,9 @@ func (inst *FBInstance) SetInput(name string, v Value) {
 		return
 	}
 	if inst.Env != nil {
+		if cur, ok := inst.Env.Get(name); ok {
+			v = adoptEnumTag(cur, v)
+		}
 		if !inst.Env.Set(name, v) {
 			inst.Env.Define(name, v)
 		}
@@ -398,7 +432,11 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 			// nested inside other aggregates are built correctly.
 			if resolve != nil {
 				if target, found := resolve(name); found {
-					return zeroFromTypeSpecWith(target, resolve, depth+1)
+					v := zeroFromTypeSpecWith(target, resolve, depth+1)
+					if _, isEnum := target.(*ast.EnumType); isEnum {
+						v.Enum = name
+					}
+					return v
 				}
 			}
 		}
@@ -419,6 +457,8 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 	case *ast.ReferenceType:
 		// Null reference
 		return Value{Kind: ValReference}
+	case *ast.EnumType:
+		return zeroEnum(t)
 	default:
 		return Zero(types.KindDINT)
 	}

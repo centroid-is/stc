@@ -96,6 +96,93 @@ func TestResolveForwardRef(t *testing.T) {
 	require.NotNil(t, motorScope)
 	speedVar := motorScope.LookupLocal("speed")
 	require.NotNil(t, speedVar, "speed variable should be in FB_Motor scope")
+
+	// The variable resolved before FB_Motor's declaration must be the final,
+	// filled type object, not a placeholder.
+	assert.Same(t, motorSym.Type, motorVar.Type, "forward reference must be pointer-stable")
+
+	t.Run("member access through forward references", func(t *testing.T) {
+		file := parseTestdata(t, "forward_ref_members.st")
+		table, ds := resolveAndCheck(file)
+		assert.Empty(t, errorsOf(ds), "expected no errors")
+
+		main := table.LookupPOU("Main")
+		require.NotNil(t, main)
+		assert.Same(t, table.LookupGlobal("ST_A").Type, main.LookupLocal("a").Type)
+		assert.Same(t, table.LookupGlobal("FB_Pump").Type, main.LookupLocal("pump").Type)
+
+		t1, ok := main.LookupLocal("t1").Type.(types.Type)
+		require.True(t, ok)
+		assert.Equal(t, types.KindINT, t1.Kind(), "alias chain declared in reverse order")
+
+		ta, ok := main.LookupLocal("ta").Type.(*types.ArrayType)
+		require.True(t, ok, "array alias of a later struct")
+		assert.Same(t, table.LookupGlobal("ST_B").Type, ta.ElementType)
+
+		i, ok := main.LookupLocal("i").Type.(*types.FunctionBlockType)
+		require.True(t, ok, "interface declared after use resolves to its shell")
+		assert.Equal(t, "I_Motor", i.Name)
+	})
+
+	t.Run("self-referential alias terminates", func(t *testing.T) {
+		file := parseFile("TYPE T : T; END_TYPE\nTYPE U : V; END_TYPE\nTYPE V : U; END_TYPE\n")
+		_, _ = resolveAndCheck(file)
+	})
+
+	t.Run("user type overriding a library type wins for earlier uses", func(t *testing.T) {
+		lib := parser.Parse("lib.st", "TYPE ST_X :\nSTRUCT\n    libOnly : INT;\nEND_STRUCT\nEND_TYPE\n"+
+			"TYPE ST_X :\nSTRUCT\n    dup : INT;\nEND_STRUCT\nEND_TYPE\n").File
+		user := parseFile("PROGRAM P\nVAR\n    x : ST_X;\n    n : INT;\nEND_VAR\nn := x.userOnly;\nEND_PROGRAM\n" +
+			"TYPE ST_X :\nSTRUCT\n    userOnly : INT;\nEND_STRUCT\nEND_TYPE\n")
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{user}, ResolveOpts{LibraryFiles: []*ast.SourceFile{lib}})
+		NewChecker(table, diags).CheckBodies([]*ast.SourceFile{user})
+		assert.Empty(t, errorsOf(diags.All()))
+		assert.False(t, table.LookupGlobal("ST_X").IsLibrary)
+		assert.Same(t, table.LookupGlobal("ST_X").Type, table.LookupPOU("P").LookupLocal("x").Type)
+	})
+
+	t.Run("library-only type used before declaration", func(t *testing.T) {
+		lib := parser.Parse("lib.st", "FUNCTION_BLOCK FB_L\nVAR_OUTPUT\n    s : ST_L;\nEND_VAR\nEND_FUNCTION_BLOCK\n"+
+			"TYPE ST_L :\nSTRUCT\n    v : INT;\nEND_STRUCT\nEND_TYPE\n").File
+		user := parseFile("PROGRAM P\nVAR\n    f : FB_L;\n    n : INT;\nEND_VAR\nn := f.s.v;\nEND_PROGRAM\n")
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{user}, ResolveOpts{LibraryFiles: []*ast.SourceFile{lib}})
+		NewChecker(table, diags).CheckBodies([]*ast.SourceFile{user})
+		assert.Empty(t, errorsOf(diags.All()))
+	})
+
+	t.Run("mock FB overriding a library FB", func(t *testing.T) {
+		lib := parser.Parse("lib.st", "FUNCTION_BLOCK FB_M\nVAR_OUTPUT\n    a : INT;\nEND_VAR\nEND_FUNCTION_BLOCK\n").File
+		mock := parser.Parse("mock.st", "FUNCTION_BLOCK FB_M\nVAR_OUTPUT\n    b : INT;\nEND_VAR\nEND_FUNCTION_BLOCK\n").File
+		user := parseFile("PROGRAM P\nVAR\n    f : FB_M;\n    n : INT;\nEND_VAR\nn := f.b;\nEND_PROGRAM\n")
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{user},
+			ResolveOpts{LibraryFiles: []*ast.SourceFile{lib}, MockFiles: []*ast.SourceFile{mock}})
+		NewChecker(table, diags).CheckBodies([]*ast.SourceFile{user})
+		assert.Empty(t, errorsOf(diags.All()))
+	})
+
+	t.Run("GVL member of a forward-declared struct", func(t *testing.T) {
+		ds, _ := runGVL(t, []gvlFile{
+			{"g.st", "VAR_GLOBAL\n    gs : ST_Later;\nEND_VAR\n"},
+			{"main.st", "PROGRAM P\nVAR\n    n : INT;\nEND_VAR\nn := g.gs.v;\nn := gs.v;\nEND_PROGRAM\n" +
+				"TYPE ST_Later :\nSTRUCT\n    v : INT;\nEND_STRUCT\nEND_TYPE\n"},
+		})
+		assert.Empty(t, errorsOf(ds))
+	})
+}
+
+// resolveAndCheck runs pass 1 and pass 2 over a single file.
+func resolveAndCheck(file *ast.SourceFile) (*symbols.Table, []diag.Diagnostic) {
+	table := symbols.NewTable()
+	diags := diag.NewCollector()
+	NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{file})
+	NewChecker(table, diags).CheckBodies([]*ast.SourceFile{file})
+	return table, diags.All()
 }
 
 func TestResolveTypeDecl(t *testing.T) {
@@ -418,4 +505,74 @@ END_FUNCTION_BLOCK
 
 	// Should produce redeclaration error -- mock cannot override user code
 	assert.True(t, diags.HasErrors(), "mock override of user code should produce error")
+}
+
+// TestResolveWithoutPrePass covers the resolveX entry points called directly,
+// without CollectDeclarations' pre-pass: each allocates its own type object.
+func TestResolveWithoutPrePass(t *testing.T) {
+	file := parseFile("PROGRAM P\nEND_PROGRAM\nFUNCTION_BLOCK FB\nEND_FUNCTION_BLOCK\nFUNCTION F : INT\nF := 1;\nEND_FUNCTION\n" +
+		"TYPE S :\nSTRUCT\n    a : INT;\nEND_STRUCT\nEND_TYPE\nTYPE E : (one, two); END_TYPE\n")
+	table := symbols.NewTable()
+	r := NewResolver(table, diag.NewCollector())
+	r.fbs = make(map[string]*fbEntry)
+	r.resolveProgram(file.Declarations[0].(*ast.ProgramDecl), false)
+	r.resolveFunctionBlock(file.Declarations[1].(*ast.FunctionBlockDecl), false)
+	r.resolveFunction(file.Declarations[2].(*ast.FunctionDecl), false)
+	r.resolveTypeDecl(file.Declarations[3].(*ast.TypeDecl), false)
+	r.resolveTypeDecl(file.Declarations[4].(*ast.TypeDecl), false)
+
+	assert.Equal(t, "P", table.LookupGlobal("P").Type.(*types.FunctionBlockType).Name)
+	assert.Equal(t, "FB", table.LookupGlobal("FB").Type.(*types.FunctionBlockType).Name)
+	assert.Equal(t, types.TypeINT, table.LookupGlobal("F").Type.(*types.FunctionType).ReturnType)
+	assert.Equal(t, "S", table.LookupGlobal("S").Type.(*types.StructType).Name)
+	assert.Equal(t, "E", table.LookupGlobal("E").Type.(*types.EnumType).Name)
+}
+
+// TestResolveLibraryOverrides covers the redeclaration rules of every POU
+// kind against library symbols and the standard FBs.
+func TestResolveLibraryOverrides(t *testing.T) {
+	libSrc := "PROGRAM LP\nEND_PROGRAM\nPROGRAM LP\nEND_PROGRAM\n" +
+		"FUNCTION LF : INT\nLF := 1;\nEND_FUNCTION\nFUNCTION LF : INT\nLF := 2;\nEND_FUNCTION\n" +
+		"INTERFACE LI\nEND_INTERFACE\nINTERFACE LI\nEND_INTERFACE\n" +
+		"FUNCTION TOF : BOOL\nTOF := TRUE;\nEND_FUNCTION\n" +
+		"INTERFACE TP\nEND_INTERFACE\n" +
+		"PROGRAM CTU\nEND_PROGRAM\n" +
+		"TYPE R_TRIG : INT; END_TYPE\n"
+	userSrc := "PROGRAM LP\nEND_PROGRAM\nFUNCTION LF : BOOL\nLF := TRUE;\nEND_FUNCTION\nINTERFACE LI\nEND_INTERFACE\n"
+	ds, table := runGVL(t, []gvlFile{{"main.st", userSrc}}, ResolveOpts{LibraryFiles: parseGVLFiles(t, []gvlFile{{"lib.st", libSrc}})})
+	assert.Empty(t, errorsOf(ds), "library duplicates are ignored; user code replaces library symbols")
+
+	assert.False(t, table.LookupGlobal("LP").IsLibrary)
+	assert.Equal(t, types.TypeBOOL, table.LookupGlobal("LF").Type.(*types.FunctionType).ReturnType)
+	assert.False(t, table.LookupGlobal("LI").IsLibrary)
+	assert.Equal(t, symbols.KindFunction, table.LookupGlobal("TOF").Kind, "library FUNCTION replaces standard TOF")
+	assert.Equal(t, symbols.KindInterface, table.LookupGlobal("TP").Kind, "library INTERFACE replaces standard TP")
+	assert.Equal(t, symbols.KindProgram, table.LookupGlobal("CTU").Kind, "library PROGRAM replaces standard CTU")
+	assert.Equal(t, symbols.KindType, table.LookupGlobal("R_TRIG").Kind, "library TYPE replaces standard R_TRIG")
+}
+
+func TestResolveEdgeCases(t *testing.T) {
+	t.Run("TYPE declaration without a name is skipped", func(t *testing.T) {
+		file := &ast.SourceFile{Declarations: []ast.Declaration{&ast.TypeDecl{Type: &ast.StructType{}}}}
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{file})
+		assert.Empty(t, diags.All())
+	})
+
+	t.Run("EXTENDS a FUNCTION is ignored", func(t *testing.T) {
+		ds := runAction(t, "FUNCTION F : INT\nF := 1;\nEND_FUNCTION\nFUNCTION_BLOCK FB_X EXTENDS F\nEND_FUNCTION_BLOCK\n")
+		assert.Empty(t, errorsOf(ds))
+	})
+
+	t.Run("namespace-qualified symbol registered by a loader", func(t *testing.T) {
+		table := symbols.NewTable()
+		qualified := &types.StructType{Name: "Lib.ST_Q"}
+		require.NoError(t, table.GlobalScope().Insert(&symbols.Symbol{Name: "Lib.ST_Q", Kind: symbols.KindType, Type: qualified, IsLibrary: true}))
+		file := parseFile("PROGRAM P\nVAR\n    q : Lib.ST_Q;\nEND_VAR\nEND_PROGRAM\n")
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{file})
+		assert.Empty(t, diags.All())
+		assert.Same(t, qualified, table.LookupPOU("P").LookupLocal("q").Type)
+	})
 }
