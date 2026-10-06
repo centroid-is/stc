@@ -36,7 +36,7 @@ key-files:
 key-decisions:
   - "No pkg/opcua/subscribe.go: awcullen's DataChangeMonitoredItem.Poll calls srv.readValue, which runs our read handler, so samples come from the live NodeSource"
   - "No new exported serve-loop helper: Phase 23 already made serve a Project.Run OnTick hook calling ApplyPending; the in-process test uses the same two calls"
-  - "Scenario wiring (serve --scenario, stc-mcp --scenario, pkg/scenario Stepper, toggle.toml) is pending the Phase 27 merge"
+  - "Scenario wiring landed after the Phase 27 merge: scenario.Live drives serve and stc-mcp scenarios"
 
 requirements-completed: [OPCUA-07, OPCUA-08]
 
@@ -108,15 +108,12 @@ completed: 2026-10-06
 - No exported serve-loop helper was added. Serve already calls `Project.Run` with an OnTick hook that runs ApplyPending (Phase 23-04), and the in-process test uses the same composition.
 - The tests are proof tests of behaviour that already existed after Phases 23 and 28-04. A RED commit that fails was therefore not possible. Each task has one `test(29-01)` commit.
 
-## Pending: scenario wiring pending Phase 27 merge
+## Scenario wiring (completed after the Phase 27 merge)
 
-`pkg/scenario` does not exist on main. Phase 27 is executing in a separate worktree. These parts of Task 3 remain TODO:
-
-- `pkg/scenario/stepper.go` and its test. The stepper must wrap the Phase 27 executor's per-tick logic with BeforeTick(k) and AfterTick(k), not reimplement it (D-06). Check the 27-01..27-03 SUMMARY API after the merge.
-- `stc serve --scenario <file.toml>`. `--io` already exists from Phase 23. Call `Stepper.BeforeTick` before each Tick and `AfterTick` after it, inside the serve loop's OnTick hook after ApplyPending. Failed expects become warnings in serve mode. A bad file must exit non-zero with the SCN diagnostic before the server starts.
-- `tests/opcua_live/toggle.toml` sets `GVL_Live.sensor.xIn` TRUE at cycle 50. The fixture already declares `xIn AT %I*` and copies it to `GVL_Live.sensor.HMI.p_stat_xRaw`.
-- `TestServeScenario` in `cmd/stc/serve_live_test.go` should reuse `subscribeLive` on `GVL_Live.sensor.HMI.p_stat_xRaw` and expect [FALSE, TRUE].
-- `stc-mcp --scenario` (D-14) is wired the same way.
+- `pkg/scenario/stepper.go`: `Executor.Start` returns a `Live` with BeforeTick, AfterTick and Finish. `Executor.Run` now drives the same `Live`, so the per-tick logic exists once (D-06).
+- `stc serve --scenario`: validated before the OPC UA server starts. Between Ticks the expects are evaluated, pending OPC UA writes applied, then the next steps fire. The report prints on stop and failures are warnings. `TestServeScenario` subscribes to `GVL_Live.sensor.HMI.p_stat_xRaw` and sees [FALSE, TRUE] from `tests/opcua_live/toggle.toml` (cycle 100, 1 s at 10 ms, for subscription margin).
+- `stc-mcp --scenario` (D-14): the session is a `scenario.Plant`; steps fire in `stc_sim_step`, failed expects return in `scenario_failures`. `stc_sim_write` forces linked inputs through the Plant network force instead of an image-level force map.
+- Scenario diagnostics now carry the scenario file name.
 
 ## Known Stubs
 
@@ -124,6 +121,6 @@ None.
 
 ## Threat Flags
 
-None. T-29-01 is tested by TestLiveWritesBetweenScans and TestLiveStatusNotWritable. T-29-02 needed no push mechanism and keeps the library limits. T-29-03 is pending with the scenario wiring.
+None. T-29-01 is tested by TestLiveWritesBetweenScans and TestLiveStatusNotWritable. T-29-02 needed no push mechanism and keeps the library limits. T-29-03 is covered by TestServeScenarioInvalid and TestSimSessionScenarioInvalid: a scenario that does not validate stops before anything runs.
 
 ## Self-Check: PASSED

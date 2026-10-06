@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: executing
-stopped_at: Completed 29-03-PLAN.md
-last_updated: "2026-10-06T09:05:28.838Z"
+status: milestone_complete
+stopped_at: Milestone complete (Phase 29 was final phase)
+last_updated: 2026-10-06T09:22:33.486Z
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 24
   total_plans: 92
-  completed_plans: 92
+  completed_plans: 96
   percent: 83
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 29 — live hmi & agent integration
+**Current focus:** Milestone complete
 
 ## Current Position
 
-Phase: 29 of 4 (live hmi & agent integration)
-Plan: 29-03 complete (29-01, 29-04 pending)
-Status: In progress
+Phase: 29 of 4 (opc ua address space)
+Plan: Not started
+Status: Milestone complete
 Last activity: 2026-10-06
 
 Progress: [██████████] 100%
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 78 (v1.0) + 10 (v1.1) = 42
+- Total plans completed: 86 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 
