@@ -21,6 +21,8 @@ func TestAttribute_String(t *testing.T) {
 		{"round trip escaped", Attribute{Name: "x", Value: "it's", HasValue: true}, "{attribute 'x' := 'it''s'}"},
 		{"closing brace in value", Attribute{Name: "x", Value: "a}b", HasValue: true}, "{attribute 'x' := 'a)b'}"},
 		{"closing brace in name", Attribute{Name: "n}"}, "{attribute 'n)'}"},
+		{"double quoted name", Attribute{Name: "qualified_only", DoubleQuoted: true}, `{attribute "qualified_only"}`},
+		{"double quoted with value", Attribute{Name: "x", Value: `a"b'c}`, HasValue: true, DoubleQuoted: true}, `{attribute "x" := "a""b'c)"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,6 +42,10 @@ func TestAttribute_HasAttribute(t *testing.T) {
 	assert.False(t, HasAttribute(attrs, "TcLinkTo"))
 	assert.False(t, HasAttribute(nil, "qualified_only"))
 	assert.False(t, HasAttribute([]*Attribute{nil}, "qualified_only"))
+	// TwinCAT ignores attribute names written in double quotes.
+	dq := []*Attribute{{Name: "qualified_only", DoubleQuoted: true}}
+	assert.False(t, HasAttribute(dq, "qualified_only"))
+	assert.True(t, HasAttribute(append(dq, &Attribute{Name: "qualified_only"}), "qualified_only"))
 }
 
 func TestSanitizeGVLName(t *testing.T) {

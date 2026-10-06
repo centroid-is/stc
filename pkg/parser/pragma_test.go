@@ -52,7 +52,7 @@ func TestAttributeText(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			name, value, hasValue, ok := parseAttributeText(tc.text)
+			name, value, hasValue, _, ok := parseAttributeText(tc.text)
 			require.Equal(t, tc.ok, ok)
 			if !tc.ok {
 				return
@@ -72,15 +72,46 @@ func TestAttributeTextRoundTrip(t *testing.T) {
 		"{attribute 'OPC.UA.DA.Description' := 'controller''s — count'}",
 		`{attribute "qualified_only"}`,
 	} {
-		name, value, hasValue, ok := parseAttributeText(text)
+		name, value, hasValue, dq, ok := parseAttributeText(text)
 		require.True(t, ok, text)
-		a := &ast.Attribute{Name: name, Value: value, HasValue: hasValue}
-		n2, v2, h2, ok2 := parseAttributeText(a.String())
+		a := &ast.Attribute{Name: name, Value: value, HasValue: hasValue, DoubleQuoted: dq}
+		n2, v2, h2, dq2, ok2 := parseAttributeText(a.String())
 		require.True(t, ok2, a.String())
 		require.Equal(t, name, n2)
 		require.Equal(t, value, v2)
 		require.Equal(t, hasValue, h2)
+		require.Equal(t, dq, dq2)
 	}
+}
+
+func TestAttributeTextDoubleQuotedFlag(t *testing.T) {
+	tests := []struct {
+		text string
+		dq   bool
+		ok   bool
+	}{
+		{"{attribute 'qualified_only'}", false, true},
+		{`{attribute "qualified_only"}`, true, true},
+		{`{attribute "x" := 'y'}`, true, true},
+		{`{attribute 'x' := "y"}`, false, true},
+		{`{attribute "unterminated}`, false, false},
+		{`{attribute "x" := "y}`, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.text, func(t *testing.T) {
+			_, _, _, dq, ok := parseAttributeText(tc.text)
+			require.Equal(t, tc.ok, ok)
+			require.Equal(t, tc.dq, dq)
+		})
+	}
+
+	t.Run("parsed attribute node carries the flag", func(t *testing.T) {
+		f := parseClean(t, "{attribute \"qualified_only\"}\n{attribute 'TcLinkTo' := 'x'}\nPROGRAM P\nEND_PROGRAM\n")
+		prog := f.Declarations[0].(*ast.ProgramDecl)
+		require.Len(t, prog.Attributes, 2)
+		require.True(t, prog.Attributes[0].DoubleQuoted)
+		require.False(t, prog.Attributes[1].DoubleQuoted)
+	})
 }
 
 func TestAttributeStringWithBraceReparses(t *testing.T) {

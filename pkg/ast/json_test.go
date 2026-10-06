@@ -392,6 +392,12 @@ func TestMarshalAttributes(t *testing.T) {
 		})
 	}
 
+	t.Run("double quoted flag", func(t *testing.T) {
+		m := marshalToMap(t, &Attribute{Name: "x", DoubleQuoted: true})
+		assert.Equal(t, true, m["double_quoted"])
+		assert.NotContains(t, marshalToMap(t, &Attribute{Name: "x"}), "double_quoted")
+	})
+
 	t.Run("empty value is kept", func(t *testing.T) {
 		m := marshalToMap(t, &Attribute{Name: "x", HasValue: true})
 		assert.Contains(t, m, "value")
