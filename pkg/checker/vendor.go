@@ -143,6 +143,16 @@ func checkVendorDecl(decl ast.Declaration, profile *VendorProfile, diags *diag.C
 		for _, vb := range d.VarBlocks {
 			checkVendorVarBlock(vb, profile, diags)
 		}
+
+	case *ast.GVLDecl:
+		for _, vb := range d.Blocks {
+			if vb != nil {
+				checkVendorVarBlock(vb, profile, diags)
+			}
+		}
+
+	case *ast.TypeDecl:
+		checkVendorTypeSpec(d.Type, profile, diags)
 	}
 }
 
@@ -195,6 +205,11 @@ func checkVendorTypeSpec(ts ast.TypeSpec, profile *VendorProfile, diags *diag.Co
 
 	case *ast.ArrayType:
 		checkVendorTypeSpec(t.ElementType, profile, diags)
+
+	case *ast.StructType:
+		for _, m := range t.Members {
+			checkVendorTypeSpec(m.Type, profile, diags)
+		}
 	}
 }
 

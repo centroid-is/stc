@@ -510,3 +510,31 @@ func TestVendorCheckInterfaceDecl(t *testing.T) {
 		t.Error("expected VEND001 for INTERFACE on schneider")
 	}
 }
+
+// TestVendorCheckGVLAndTypes covers declarations outside POUs: VAR_GLOBAL
+// variables and TYPE struct members (including inline structs) get the same
+// VEND00x warnings as POU variables.
+func TestVendorCheckGVLAndTypes(t *testing.T) {
+	files := parseGVLFiles(t, []gvlFile{
+		{"G.st", "VAR_GLOBAL\n\tp : POINTER TO INT;\nEND_VAR\nVAR_GLOBAL CONSTANT\n\tbig : LINT := 1;\nEND_VAR\n"},
+		{"types.st", "TYPE ST_X :\nSTRUCT\n\tr : REFERENCE TO INT;\n\tw : LREAL;\n\tinner : STRUCT\n\t\tq : POINTER TO INT;\n\tEND_STRUCT;\nEND_STRUCT\nEND_TYPE\nTYPE T_Alias : WSTRING; END_TYPE\n"},
+	})
+	codes := func(profile *VendorProfile) map[string]int {
+		diags := diag.NewCollector()
+		CheckVendorCompat(files, nil, profile, diags)
+		got := map[string]int{}
+		for _, d := range diags.All() {
+			got[d.Code]++
+		}
+		return got
+	}
+	if got := codes(Portable); got[CodeVendorPointer] != 2 || got[CodeVendorReference] != 1 || got[CodeVendor64Bit] != 2 || got[CodeVendorWString] != 1 {
+		t.Errorf("portable: unexpected vendor warnings %v", got)
+	}
+	if got := codes(Schneider); got[CodeVendorPointer] != 2 || got[CodeVendorReference] != 1 || got[CodeVendor64Bit] != 0 {
+		t.Errorf("schneider: unexpected vendor warnings %v", got)
+	}
+	if got := codes(Beckhoff); len(got) != 0 {
+		t.Errorf("beckhoff: expected no vendor warnings, got %v", got)
+	}
+}
