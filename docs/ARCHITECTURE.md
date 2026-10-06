@@ -246,6 +246,47 @@ type Config struct {
 
 4. Users reference stubs via `[build.library_paths]` in their `stc.toml`.
 
+## How to Add an EtherCAT Device Model
+
+`pkg/ecat` simulates the EtherCAT side of a TwinCAT project from its EtherCATConfig exports. Every slave gets a device model that reads its outputs and writes its inputs in the process image each cycle.
+
+**Contract.** A model implements `ecat.Device`:
+
+```go
+type Device interface {
+    Init(s *Slave)                                  // once, with the slave from the export
+    Step(dt time.Duration, out []byte, in []byte)   // every cycle
+}
+```
+
+`out` is the master-to-slave view and `in` is the slave-to-master view, both limited to the byte span of the slave's own PDO entries. Models that also implement `ecat.Binder` receive their `*ecat.Layout` after `Init`. The Layout resolves entries by PDO and entry name exactly as they appear in the export, for example `Layout.Field("Channel 1", "Status")`. `FindEntry` and `Fields` give per-direction lookups when names vary between revisions. Embed `devices.Base` to get `Init`, `Bind` and the generic `Set(pdo, entry, v)` and `Get(pdo, entry)` stimulus.
+
+**Registration.** `ecat.Registry` maps `(VendorId, ProductCode)` to a factory. An exact identity always wins. When none matches, vendor-scoped model-name patterns registered with `RegisterModel` are tried in order, which covers other revisions and synthetic fixtures. Add new products to `knownIDs` in `pkg/ecat/devices/ids.go` with a product constant taken from a real export, plus a fallback regex if useful. Couplers and terminals without process data use the `passive` factory.
+
+**Unmatched slaves.** A slave with no model runs as `ecat.Passthrough`, which never touches the image. `NewNetwork` reports it as an `ECAT010` warning through `Network.Diagnostics()`, with the slave name, vendor and product, so the missing registration is easy to add.
+
+**Package layout.** `pkg/ecat/devices` keeps one file per family: `base.go`, `passive.go`, `digital.go`, `analog.go`, `el9222.go`, `psu.go`, `safety.go`, `el6001.go` and `serial_peer.go`. Each family has a matching `_test.go` built on fixtures in `tests/ecat_fixtures`. The package registers itself into `ecat.DefaultRegistry` from `init`, so consumers that pass a nil registry must blank-import it:
+
+```go
+import _ "github.com/centroid-is/stc/pkg/ecat/devices"
+```
+
+**Shipped models and stimulus.** Tests and scenarios reach a model with `Network.Device(master, slave)` or `Network.DeviceByName(name)` and type-assert it.
+
+| Model | Products | Stimulus and inspection |
+|-------|----------|-------------------------|
+| `Passive` | EK1100, EK1110, EK1200, EL6070, EL9011, CU2508 | `Base.Set`, `Base.Get` |
+| `DigitalIO` | EL1008, EL1018, EL2008, EP2338, Festo CTEU | `SetInput(ch, v)`, `Output(ch)` |
+| `Analog` | EL3054 (4-20 mA), EL3064 (0-10 V) | `SetCurrent(ch, mA)`, `SetVoltage(ch, v)`, `SetRaw(ch, raw)` |
+| `EL9222` | EL9222-5500 | `Trip`, `SetWarning`, `SetCoolDown`, `SetHardwareProtection`, `SetLoadCurrent`, `Enabled`, `Tripped` |
+| `PSU` | PS2001-2410 | `SetPSU(state)`, `State()` |
+| `SafetyDiag` | EL1904, EL2912, EP1918-0002 | `SetFieldVoltage(under, over)` |
+| `EL6001` | EL6001, EL6002 | `SetPeer(p)` with `ScriptedPeer`, `LoopbackPeer` or `BaaderPeer()`, `SetErrors` |
+
+Network-level faults that apply to any slave use `SetSlaveState`, `SetWcState`, `SetDevState` and `ClearFaults`.
+
+**Real-data gate.** `tests/ecat_models_test.go` loads every local sildarvinnsla export when `STC_SILD_DIR` is set and fails on any unmodelled slave except the ATV320 drives, which Phase 26 models.
+
 ## Testing Strategy
 
 ### Layers
