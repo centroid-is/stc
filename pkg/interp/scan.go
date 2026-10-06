@@ -223,7 +223,7 @@ func (interp *Interpreter) initVarDecl(env, fbParent *Env, vd *ast.VarDecl) {
 			val = zeroFromTypeSpecWith(vd.Type, interp.TypeResolverFunc(), 0)
 			if vd.InitValue != nil {
 				if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-					val = iv
+					val = storeAs(val, iv)
 				}
 			}
 			if val.IsAggregate() {

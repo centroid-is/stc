@@ -844,8 +844,11 @@ func (interp *Interpreter) execFor(env *Env, s *ast.ForStmt) error {
 
 	varName := s.Variable.Name
 
-	// Define or set the loop variable
-	if !env.Set(varName, from) {
+	// Define or set the loop variable; an existing counter keeps its IEC
+	// type and wraps to its width.
+	if cur, ok := env.Get(varName); ok {
+		env.Set(varName, storeAs(cur, from))
+	} else {
 		env.Define(varName, from)
 	}
 
@@ -880,7 +883,7 @@ func (interp *Interpreter) execFor(env *Env, s *ast.ForStmt) error {
 
 		// Increment loop variable
 		current, _ = env.Get(varName)
-		env.Set(varName, IntValue(current.Int+step))
+		env.Set(varName, storeAs(current, IntValue(current.Int+step)))
 	}
 	return nil
 }

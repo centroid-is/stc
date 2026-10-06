@@ -5,6 +5,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWrapInt(t *testing.T) {
@@ -88,5 +89,130 @@ func TestStoreAs(t *testing.T) {
 		assert.Equal(t, b, storeAs(Zero(types.KindBOOL), b))
 		r := RealValue(2.5)
 		assert.Equal(t, r, storeAs(Zero(types.KindINT), r))
+	})
+}
+
+func TestInitialisedIECType(t *testing.T) {
+	t.Run("WORD initialiser keeps WORD type", func(t *testing.T) {
+		eng := bitRun(t, "P.st", `
+PROGRAM P
+VAR w : WORD := 16#9; i : INT := 70000; x : LREAL := 1; END_VAR
+END_PROGRAM
+`)
+		w := progVar(t, eng, "w")
+		assert.Equal(t, types.KindWORD, w.IECType)
+		assert.Equal(t, int64(9), w.Int)
+		i := progVar(t, eng, "i")
+		assert.Equal(t, types.KindINT, i.IECType)
+		assert.Equal(t, int64(4464), i.Int)
+		x := progVar(t, eng, "x")
+		assert.Equal(t, ValReal, x.Kind)
+		assert.Equal(t, 1.0, x.Real)
+	})
+
+	t.Run("bit 16 of an initialised WORD is a runtime error", func(t *testing.T) {
+		err := bitRunErr(t, `
+PROGRAM P
+VAR w : WORD := 16#9; b : BOOL; END_VAR
+b := w.16;
+END_PROGRAM
+`)
+		assert.Contains(t, err.Error(), "bit index 16 out of range for 16-bit value")
+	})
+
+	t.Run("FB VAR initialiser wraps on increment", func(t *testing.T) {
+		eng := bitRun(t, "P.st", `
+FUNCTION_BLOCK FB_Count
+VAR_OUTPUT o : USINT; END_VAR
+VAR c : USINT := 255; END_VAR
+c := c + 1;
+o := c;
+END_FUNCTION_BLOCK
+
+PROGRAM P
+VAR f : FB_Count; r : USINT := 7; END_VAR
+f();
+r := f.o;
+END_PROGRAM
+`)
+		r := progVar(t, eng, "r")
+		assert.Equal(t, int64(0), r.Int)
+		assert.Equal(t, types.KindUSINT, r.IECType)
+	})
+}
+
+func TestStoreSites(t *testing.T) {
+	t.Run("REF= to INT array element and struct member wraps", func(t *testing.T) {
+		eng := bitRun(t, "P.st", `
+TYPE S : STRUCT m : UINT; END_STRUCT END_TYPE
+
+PROGRAM P
+VAR
+  arr : ARRAY[0..1] OF INT;
+  s : S;
+  r : REFERENCE TO INT;
+  q : REFERENCE TO UINT;
+END_VAR
+r REF= arr[1];
+r := 40000;
+q REF= s.m;
+q := -1;
+END_PROGRAM
+`)
+		arr := progVar(t, eng, "arr")
+		assert.Equal(t, int64(-25536), arr.Array[1].Int)
+		assert.Equal(t, types.KindINT, arr.Array[1].IECType)
+		s := progVar(t, eng, "s")
+		assert.Equal(t, int64(65535), s.Struct["M"].Int)
+	})
+
+	t.Run("writeRef to a root variable wraps", func(t *testing.T) {
+		env := NewEnv(nil)
+		env.Define("B", Zero(types.KindBYTE))
+		require.NoError(t, writeRef(&RefPath{Env: env, Var: "B"}, IntValue(257)))
+		b, _ := env.Get("B")
+		assert.Equal(t, int64(1), b.Int)
+		assert.Equal(t, types.KindBYTE, b.IECType)
+	})
+
+	t.Run("FOR counter keeps its IEC type", func(t *testing.T) {
+		eng := bitRun(t, "P.st", `
+PROGRAM P
+VAR i : SINT; n : DINT; END_VAR
+FOR i := 1 TO 5 DO n := n + 1; END_FOR
+END_PROGRAM
+`)
+		i := progVar(t, eng, "i")
+		assert.Equal(t, types.KindSINT, i.IECType)
+		assert.Equal(t, int64(6), i.Int)
+		assert.Equal(t, int64(5), progVar(t, eng, "n").Int)
+	})
+
+	t.Run("FOR start value wraps to the counter type", func(t *testing.T) {
+		eng := bitRun(t, "P.st", `
+PROGRAM P
+VAR i : SINT; n : DINT; END_VAR
+FOR i := 130 TO -126 DO n := n + 1; END_FOR
+END_PROGRAM
+`)
+		// 130 stored into SINT is -126: one pass, then -125 > -126 ends it.
+		assert.Equal(t, types.KindSINT, progVar(t, eng, "i").IECType)
+		assert.Equal(t, int64(1), progVar(t, eng, "n").Int)
+	})
+
+	t.Run("bit write keeps BYTE type", func(t *testing.T) {
+		eng := bitRun(t, "P.st", `
+PROGRAM P
+VAR b : BYTE := 16#01; s : SINT; END_VAR
+b.7 := TRUE;
+s.7 := TRUE;
+END_PROGRAM
+`)
+		b := progVar(t, eng, "b")
+		assert.Equal(t, types.KindBYTE, b.IECType)
+		assert.Equal(t, int64(129), b.Int)
+		s := progVar(t, eng, "s")
+		assert.Equal(t, types.KindSINT, s.IECType)
+		assert.Equal(t, int64(-128), s.Int)
 	})
 }

@@ -127,7 +127,7 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 					// If there is an init value, try to evaluate it
 					if vd.InitValue != nil && interp != nil {
 						if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-							val = iv
+							val = storeAs(val, iv)
 						}
 					}
 				}
