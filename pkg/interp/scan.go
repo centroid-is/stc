@@ -49,6 +49,17 @@ func NewScanCycleEngine(program *ast.ProgramDecl) *ScanCycleEngine {
 	}
 }
 
+// NewScanCycleEngineWith creates a scan cycle engine for program that runs on
+// interp instead of a fresh interpreter, so several programs share its
+// TYPEs, FBs, FUNCTIONs and GVLs (see Runtime). Register GVLs on interp
+// before the engine initialises: the program env takes the GVL chain as its
+// parent when it is created.
+func NewScanCycleEngineWith(interp *Interpreter, program *ast.ProgramDecl) *ScanCycleEngine {
+	e := NewScanCycleEngine(program)
+	e.interp = interp
+	return e
+}
+
 // IOTable returns the engine's I/O process image table for external access.
 // External code can call SetBit/SetWord etc. to inject test inputs before Tick.
 func (e *ScanCycleEngine) IOTable() *iomap.IOTable {
@@ -64,6 +75,13 @@ func (e *ScanCycleEngine) IOTable() *iomap.IOTable {
 //  5. Copy AT-bound output/memory variables to I/O table
 //  6. Advance the virtual clock by dt
 func (e *ScanCycleEngine) Tick(dt time.Duration) error {
+	return e.tick(dt, true)
+}
+
+// tick runs one scan cycle. advance is false when the caller (Runtime.Tick)
+// has already advanced the shared interpreter clock for this cycle, so that
+// several programs on one interpreter do not advance it once each.
+func (e *ScanCycleEngine) tick(dt time.Duration, advance bool) error {
 	if !e.initialized {
 		e.initializeEnv()
 	}
@@ -83,7 +101,9 @@ func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 	}
 
 	// 2. Advance the interpreter's virtual clock by this scan's delta
-	e.interp.SetDt(dt)
+	if advance {
+		e.interp.SetDt(dt)
+	}
 
 	// 3. Execute program body
 	err := e.interp.execStatements(e.env, e.program.Body)
