@@ -1,0 +1,1580 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic stc test fixture: EtherCAT master with an EK1100 and two EL6001 serial
+     terminals copied from a TwinCAT EtherCATConfig export (Info, ProcessData and
+     PreviousPort only; only the 22-byte PDO alternatives kept). DEMO.A3.01 maps the
+     "COM Inputs"/"COM Outputs" PDOs with split Status__*/Ctrl__* bits, as the export
+     does; DEMO.A3.02 maps the 22-byte "Inputs"/"Outputs" PDOs with 16-bit Status/Ctrl words. -->
+<EtherCATConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="EtherCATConfig.xsd" Version="1.3">
+	<Config>
+		<Master>
+			<Info>
+				<Name><![CDATA[Device 1 (EtherCAT)]]></Name>
+				<Destination>010105010000</Destination>
+			</Info>
+		</Master>
+		<Slave>
+			<Info>
+				<Name><![CDATA[DEMO.A3.00 (EK1100)]]></Name>
+				<PhysAddr>1001</PhysAddr>
+				<Physics>YK</Physics>
+				<VendorId>2</VendorId>
+				<ProductCode>72100946</ProductCode>
+				<RevisionNo>#x00100000</RevisionNo>
+			</Info>
+			<PreviousPort Selected="true">
+				<Port>B</Port>
+				<PhysAddr>0</PhysAddr>
+			</PreviousPort>
+		</Slave>
+		<Slave>
+			<Info>
+				<Name><![CDATA[DEMO.A3.01 (EL6001)]]></Name>
+				<PhysAddr>1002</PhysAddr>
+				<Physics>KK</Physics>
+				<VendorId>2</VendorId>
+				<ProductCode>393293906</ProductCode>
+				<RevisionNo>1441792</RevisionNo>
+			</Info>
+			<ProcessData>
+				<Sm2>
+					<Type>Outputs</Type>
+					<DefaultSize>24</DefaultSize>
+					<Enable>1</Enable>
+					<Pdo>5636</Pdo>
+				</Sm2>
+				<Sm3>
+					<Type>Inputs</Type>
+					<DefaultSize>24</DefaultSize>
+					<Enable>1</Enable>
+					<Pdo>6660</Pdo>
+				</Sm3>
+				<TxPdo Fixed="true">
+					<Index>#x1a02</Index>
+					<Name>Inputs</Name>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Status</Name>
+						<DataType>UINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>8</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>10</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>11</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>12</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>13</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>14</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a04</Index>
+					<Name>COM Inputs</Name>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Transmit accepted</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Receive request</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Init accepted</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Buffer full</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Parity error</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Framing error</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrun error</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Status__Input length</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>24</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>25</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>26</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>27</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>28</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>29</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>30</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>31</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>32</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>33</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>34</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>35</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>36</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>37</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>38</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</TxPdo>
+				<RxPdo Fixed="true">
+					<Index>#x1602</Index>
+					<Name>Outputs</Name>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Ctrl</Name>
+						<DataType>UINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>8</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>10</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>11</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>12</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>13</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>14</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</RxPdo>
+				<RxPdo Fixed="true" Sm="2">
+					<Index>#x1604</Index>
+					<Name>COM Outputs</Name>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Transmit request</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Receive accepted</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Init request</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Send continues</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>4</BitLen>
+						<Name>Ctrl__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Ctrl__Output length</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>24</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>25</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>26</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>27</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>28</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>29</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>30</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>31</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>32</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>33</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>34</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>35</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>36</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>37</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>38</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</RxPdo>
+			</ProcessData>
+			<PreviousPort Selected="true">
+				<Port>B</Port>
+				<PhysAddr>1001</PhysAddr>
+			</PreviousPort>
+		</Slave>
+		<Slave>
+			<Info>
+				<Name><![CDATA[DEMO.A3.02 (EL6001)]]></Name>
+				<PhysAddr>1003</PhysAddr>
+				<Physics>KK</Physics>
+				<VendorId>2</VendorId>
+				<ProductCode>393293906</ProductCode>
+				<RevisionNo>1441792</RevisionNo>
+			</Info>
+			<ProcessData>
+				<Sm2>
+					<Type>Outputs</Type>
+					<DefaultSize>24</DefaultSize>
+					<Enable>1</Enable>
+					<Pdo>5634</Pdo>
+				</Sm2>
+				<Sm3>
+					<Type>Inputs</Type>
+					<DefaultSize>24</DefaultSize>
+					<Enable>1</Enable>
+					<Pdo>6658</Pdo>
+				</Sm3>
+				<TxPdo Fixed="true" Sm="3">
+					<Index>#x1a02</Index>
+					<Name>Inputs</Name>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Status</Name>
+						<DataType>UINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>8</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>10</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>11</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>12</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>13</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>14</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3103</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</TxPdo>
+				<TxPdo Fixed="true">
+					<Index>#x1a04</Index>
+					<Name>COM Inputs</Name>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Transmit accepted</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Receive request</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Init accepted</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Buffer full</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Parity error</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Framing error</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Status__Overrun error</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>1</BitLen>
+						<Name>Status__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Status__Input length</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>24</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>25</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>26</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>27</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>28</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>29</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>30</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>31</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>32</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>33</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>34</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>35</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>36</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>37</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x6000</Index>
+						<SubIndex>38</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data In 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</TxPdo>
+				<RxPdo Fixed="true" Sm="2">
+					<Index>#x1602</Index>
+					<Name>Outputs</Name>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>16</BitLen>
+						<Name>Ctrl</Name>
+						<DataType>UINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>5</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>6</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>7</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>8</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>10</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>11</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>12</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>13</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>14</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>15</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>16</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x3003</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</RxPdo>
+				<RxPdo Fixed="true">
+					<Index>#x1604</Index>
+					<Name>COM Outputs</Name>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>1</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Transmit request</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>2</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Receive accepted</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>3</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Init request</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>4</SubIndex>
+						<BitLen>1</BitLen>
+						<Name>Ctrl__Send continues</Name>
+						<DataType>BIT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x0</Index>
+						<BitLen>4</BitLen>
+						<Name>Ctrl__</Name>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>9</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Ctrl__Output length</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>17</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 0</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>18</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 1</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>19</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 2</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>20</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 3</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>21</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 4</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>22</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 5</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>23</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 6</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>24</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 7</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>25</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 8</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>26</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 9</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>27</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 10</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>28</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 11</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>29</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 12</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>30</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 13</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>31</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 14</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>32</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 15</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>33</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 16</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>34</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 17</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>35</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 18</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>36</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 19</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>37</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 20</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+					<Entry>
+						<Index>#x7000</Index>
+						<SubIndex>38</SubIndex>
+						<BitLen>8</BitLen>
+						<Name>Data Out 21</Name>
+						<DataType>USINT</DataType>
+					</Entry>
+				</RxPdo>
+			</ProcessData>
+			<PreviousPort Selected="true">
+				<Port>B</Port>
+				<PhysAddr>1002</PhysAddr>
+			</PreviousPort>
+		</Slave>
+	</Config>
+</EtherCATConfig>
