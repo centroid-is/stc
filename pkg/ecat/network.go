@@ -104,6 +104,7 @@ func NewNetwork(topo *Topology, reg *Registry) *Network {
 			rt := slaveRT{slave: s, dev: reg.New(s)}
 			rt.in, rt.out = slaveSpans(m, s)
 			rt.dev.Init(s)
+			bindLayout(m, rt)
 			mr.slaves = append(mr.slaves, rt)
 		}
 		n.masters = append(n.masters, mr)
