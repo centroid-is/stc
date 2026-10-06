@@ -33,6 +33,7 @@ func newRootCmd() *cobra.Command {
 		newVendorCmd(),
 		newEcatCmd(),
 		newServeCmd(),
+		newOpcuaCmd(),
 	)
 
 	return rootCmd
