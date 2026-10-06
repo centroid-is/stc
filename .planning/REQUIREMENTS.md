@@ -69,7 +69,7 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 ### Test and agent ergonomics (DEVX)
 
 - [ ] **DEVX-01**: ST test built-ins `SET(path, value)`, `GET(path)`, `SIM_SET_LINK(linkpath, value)`, `SIM_TRIP(slave, channel)`, `SIM_SLAVE_STATE(slave, state)` and `RUN_CYCLES(n)` are available in `*_test.st` when a project and I/O config are loaded
-- [ ] **DEVX-02**: MCP tools `stc_sim_step`, `stc_sim_read`, `stc_sim_write` and `stc_opcua_browse` expose the running simulation to agents
+- [x] **DEVX-02**: MCP tools `stc_sim_step`, `stc_sim_read`, `stc_sim_write` and `stc_opcua_browse` expose the running simulation to agents
 - [ ] **DEVX-03**: `docs/` gains a TwinCAT import, EtherCAT simulation and OPC UA guide, and the stale claims in `TESTING_GUIDE.md`, `ST_LANGUAGE_SUPPORT.md` and `stdlib/vendor/beckhoff/ethercat_io.md` are corrected
 
 ## v2 Requirements
@@ -155,7 +155,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPCUA-09 | Phase 29 | Complete |
 | OPCUA-10 | Phase 29 | Pending |
 | DEVX-01 | Phase 27 | Pending |
-| DEVX-02 | Phase 29 | Pending |
+| DEVX-02 | Phase 29 | Complete |
 | DEVX-03 | Phase 29 | Pending |
 
 **Coverage:**
