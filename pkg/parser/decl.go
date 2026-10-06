@@ -558,6 +558,7 @@ func (p *Parser) parseMethod() *ast.MethodDecl {
 // parseProperty parses PROPERTY name : type GET...END_GET SET...END_SET END_PROPERTY
 func (p *Parser) parseProperty() *ast.PropertyDecl {
 	startTok := p.advance() // consume PROPERTY
+	p.skipPropertyModifiers()
 	name := p.parseIdent()
 	p.expect(lexer.Colon)
 	typeSpec := p.parseTypeSpec()
@@ -594,6 +595,16 @@ func (p *Parser) parseProperty() *ast.PropertyDecl {
 		Type:   typeSpec,
 		Getter: getter,
 		Setter: setter,
+	}
+}
+
+// skipPropertyModifiers skips the access and inheritance modifiers TwinCAT
+// writes after PROPERTY (e.g. "PROPERTY PUBLIC P : INT"). The modifiers are
+// not recorded on the AST.
+func (p *Parser) skipPropertyModifiers() {
+	for p.at(lexer.KwPublic) || p.at(lexer.KwPrivate) || p.at(lexer.KwProtected) ||
+		p.at(lexer.KwInternal) || p.at(lexer.KwAbstract) || p.at(lexer.KwFinal) {
+		p.advance()
 	}
 }
 
@@ -676,6 +687,7 @@ func (p *Parser) parseMethodSignature() *ast.MethodSignature {
 // parsePropertySignature parses PROPERTY name : type END_PROPERTY inside an interface.
 func (p *Parser) parsePropertySignature() *ast.PropertySignature {
 	startTok := p.advance() // consume PROPERTY
+	p.skipPropertyModifiers()
 	name := p.parseIdent()
 	p.expect(lexer.Colon)
 	typeSpec := p.parseTypeSpec()
