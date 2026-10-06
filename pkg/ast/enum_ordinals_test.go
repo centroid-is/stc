@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -130,4 +131,82 @@ func TestIntLiteralValue(t *testing.T) {
 	assert.Equal(t, int64(-3), v)
 	_, ok = IntLiteralValue(&Literal{LitKind: LitReal, Value: "1.5"})
 	assert.False(t, ok)
+}
+
+func constIdent(name string) *Ident {
+	return &Ident{NodeBase: NodeBase{NodeKind: KindIdent}, Name: name}
+}
+
+func constBin(op string, a, b Expr) Expr {
+	return &BinaryExpr{Left: a, Op: Token{Text: op}, Right: b}
+}
+
+func constInt(v string) Expr { return &Literal{LitKind: LitInt, Value: v} }
+
+func TestConstIntValue(t *testing.T) {
+	lookup := func(qual, name string) (int64, bool) {
+		switch qual + "." + name {
+		case ".C_BASE":
+			return 10, true
+		case "GVL.C":
+			return 3, true
+		case ".C_MIN":
+			return math.MinInt64, true
+		case ".C_MAX":
+			return math.MaxInt64, true
+		}
+		return 0, false
+	}
+	gvlC := &MemberAccessExpr{Object: constIdent("GVL"), Member: constIdent("C")}
+	tests := []struct {
+		name string
+		x    Expr
+		want int64
+		ok   bool
+	}{
+		{"literal", constInt("7"), 7, true},
+		{"bare constant", constIdent("C_BASE"), 10, true},
+		{"qualified constant", gvlC, 3, true},
+		{"sum", constBin("+", constIdent("C_BASE"), gvlC), 13, true},
+		{"difference", constBin("-", constIdent("C_BASE"), constInt("4")), 6, true},
+		{"product in parens", &ParenExpr{Inner: constBin("*", gvlC, constInt("5"))}, 15, true},
+		{"zero product", constBin("*", constInt("0"), constIdent("C_MAX")), 0, true},
+		{"unary plus", &UnaryExpr{Op: Token{Text: "+"}, Operand: gvlC}, 3, true},
+		{"unary minus", ordNeg(constIdent("C_BASE")), -10, true},
+		{"negate MinInt64", ordNeg(constIdent("C_MIN")), 0, false},
+		{"unknown unary op", &UnaryExpr{Op: Token{Text: "NOT"}, Operand: gvlC}, 0, false},
+		{"unresolved operand", ordNeg(constIdent("NOPE")), 0, false},
+		{"unknown name", constIdent("NOPE"), 0, false},
+		{"sum overflow", constBin("+", constIdent("C_MAX"), constInt("1")), 0, false},
+		{"difference overflow", constBin("-", constIdent("C_MIN"), constInt("1")), 0, false},
+		{"product overflow", constBin("*", constIdent("C_MAX"), constInt("2")), 0, false},
+		{"MinInt64 times -1", constBin("*", constIdent("C_MIN"), ordNeg(constInt("1"))), 0, false},
+		{"-1 times MinInt64", constBin("*", ordNeg(constInt("1")), constIdent("C_MIN")), 0, false},
+		{"unknown binary op", constBin("/", constInt("4"), constInt("2")), 0, false},
+		{"unresolved binary side", constBin("+", constInt("4"), constIdent("NOPE")), 0, false},
+		{"member of non-ident", &MemberAccessExpr{Object: gvlC, Member: constIdent("X")}, 0, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ConstIntValue(tc.x, lookup)
+			assert.Equal(t, tc.ok, ok)
+			if tc.ok {
+				assert.Equal(t, tc.want, got)
+			}
+		})
+	}
+	_, ok := ConstIntValue(constIdent("C_BASE"), nil)
+	assert.False(t, ok, "nil lookup resolves no name")
+	_, ok = ConstIntValue(gvlC, nil)
+	assert.False(t, ok)
+}
+
+func TestEnumOrdinalsWith(t *testing.T) {
+	e := ordEnum(ordVal("ka", constIdent("C_BASE")), ordVal("kb", nil), ordVal("kc", constIdent("NOPE")), ordVal("kd", nil))
+	eval := func(x Expr) (int64, bool) {
+		return ConstIntValue(x, func(_, name string) (int64, bool) { return 10, name == "C_BASE" })
+	}
+	got := EnumOrdinalsWith(e, eval)
+	assert.Equal(t, []EnumOrdinal{{"ka", 10, true}, {"kb", 11, true}, {"kc", 12, false}, {"kd", 13, false}}, got)
+	assert.Equal(t, []EnumOrdinal{{"ka", 0, false}, {"kb", 1, false}, {"kc", 2, false}, {"kd", 3, false}}, EnumOrdinals(e))
 }

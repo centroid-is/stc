@@ -75,6 +75,14 @@ type Resolver struct {
 	// parameter passes over one var declaration share a single EnumType
 	// (and report its diagnostics once). TYPE enums map to their shell.
 	enums map[*ast.EnumType]*types.EnumType
+
+	// consts maps an upper-cased GVL constant name to its integer value:
+	// G.C for every VAR_GLOBAL CONSTANT, and bare C when the GVL is not
+	// qualified_only. Enum values initialised from a constant use it.
+	consts map[string]int64
+	// constScope is the POU scope whose earlier VAR CONSTANT entries an
+	// inline enum's values may name, or nil outside a POU.
+	constScope *symbols.Scope
 }
 
 type fbEntry struct {
@@ -126,6 +134,7 @@ func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveO
 	// The IEC standard FBs come before any library file, as library
 	// symbols, so stubs and user code can redeclare them.
 	r.registerStdFBs()
+	r.collectConsts(groups)
 
 	// Pass 0: allocate a type object for every named type so forward
 	// references resolve to the object that is filled later.
@@ -878,6 +887,8 @@ func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
 // (eStep : (E_IDLE, E_RUN);) is named <POU>.<var> and its values are
 // inserted into the POU scope, so two POUs may reuse value names.
 func (r *Resolver) resolveVarBlocksInScope(pouName string, blocks []*ast.VarBlock, scope *symbols.Scope) {
+	r.constScope = scope
+	defer func() { r.constScope = nil }()
 	for _, vb := range blocks {
 		for _, vd := range vb.Declarations {
 			resolvedType := r.resolveTypeSpec(vd.Type)
@@ -953,7 +964,7 @@ func (r *Resolver) resolveEnumSpec(t *ast.EnumType, into *types.EnumType) *types
 		}
 	}
 
-	ords := ast.EnumOrdinals(t)
+	ords := ast.EnumOrdinalsWith(t, r.enumConst)
 	et.Values = make([]string, len(ords))
 	et.Ordinals = make([]int64, len(ords))
 	lo, hi, _ := intKindRange(et.BaseType)
@@ -968,12 +979,102 @@ func (r *Resolver) resolveEnumSpec(t *ast.EnumType, into *types.EnumType) *types
 			r.diags.Errorf(astPosToSource(v.Span().Start), CodeEnumRule,
 				"enum value %s = %d is out of range for %s (%d..%d)", o.Name, o.Value, et.BaseType, lo, hi)
 		}
+		if !o.Known && v.Value != nil && !r.probing {
+			r.diags.Errorf(astPosToSource(v.Value.Span().Start), CodeEnumRule,
+				"enum value %s must be a constant integer expression", o.Name)
+		}
 		i++
 	}
 	if !r.probing {
 		r.enums[t] = et
 	}
 	return et
+}
+
+// collectConsts fills r.consts from the VAR_GLOBAL CONSTANT blocks of every
+// GVL in groups. A constant may be defined from an earlier one, so values
+// are evaluated in sweeps until a sweep resolves nothing new.
+func (r *Resolver) collectConsts(groups []fileGroup) {
+	r.consts = make(map[string]int64)
+	type entry struct {
+		keys []string
+		init ast.Expr
+	}
+	var pending []entry
+	for _, g := range groups {
+		for _, file := range g.files {
+			for _, decl := range file.Declarations {
+				d, ok := decl.(*ast.GVLDecl)
+				if !ok || d.Name == nil {
+					continue
+				}
+				gvl := strings.ToUpper(d.Name.Name)
+				qualified := ast.HasAttribute(d.Attributes, "qualified_only")
+				for _, vb := range d.Blocks {
+					qualified = qualified || ast.HasAttribute(vb.Attributes, "qualified_only")
+				}
+				for _, vb := range d.Blocks {
+					if !vb.IsConstant {
+						continue
+					}
+					for _, vd := range vb.Declarations {
+						if vd.InitValue == nil {
+							continue
+						}
+						for _, id := range vd.Names {
+							keys := []string{gvl + "." + strings.ToUpper(id.Name)}
+							if !qualified {
+								keys = append(keys, strings.ToUpper(id.Name))
+							}
+							pending = append(pending, entry{keys: keys, init: vd.InitValue})
+						}
+					}
+				}
+			}
+		}
+	}
+	for progress := true; progress; {
+		progress = false
+		next := pending[:0]
+		for _, e := range pending {
+			n, ok := ast.ConstIntValue(e.init, r.globalConst)
+			if !ok {
+				next = append(next, e)
+				continue
+			}
+			for _, k := range e.keys {
+				if _, dup := r.consts[k]; !dup {
+					r.consts[k] = n
+				}
+			}
+			progress = true
+		}
+		pending = next
+	}
+}
+
+// globalConst looks up a GVL constant collected by collectConsts.
+func (r *Resolver) globalConst(qual, name string) (int64, bool) {
+	key := strings.ToUpper(name)
+	if qual != "" {
+		key = strings.ToUpper(qual) + "." + key
+	}
+	n, ok := r.consts[key]
+	return n, ok
+}
+
+// enumConst evaluates an enum value that is not an integer literal: a
+// constant expression over GVL constants and, inside a POU, the POU's
+// earlier VAR CONSTANT entries.
+func (r *Resolver) enumConst(x ast.Expr) (int64, bool) {
+	return ast.ConstIntValue(x, func(qual, name string) (int64, bool) {
+		if qual == "" && r.constScope != nil {
+			if sym := r.constScope.LookupLocal(name); sym != nil && sym.HasConstInt {
+				return sym.ConstInt, true
+			}
+		}
+		return r.globalConst(qual, name)
+	})
 }
 
 // intKindRange returns the value range of an integer or bit-string kind.

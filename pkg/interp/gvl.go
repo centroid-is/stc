@@ -72,6 +72,7 @@ func (interp *Interpreter) RegisterGVL(decl *ast.GVLDecl) *Env {
 	if !qualifiedOnly {
 		interp.gvls.unqualified = env
 	}
+	interp.retryPendingEnums()
 	return env
 }
 

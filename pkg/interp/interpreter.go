@@ -41,6 +41,9 @@ type Interpreter struct {
 	// EnumDefs maps upper-case enum type names (inline VAR enums use
 	// <POU>.<VAR>) to their runtime definitions; see RegisterEnumDecl.
 	EnumDefs map[string]*EnumDef
+	// pendingEnums holds enums with a value that names a constant not yet
+	// registered; RegisterGVL numbers them again (see registerEnum).
+	pendingEnums []pendingEnum
 
 	// TypeDecls maps uppercase user-defined type names to their TypeSpec.
 	// Zero-value construction consults this so that a named STRUCT or ARRAY

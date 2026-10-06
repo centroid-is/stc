@@ -33,12 +33,29 @@ func (d *EnumDef) value(member string) (Value, bool) {
 	return Value{Kind: ValInt, Int: n, IECType: d.Base, Enum: d.Name}, true
 }
 
+// pendingEnum is an enumeration whose numbering needs a constant that was
+// not available when it was registered.
+type pendingEnum struct {
+	name  string
+	et    *ast.EnumType
+	attrs []*ast.Attribute
+	local func(string) (int64, bool)
+}
+
 // RegisterEnumDecl registers the enumeration et under name. Values are
-// numbered with ast.EnumOrdinals (the previous+1 rule shared with the
-// checker); the base type comes from et.BaseType and defaults to INT;
-// attrs supplies the to_string attribute. The legacy EnumTypes map is filled
-// as well. A nil et is ignored.
+// numbered with ast.EnumOrdinalsWith (the previous+1 rule shared with the
+// checker); a value that names a constant (ka := C_BASE, GVL.C, C + 1) is
+// evaluated against the registered GVLs, and numbered again when a later
+// RegisterGVL supplies it. The base type comes from et.BaseType and
+// defaults to INT; attrs supplies the to_string attribute. The legacy
+// EnumTypes map is filled as well. A nil et is ignored.
 func (interp *Interpreter) RegisterEnumDecl(name string, et *ast.EnumType, attrs []*ast.Attribute) {
+	interp.registerEnum(name, et, attrs, nil)
+}
+
+// registerEnum implements RegisterEnumDecl. local resolves a bare constant
+// name before the GVLs are consulted (an inline enum's POU constants).
+func (interp *Interpreter) registerEnum(name string, et *ast.EnumType, attrs []*ast.Attribute, local func(string) (int64, bool)) {
 	if et == nil {
 		return
 	}
@@ -49,13 +66,90 @@ func (interp *Interpreter) RegisterEnumDecl(name string, et *ast.EnumType, attrs
 		Names:    make(map[int64]string),
 		ToString: ast.HasAttribute(attrs, "to_string"),
 	}
-	for _, ord := range ast.EnumOrdinals(et) {
+	complete := true
+	for _, ord := range ast.EnumOrdinalsWith(et, interp.enumConst(local)) {
 		def.Values[strings.ToUpper(ord.Name)] = ord.Value
 		if _, dup := def.Names[ord.Value]; !dup {
 			def.Names[ord.Value] = ord.Name
 		}
+		complete = complete && ord.Known
 	}
 	interp.addEnumDef(def)
+	if !complete {
+		interp.pendingEnums = append(interp.pendingEnums, pendingEnum{name: name, et: et, attrs: attrs, local: local})
+	}
+}
+
+// enumConst returns the evaluator for enum values that are not literals:
+// constant expressions over local, then bare GVL variables, then GVL.C.
+func (interp *Interpreter) enumConst(local func(string) (int64, bool)) func(ast.Expr) (int64, bool) {
+	return func(x ast.Expr) (int64, bool) {
+		return ast.ConstIntValue(x, func(qual, name string) (int64, bool) {
+			var v Value
+			var ok bool
+			switch {
+			case qual != "":
+				if g := interp.lookupGVL(qual); g != nil {
+					v, ok = g.GetLocal(name)
+				}
+			default:
+				if local != nil {
+					if n, found := local(name); found {
+						return n, true
+					}
+				}
+				if g := interp.GlobalParent(); g != nil {
+					v, ok = g.Get(name)
+				}
+			}
+			return v.Int, ok && v.Kind == ValInt
+		})
+	}
+}
+
+// retryPendingEnums numbers again every enum that waited for a constant.
+// Enums still unresolved stay pending.
+func (interp *Interpreter) retryPendingEnums() {
+	pending := interp.pendingEnums
+	interp.pendingEnums = nil
+	for _, p := range pending {
+		interp.registerEnum(p.name, p.et, p.attrs, p.local)
+	}
+}
+
+// blockConsts returns a lookup of the integer VAR CONSTANT entries of
+// blocks, each evaluated with ast.ConstIntValue against the others and
+// the GVLs. A constant that refers back to itself is unresolved.
+func (interp *Interpreter) blockConsts(blocks []*ast.VarBlock) func(string) (int64, bool) {
+	inits := make(map[string]ast.Expr)
+	for _, vb := range blocks {
+		if vb == nil || !vb.IsConstant {
+			continue
+		}
+		for _, vd := range vb.Declarations {
+			for _, n := range vd.Names {
+				if vd.InitValue != nil {
+					inits[strings.ToUpper(n.Name)] = vd.InitValue
+				}
+			}
+		}
+	}
+	if len(inits) == 0 {
+		return nil
+	}
+	visiting := make(map[string]bool)
+	var lookup func(string) (int64, bool)
+	lookup = func(name string) (int64, bool) {
+		key := strings.ToUpper(name)
+		x, ok := inits[key]
+		if !ok || visiting[key] {
+			return 0, false
+		}
+		visiting[key] = true
+		defer delete(visiting, key)
+		return interp.enumConst(lookup)(x)
+	}
+	return lookup
 }
 
 // addEnumDef stores def in EnumDefs and mirrors its values into EnumTypes.

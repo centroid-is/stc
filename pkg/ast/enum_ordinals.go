@@ -35,6 +35,14 @@ type EnumOrdinal struct {
 // This is the single numbering routine shared by the checker and the
 // interpreter. It never panics on malformed or overflowing input.
 func EnumOrdinals(e *EnumType) []EnumOrdinal {
+	return EnumOrdinalsWith(e, nil)
+}
+
+// EnumOrdinalsWith numbers an enumeration like EnumOrdinals and evaluates an
+// explicit value that is not an integer literal with eval, when eval is
+// non-nil. A value eval resolves is Known, and so are its implicit
+// successors: (ka := C_BASE, kb) with C_BASE = 10 gives kb = 11.
+func EnumOrdinalsWith(e *EnumType, eval func(Expr) (int64, bool)) []EnumOrdinal {
 	if e == nil {
 		return nil
 	}
@@ -51,6 +59,9 @@ func EnumOrdinals(e *EnumType) []EnumOrdinal {
 		}
 		if v.Value != nil {
 			val, ok := enumLiteralValue(v.Value)
+			if !ok && eval != nil {
+				val, ok = eval(v.Value)
+			}
 			if ok {
 				ord.Value, ord.Known = val, true
 			} else {
@@ -166,4 +177,63 @@ func isDigits(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// ConstIntValue evaluates an integer constant expression: integer literals,
+// parentheses, unary + and -, binary +, - and *, and names. A bare name C
+// resolves through lookup("", "C") and a qualified name G.C through
+// lookup("G", "C"). ok is false for anything else, for an unresolved name
+// and on int64 overflow.
+func ConstIntValue(x Expr, lookup func(qual, name string) (int64, bool)) (int64, bool) {
+	if n, ok := enumLiteralValue(x); ok {
+		return n, true
+	}
+	switch v := x.(type) {
+	case *ParenExpr:
+		return ConstIntValue(v.Inner, lookup)
+	case *UnaryExpr:
+		n, ok := ConstIntValue(v.Operand, lookup)
+		switch {
+		case !ok:
+			return 0, false
+		case v.Op.Text == "+":
+			return n, true
+		case v.Op.Text == "-" && n != math.MinInt64:
+			return -n, true
+		}
+	case *Ident:
+		if lookup != nil {
+			return lookup("", v.Name)
+		}
+	case *MemberAccessExpr:
+		if obj, ok := v.Object.(*Ident); ok && lookup != nil && v.Member != nil {
+			return lookup(obj.Name, v.Member.Name)
+		}
+	case *BinaryExpr:
+		a, okA := ConstIntValue(v.Left, lookup)
+		b, okB := ConstIntValue(v.Right, lookup)
+		if okA && okB {
+			return constBinary(v.Op.Text, a, b)
+		}
+	}
+	return 0, false
+}
+
+// constBinary applies +, - or * to a and b, failing on overflow.
+func constBinary(op string, a, b int64) (int64, bool) {
+	switch op {
+	case "+":
+		r := a + b
+		return r, (r > a) == (b > 0) || b == 0
+	case "-":
+		r := a - b
+		return r, (r < a) == (b > 0) || b == 0
+	case "*":
+		if a == 0 || b == 0 {
+			return 0, true
+		}
+		r := a * b
+		return r, r/b == a && !(a == -1 && b == math.MinInt64) && !(b == -1 && a == math.MinInt64)
+	}
+	return 0, false
 }

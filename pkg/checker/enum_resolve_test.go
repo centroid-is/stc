@@ -207,3 +207,44 @@ END_FUNCTION
 		assert.Equal(t, []int64{0, 1, 2}, et.Ordinals)
 	})
 }
+
+// TestEnumConstValues covers review ME-02: enum values initialised from a
+// constant are numbered from the constant's value, and a value that is not
+// a resolvable constant integer expression reports SEMA036.
+func TestEnumConstValues(t *testing.T) {
+	t.Run("bare, qualified and chained GVL constants", func(t *testing.T) {
+		ds, table := runGVL(t, []gvlFile{
+			{"GVL_C.st", "{attribute 'qualified_only'}\nVAR_GLOBAL CONSTANT\n\tQ : INT := 100;\nEND_VAR\n"},
+			{"GVL.st", "VAR_GLOBAL CONSTANT\n\tC_TOP : INT := C_BASE * 2;\n\tC_BASE : INT := 10;\nEND_VAR\n"},
+			{"t.st", "TYPE E_K : (ka := C_BASE, kb, kc := GVL_C.Q + 1, kd, ke := C_TOP); END_TYPE\n"},
+		})
+		assert.Empty(t, errorsOf(ds))
+		assert.Equal(t, []int64{10, 11, 101, 102, 20}, enumOf(t, table, "E_K").Ordinals)
+	})
+
+	t.Run("constant value is range checked", func(t *testing.T) {
+		ds, _ := runGVL(t, []gvlFile{
+			{"GVL.st", "VAR_GLOBAL CONSTANT\n\tC_BIG : DINT := 300;\nEND_VAR\n"},
+			{"t.st", "TYPE E : (a := C_BIG) USINT; END_TYPE\n"},
+		})
+		errs := diagsWithCode(ds, CodeEnumRule)
+		require.Len(t, errs, 1)
+		assert.Contains(t, errs[0].Message, "out of range")
+	})
+
+	t.Run("inline enum uses an earlier POU constant", func(t *testing.T) {
+		ds, _ := runGVL(t, []gvlFile{{"p.st", "PROGRAM P\nVAR CONSTANT\n\tC_L : INT := 4;\nEND_VAR\nVAR\n\tm : (x := C_L, y);\nEND_VAR\nm := y;\nEND_PROGRAM\n"}})
+		assert.Empty(t, errorsOf(ds))
+	})
+
+	t.Run("unresolvable value reports SEMA036", func(t *testing.T) {
+		ds, _ := runGVL(t, []gvlFile{
+			{"GVL.st", "VAR_GLOBAL\n\tv : INT := 3;\nEND_VAR\n"},
+			{"t.st", "TYPE E : (a := v, b := C_NONE, c); END_TYPE\n"},
+		})
+		errs := diagsWithCode(ds, CodeEnumRule)
+		require.Len(t, errs, 2, "a non-constant variable and an unknown name; c follows silently")
+		assert.Contains(t, errs[0].Message, "enum value a must be a constant integer expression")
+		assert.Contains(t, errs[1].Message, "enum value b must be a constant integer expression")
+	})
+}

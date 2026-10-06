@@ -385,3 +385,39 @@ END_PROGRAM
 	assert.Equal(t, "run", progVar(t, eng, "s6").Str, "integer stored into an enum variable")
 	assert.Equal(t, "stop", progVar(t, eng, "s7").Str, "integer stored into an enum struct member")
 }
+
+// TestEnumConstNumbering covers the interpreter's constant evaluation for
+// enum values (review ME-02): a qualified GVL constant registered after the
+// enum, a name no GVL supplies, and a self-referencing local constant.
+func TestEnumConstNumbering(t *testing.T) {
+	src := `
+{attribute 'qualified_only'}
+VAR_GLOBAL CONSTANT
+	Q : INT := 7;
+END_VAR
+`
+	res := parser.Parse("GVL_Q.st", src)
+	require.Empty(t, res.Diags)
+	gvl := res.File.Declarations[0].(*ast.GVLDecl)
+	gvl.Name = &ast.Ident{Name: "GVL_Q"}
+
+	enums := parser.Parse("e.st", "TYPE E_Q : (qa := GVL_Q.Q, qb); END_TYPE\nTYPE E_N : (na := C_NONE, nb); END_TYPE\n")
+	require.Empty(t, enums.Diags)
+	in := New()
+	for _, d := range enums.File.Declarations {
+		td := d.(*ast.TypeDecl)
+		in.RegisterEnumDecl(td.Name.Name, td.Type.(*ast.EnumType), nil)
+	}
+	assert.Equal(t, int64(1), in.EnumDefs["E_Q"].Values["QB"], "positional before the GVL exists")
+	in.RegisterGVL(gvl)
+	assert.Equal(t, int64(8), in.EnumDefs["E_Q"].Values["QB"])
+	assert.Equal(t, int64(1), in.EnumDefs["E_N"].Values["NB"], "unresolved names keep the positional guess")
+	require.Len(t, in.pendingEnums, 1, "E_N is still waiting for a constant")
+
+	blocks := parser.Parse("p.st", "PROGRAM P\nVAR CONSTANT\n\tC_SELF : INT := C_SELF + 1;\n\tC_OK : INT := 2;\nEND_VAR\nVAR\n\tm : (x := C_SELF, y := C_OK);\nEND_VAR\nEND_PROGRAM\n")
+	require.Empty(t, blocks.Diags)
+	prog := blocks.File.Declarations[0].(*ast.ProgramDecl)
+	in.RegisterInlineEnums("P", prog.VarBlocks)
+	assert.Equal(t, int64(2), in.EnumDefs["P.M"].Values["Y"])
+	assert.Nil(t, in.blockConsts(nil), "no constants, no lookup")
+}

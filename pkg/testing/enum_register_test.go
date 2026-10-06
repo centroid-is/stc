@@ -37,3 +37,29 @@ END_TEST_CASE
 `)
 	requireAllPassed(t, result, 4)
 }
+
+// TestEnumConstOrdinals covers review ME-02 at runtime: enum values named by
+// a GVL constant are numbered from the constant, although the runner
+// registers enums before GVLs, and inline enums use the POU's constants.
+func TestEnumConstOrdinals(t *testing.T) {
+	result := runGVLSuite(t, "enum_const_test.st", `
+VAR_GLOBAL CONSTANT
+	C_BASE : INT := 10;
+END_VAR
+TYPE E_K : (ka := C_BASE, kb, kc := C_BASE * 3 + 1, kd); END_TYPE
+
+TEST_CASE 'values from a GVL constant'
+ASSERT_EQ(TO_INT(E_K.ka), 10);
+ASSERT_EQ(TO_INT(E_K.kb), 11);
+ASSERT_EQ(TO_INT(kd), 32);
+END_TEST_CASE
+
+TEST_CASE 'inline enum from a local constant'
+VAR CONSTANT C_L : INT := 4; END_VAR
+VAR m : (x := C_L, y); END_VAR
+m := y;
+ASSERT_EQ(TO_INT(m), 5);
+END_TEST_CASE
+`)
+	requireAllPassed(t, result, 2)
+}

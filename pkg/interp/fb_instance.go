@@ -152,6 +152,7 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 // RegisterInlineEnums registers every anonymous enumeration declared in
 // blocks as <pou>.<var>, so its bare values resolve inside the POU.
 func (interp *Interpreter) RegisterInlineEnums(pou string, blocks []*ast.VarBlock) {
+	local := interp.blockConsts(blocks)
 	for _, vb := range blocks {
 		if vb == nil {
 			continue
@@ -162,7 +163,7 @@ func (interp *Interpreter) RegisterInlineEnums(pou string, blocks []*ast.VarBloc
 				continue
 			}
 			for _, n := range vd.Names {
-				interp.RegisterEnumDecl(pou+"."+n.Name, et, vd.Attributes)
+				interp.registerEnum(pou+"."+n.Name, et, vd.Attributes, local)
 			}
 		}
 	}
