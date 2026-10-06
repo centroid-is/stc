@@ -266,7 +266,7 @@ Each TEST_CASE starts from a fresh project and network, so a slave pulled in one
 
 Slave names follow the scenario rules: exact, then case-insensitive, then the unique prefix before ` (`. The semantics match the scenario actions in [EtherCAT Simulation](ETHERCAT_SIMULATION.md#scenarios). Without `--io`, SET, GET, RUN_CYCLES and ADVANCE_TIME work, and the SIM_* built-ins fail with "no --io network loaded".
 
-Example from `tests/ecat_fixtures/scenario/scenario_test.st`:
+Example from `tests/ecat_fixtures/scenario/plant_cases.st`, which is named without `_test.st` so that plain-mode `stc test tests/` does not pick it up:
 
 ```iecst
 TEST_CASE 'removed slave shows in ECT_Diag'

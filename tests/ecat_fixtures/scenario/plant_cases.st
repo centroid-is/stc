@@ -1,4 +1,6 @@
-// DEVX-01 acceptance tests: run with
+// DEVX-01 acceptance tests. They need project mode, so the file is not
+// named *_test.st (plain `stc test tests/` would discover it); copy it to a
+// tests directory as *_test.st and run
 //   stc test <dir> --project demo_types.st --project ECT.st --project ECT_Diag.st
 //     --project MAIN.st --io "Demo Device [12].xml"
 // Every TEST_CASE starts from a fresh project and EtherCAT network.

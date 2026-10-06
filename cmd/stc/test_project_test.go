@@ -9,13 +9,13 @@ import (
 )
 
 // scenarioTestProject copies the scenario fixture project and
-// scenario_test.st (into a tests/ subdirectory) and returns the stc test
+// plant_cases.st as scenario_test.st (into a tests/ subdirectory) and returns the stc test
 // arguments for plant mode.
 func scenarioTestProject(t *testing.T) (testsDir string, args []string) {
 	t.Helper()
 	dir, st, ioGlob := scenarioProject(t)
 	testsDir = filepath.Join(dir, "tests")
-	b, err := os.ReadFile(filepath.Join(ecatFixtures, "scenario", "scenario_test.st"))
+	b, err := os.ReadFile(filepath.Join(ecatFixtures, "scenario", "plant_cases.st"))
 	if err != nil {
 		t.Fatal(err)
 	}
