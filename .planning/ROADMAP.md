@@ -453,7 +453,13 @@ Plans:
   2. `stc ecat validate` on ST301 reports zero unresolved links, and a mistyped link path or a type-size mismatch is reported with the GVL file position
   3. Writing a byte in a master's input image makes the linked `AT %I*` struct member (e.g. `ECT.ST301_A1_03.I1`) change at the next scan, and a linked `%Q*` FB member appears in the output image after the scan
   4. `ECT_Diag` variables linked to slave `WcState`/`InfoData.State`/`InfoData.AdsAddr` and master `DevState`/`SlaveCount`/`Frm0State`/`Frm0WcState`/`InfoData.AmsNetId` read the Beckhoff values for a healthy network (OP = 0x8, WcState 0)
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 24-01-PLAN.md -- pkg/ecat loader, generate_gvl.py tree/link-path port, process image layout + pseudo-input slots, synthetic Demo Device fixtures
+- [x] 24-02-PLAN.md -- TcLinkTo parsing, CollectLinks, Resolve (ECAT001-007), `stc ecat validate` CLI
+- [x] 24-03-PLAN.md -- Network + Device registry + healthy pseudo-inputs/fault API, interp IOBinder with two scan.go hooks
+- [x] 24-04-PLAN.md -- env-gated ST301 equivalence gate, docs, VALIDATION sign-off, coverage gate
 
 ### Phase 25: EtherCAT Terminal Models
 **Goal**: Every non-drive terminal in the sildarvinnsla hardware list behaves like the real device at PDO level, selected automatically by vendor and product code
@@ -541,7 +547,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 6/6 | Complete    | 2026-10-06 |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
-| 24. EtherCAT Topology & Link Binding | v1.2 | 0/TBD | Not started | - |
+| 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete   | 2026-10-06 |
 | 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |

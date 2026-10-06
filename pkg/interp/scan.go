@@ -33,6 +33,7 @@ type ScanCycleEngine struct {
 
 	ioTable    *iomap.IOTable // I/O process image table
 	ioBindings []IOBinding    // AT-addressed variable bindings
+	ioBinder   *IOBinder      // EtherCAT TcLinkTo bindings, nil when unused
 
 	initialized bool
 }
@@ -56,12 +57,13 @@ func (e *ScanCycleEngine) IOTable() *iomap.IOTable {
 }
 
 // Tick executes one scan cycle with the given time delta:
-//  0. Copy I/O table values into env for AT-bound input/memory variables
+//  0. Copy I/O table values into env for AT-bound input/memory variables,
+//     then step the EtherCAT network and copy linked inputs (IOBinder)
 //  1. Copy staged inputs into the program environment
 //  2. Set dt on the interpreter for FB Execute calls
 //  3. Execute the program body
 //  4. Copy VAR_OUTPUT variables from env into the outputs map
-//  5. Copy AT-bound output/memory variables to I/O table
+//  5. Copy AT-bound outputs to the I/O table, then linked outputs (IOBinder)
 //  6. Advance the virtual clock by dt
 func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 	if !e.initialized {
@@ -73,6 +75,9 @@ func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 		if b.Address.Area == iomap.AreaInput || b.Address.Area == iomap.AreaMemory {
 			e.env.Set(b.VarName, e.readIOValue(b.Address))
 		}
+	}
+	if e.ioBinder != nil {
+		e.ioBinder.preScan(dt)
 	}
 
 	// 1. Copy inputs into env
@@ -108,6 +113,9 @@ func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 				e.writeIOValue(b.Address, v)
 			}
 		}
+	}
+	if e.ioBinder != nil {
+		e.ioBinder.postScan()
 	}
 
 	// 6. Advance clock
