@@ -206,8 +206,16 @@ func registerConvertFunctions() {
 		if len(args) < 1 {
 			return Value{}, &RuntimeError{Msg: "REAL_TO_STRING requires 1 argument"}
 		}
-		s := strconv.FormatFloat(args[0].Real, 'G', -1, 64)
-		return Value{Kind: ValString, Str: s, IECType: types.KindSTRING}, nil
+		return Value{Kind: ValString, Str: formatReal(args[0].Real), IECType: types.KindSTRING}, nil
+	}
+
+	// TO_STRING: overloaded conversion. The interpreter answers a to_string
+	// enum value with its name before reaching this function (see evalCall).
+	StdlibFunctions["TO_STRING"] = func(args []Value) (Value, error) {
+		if len(args) != 1 {
+			return Value{}, &RuntimeError{Msg: "TO_STRING requires 1 argument"}
+		}
+		return Value{Kind: ValString, Str: anyToString(args[0]), IECType: types.KindSTRING}, nil
 	}
 
 	// STRING_TO_REAL
@@ -236,5 +244,31 @@ func registerConvertFunctions() {
 			return Value{}, &RuntimeError{Msg: "INT_TO_BYTE requires 1 argument"}
 		}
 		return Value{Kind: ValInt, Int: args[0].Int & 0xFF, IECType: types.KindBYTE}, nil
+	}
+}
+
+// formatReal is the REAL_TO_STRING text of f.
+func formatReal(f float64) string {
+	return strconv.FormatFloat(f, 'G', -1, 64)
+}
+
+// anyToString formats v for TO_STRING by kind: integers in decimal, BOOL as
+// TRUE/FALSE, reals like REAL_TO_STRING, strings unchanged and every other
+// kind by its literal form.
+func anyToString(v Value) string {
+	switch v.Kind {
+	case ValInt:
+		return strconv.FormatInt(v.Int, 10)
+	case ValBool:
+		if v.Bool {
+			return "TRUE"
+		}
+		return "FALSE"
+	case ValReal:
+		return formatReal(v.Real)
+	case ValString:
+		return v.Str
+	default:
+		return v.String()
 	}
 }

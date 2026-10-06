@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/types"
 )
 
 // AssertionResult records one assertion outcome.
@@ -143,6 +144,10 @@ func (interp *Interpreter) RegisterEnumType(typeName string, values map[string]i
 		interp.EnumTypes = make(map[string]map[string]int64)
 	}
 	interp.EnumTypes[strings.ToUpper(typeName)] = values
+	// Mirror into EnumDefs, which every enum lookup reads. Legacy callers
+	// give no base type; their values stay DINT as before.
+	def := &EnumDef{Name: strings.ToUpper(typeName), Base: types.KindDINT, Values: values, Names: map[int64]string{}}
+	interp.addEnumDef(def)
 }
 
 // RegisterAdvanceTime adds ADVANCE_TIME to LocalFunctions. It expects 1 arg

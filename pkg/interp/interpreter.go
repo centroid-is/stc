@@ -38,6 +38,10 @@ type Interpreter struct {
 	// Each enum value map is uppercase enum member name -> integer value.
 	EnumTypes map[string]map[string]int64
 
+	// EnumDefs maps upper-case enum type names (inline VAR enums use
+	// <POU>.<VAR>) to their runtime definitions; see RegisterEnumDecl.
+	EnumDefs map[string]*EnumDef
+
 	// TypeDecls maps uppercase user-defined type names to their TypeSpec.
 	// Zero-value construction consults this so that a named STRUCT or ARRAY
 	// used as an array element or struct member resolves to the right shape
@@ -297,14 +301,11 @@ func (interp *Interpreter) parseLitTyped(value string, prefix string) (Value, er
 		return interp.parseLitBool(value)
 	default:
 		// Check if this is an enum typed literal (e.g., Color#Green)
-		if interp.EnumTypes != nil {
-			if enumMap, ok := interp.EnumTypes[upper]; ok {
-				upperVal := strings.ToUpper(value)
-				if intVal, found := enumMap[upperVal]; found {
-					return Value{Kind: ValInt, Int: intVal, IECType: types.KindDINT}, nil
-				}
-				return Value{}, &RuntimeError{Msg: fmt.Sprintf("unknown enum value '%s' for type '%s'", value, prefix)}
+		if def, ok := interp.EnumDefs[upper]; ok {
+			if v, found := def.value(value); found {
+				return v, nil
 			}
+			return Value{}, &RuntimeError{Msg: fmt.Sprintf("unknown enum value '%s' for type '%s'", value, prefix)}
 		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported typed literal prefix: %s", prefix)}
 	}
@@ -317,13 +318,8 @@ func (interp *Interpreter) parseLitTyped(value string, prefix string) (Value, er
 func (interp *Interpreter) evalIdent(env *Env, id *ast.Ident) (Value, error) {
 	v, ok := env.Get(id.Name)
 	if !ok {
-		if interp.EnumTypes != nil {
-			upper := strings.ToUpper(id.Name)
-			for _, enumMap := range interp.EnumTypes {
-				if intVal, found := enumMap[upper]; found {
-					return Value{Kind: ValInt, Int: intVal, IECType: types.KindDINT}, nil
-				}
-			}
+		if ev, found := interp.lookupBareEnum(id.Name); found {
+			return ev, nil
 		}
 		return Value{}, &RuntimeError{
 			Msg: fmt.Sprintf("undefined variable: %s", id.Name),
@@ -1089,6 +1085,10 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 	if g, gvl := interp.gvlRoot(env, e.Object); g != nil {
 		return evalGVLMember(g, gvl, e.Member)
 	}
+	// E.v with E an enum type that is neither a variable nor a GVL.
+	if v, handled, err := interp.qualifiedEnum(env, e); handled {
+		return v, err
+	}
 	obj, err := interp.evalExpr(env, e.Object)
 	if err != nil {
 		return Value{}, err
@@ -1305,6 +1305,14 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 				return Value{}, err
 			}
 			args = append(args, v)
+		}
+		// TO_STRING of a to_string enum value gives the value name; the
+		// stdlib function, which has no access to enum definitions,
+		// formats every other value.
+		if calleeName == "TO_STRING" && len(args) == 1 {
+			if s, ok := interp.enumString(args[0]); ok {
+				return StringValue(s), nil
+			}
 		}
 		return fn(args)
 	}

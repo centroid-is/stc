@@ -83,6 +83,11 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 		for _, a := range d.Actions {
 			env.DefineAction(a)
 		}
+		// Inline VAR enums: their bare values must resolve before the
+		// initialisers below are evaluated.
+		if interp != nil && d.Name != nil {
+			interp.RegisterInlineEnums(d.Name.Name, d.VarBlocks)
+		}
 	}
 
 	// Walk VarBlocks, initialize variables, and track input/output names
@@ -141,6 +146,25 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 	}
 
 	return inst
+}
+
+// RegisterInlineEnums registers every anonymous enumeration declared in
+// blocks as <pou>.<var>, so its bare values resolve inside the POU.
+func (interp *Interpreter) RegisterInlineEnums(pou string, blocks []*ast.VarBlock) {
+	for _, vb := range blocks {
+		if vb == nil {
+			continue
+		}
+		for _, vd := range vb.Declarations {
+			et, ok := vd.Type.(*ast.EnumType)
+			if !ok {
+				continue
+			}
+			for _, n := range vd.Names {
+				interp.RegisterEnumDecl(pou+"."+n.Name, et, vd.Attributes)
+			}
+		}
+	}
 }
 
 // fbExtendsChain returns decl and the FBs it EXTENDS that the interpreter's
@@ -398,7 +422,11 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 			// nested inside other aggregates are built correctly.
 			if resolve != nil {
 				if target, found := resolve(name); found {
-					return zeroFromTypeSpecWith(target, resolve, depth+1)
+					v := zeroFromTypeSpecWith(target, resolve, depth+1)
+					if _, isEnum := target.(*ast.EnumType); isEnum {
+						v.Enum = name
+					}
+					return v
 				}
 			}
 		}
@@ -419,6 +447,8 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 	case *ast.ReferenceType:
 		// Null reference
 		return Value{Kind: ValReference}
+	case *ast.EnumType:
+		return zeroEnum(t)
 	default:
 		return Zero(types.KindDINT)
 	}

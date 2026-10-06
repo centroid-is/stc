@@ -68,6 +68,7 @@ type Value struct {
 	IECType types.TypeKind // Tracks the precise IEC type for conversions
 	PtrEnv  *Env           // For ValPointer/ValReference: the env containing the target
 	PtrVar  string         // For ValPointer/ValReference: uppercase variable name
+	Enum    string         // Upper-case enum type name for enum values, else empty
 }
 
 // String returns a debug representation of the Value.
