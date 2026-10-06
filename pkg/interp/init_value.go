@@ -18,7 +18,9 @@ type typeCtx struct {
 	interp  *Interpreter
 	env     *Env
 	// fbParent is the parent env of user FB instances built as array
-	// elements or struct members; env when nil.
+	// elements or struct members, the same parent instantiateVar gives a
+	// plain FB variable (nil for a qualified_only GVL without an unqualified
+	// GVL chain).
 	fbParent *Env
 }
 
@@ -36,11 +38,7 @@ func (c typeCtx) fbInstance(name string, depth int) (Value, bool) {
 	if decl == nil {
 		return Value{}, false
 	}
-	parent := c.fbParent
-	if parent == nil {
-		parent = c.env
-	}
-	return Value{Kind: ValFBInstance, FBRef: newUserFBInstanceDepth(name, decl, c.interp, parent, depth)}, true
+	return Value{Kind: ValFBInstance, FBRef: newUserFBInstanceDepth(name, decl, c.interp, c.fbParent, depth)}, true
 }
 
 // typeCtxFor returns the full construction context for variables
