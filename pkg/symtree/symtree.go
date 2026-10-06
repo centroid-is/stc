@@ -483,6 +483,7 @@ func typeName(spec ast.TypeSpec, typ types.Type) string {
 		if at, ok := typ.(*types.ArrayType); ok {
 			return arrayName(at, s.ElementType)
 		}
+		return specArrayName(s)
 	case *ast.PointerType:
 		return "POINTER TO " + typeName(s.BaseType, baseOf(typ))
 	case *ast.ReferenceType:
@@ -532,4 +533,24 @@ func baseOf(typ types.Type) types.Type {
 	return nil
 }
 
-func itoa(i int) string { return strconv.Itoa(i) }
+// specArrayName renders an array type from its spec alone, for a variable
+// whose type did not resolve. Non-literal bounds print as "?".
+func specArrayName(s *ast.ArrayType) string {
+	bound := func(x ast.Expr) string {
+		if x != nil {
+			if n, ok := ast.ConstIntValue(x, nil); ok {
+				return strconv.FormatInt(n, 10)
+			}
+		}
+		return "?"
+	}
+	dims := make([]string, len(s.Ranges))
+	for i, r := range s.Ranges {
+		if r == nil {
+			dims[i] = "?"
+			continue
+		}
+		dims[i] = bound(r.Low) + ".." + bound(r.High)
+	}
+	return "ARRAY[" + strings.Join(dims, ", ") + "] OF " + typeName(s.ElementType, nil)
+}
