@@ -54,6 +54,10 @@ type GVLDecl struct {
 	Blocks     []*VarBlock   `json:"blocks,omitempty"`
 	Attributes []*Attribute  `json:"attributes,omitempty"`
 	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
+	// NameDerived is true when Name came from the file basename rather than
+	// from an explicit name (SetGVLName). A derived name that clashes with a
+	// POU only warns, so the variables are still registered.
+	NameDerived bool `json:"-"`
 }
 
 // Children lists attributes and pragmas first, then the name and blocks.
@@ -123,6 +127,7 @@ func SetGVLName(file *SourceFile, name string) bool {
 			g.Name = &Ident{NodeBase: NodeBase{NodeKind: KindIdent, NodeSpan: g.NodeSpan}}
 		}
 		g.Name.Name = name
+		g.NameDerived = false
 	}
 	return found
 }

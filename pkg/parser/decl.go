@@ -99,9 +99,10 @@ func (p *Parser) parseGVLBlock(attrs []*ast.Attribute, pragmas []*ast.PragmaNode
 			NodeBase: ast.NodeBase{NodeKind: ast.KindIdent, NodeSpan: ast.SpanFrom(start, start)},
 			Name:     name,
 		},
-		Blocks:     []*ast.VarBlock{vb},
-		Attributes: attrs,
-		Pragmas:    pragmas,
+		Blocks:      []*ast.VarBlock{vb},
+		Attributes:  attrs,
+		Pragmas:     pragmas,
+		NameDerived: true,
 	}
 	return p.gvl
 }

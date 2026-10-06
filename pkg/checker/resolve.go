@@ -115,13 +115,22 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 	pos := astPosToSource(d.Name.Span().Start)
 	global := r.table.GlobalScope()
 
+	// registerQualified is false when a file-derived GVL name clashes with a
+	// POU: a single main.st holding VAR_GLOBAL and PROGRAM Main is a normal
+	// layout, so the variables still register bare and only GVL.x is lost.
+	registerQualified := true
 	if existing := r.table.LookupGlobal(name); existing != nil {
-		if isLibrary && existing.IsLibrary {
+		switch {
+		case isLibrary && existing.IsLibrary:
 			return
-		}
-		if !isLibrary && existing.IsLibrary {
+		case !isLibrary && existing.IsLibrary:
 			r.removeGVL(existing)
-		} else {
+		case d.NameDerived && existing.Kind != symbols.KindGVL:
+			r.diags.Warnf(pos, CodeRedeclared,
+				"GVL name %q (from the file name) clashes with %s %q declared at %s; qualified access is unavailable, use --gvl-name to rename the GVL",
+				name, existing.Kind, existing.Name, existing.Pos)
+			registerQualified = false
+		default:
 			r.diags.Errorf(pos, CodeRedeclared,
 				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
 			return
@@ -166,14 +175,16 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 		}
 	}
 
-	_ = global.Insert(&symbols.Symbol{
-		Name:      name,
-		Kind:      symbols.KindGVL,
-		Pos:       pos,
-		Type:      st,
-		IsLibrary: isLibrary,
-		GVL:       info,
-	})
+	if registerQualified {
+		_ = global.Insert(&symbols.Symbol{
+			Name:      name,
+			Kind:      symbols.KindGVL,
+			Pos:       pos,
+			Type:      st,
+			IsLibrary: isLibrary,
+			GVL:       info,
+		})
+	}
 	for _, sym := range bare {
 		if err := global.Insert(sym); err != nil {
 			r.diags.Errorf(sym.Pos, CodeRedeclared, "%s", err.Error())

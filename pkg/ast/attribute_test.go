@@ -60,11 +60,12 @@ func TestSanitizeGVLName(t *testing.T) {
 
 func TestSetGVLName(t *testing.T) {
 	t.Run("renames existing GVL", func(t *testing.T) {
-		g1 := &GVLDecl{NodeBase: NodeBase{NodeKind: KindGVLDecl}, Name: &Ident{Name: "old"}}
+		g1 := &GVLDecl{NodeBase: NodeBase{NodeKind: KindGVLDecl}, Name: &Ident{Name: "old"}, NameDerived: true}
 		g2 := &GVLDecl{NodeBase: NodeBase{NodeKind: KindGVLDecl}}
 		f := &SourceFile{Declarations: []Declaration{&ProgramDecl{Name: &Ident{Name: "Main"}}, g1, g2}}
 		assert.True(t, SetGVLName(f, "ECT"))
 		assert.Equal(t, "ECT", g1.Name.Name)
+		assert.False(t, g1.NameDerived, "an explicit name is not derived")
 		if assert.NotNil(t, g2.Name) {
 			assert.Equal(t, "ECT", g2.Name.Name)
 			assert.Equal(t, KindIdent, g2.Name.Kind())

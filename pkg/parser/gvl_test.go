@@ -28,6 +28,7 @@ func TestGVLParse(t *testing.T) {
 		g := r.File.Declarations[0].(*ast.GVLDecl)
 		require.Equal(t, ast.KindGVLDecl, g.Kind())
 		require.Equal(t, "gvl1", g.Name.Name)
+		require.True(t, g.NameDerived)
 		require.Len(t, g.Blocks, 1)
 		require.Equal(t, ast.VarGlobal, g.Blocks[0].Section)
 		require.Len(t, g.Blocks[0].Declarations, 1)

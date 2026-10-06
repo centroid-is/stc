@@ -156,9 +156,33 @@ func TestGVL(t *testing.T) {
 		assert.Empty(t, diagsWithCode(ds, CodeAssignToConstant))
 	})
 
-	t.Run("GVL named like an existing POU is a redeclaration", func(t *testing.T) {
+	t.Run("GVL named from the file like an existing POU only warns", func(t *testing.T) {
 		ds, _ := runGVL(t, []gvlFile{{"main.st", "PROGRAM G\nEND_PROGRAM\n"}, {"G.st", gvlG}})
+		got := diagsWithCode(ds, CodeRedeclared)
+		require.Len(t, got, 1)
+		assert.Equal(t, diag.Warning, got[0].Severity)
+		assert.Contains(t, got[0].Message, "--gvl-name")
+	})
+
+	t.Run("GVL and POU named after the same file keep the GVL variables", func(t *testing.T) {
+		src := "VAR_GLOBAL\n\tgCount : DINT;\nEND_VAR\n\nPROGRAM Main\nVAR\n\tn : DINT;\nEND_VAR\ngCount := gCount + 1;\nn := gCount;\nEND_PROGRAM\n"
+		ds, table := runGVL(t, []gvlFile{{"main.st", src}})
+		assert.Empty(t, errorsOf(ds))
 		require.Len(t, diagsWithCode(ds, CodeRedeclared), 1)
+		assert.Equal(t, symbols.KindProgram, table.LookupGlobal("Main").Kind)
+		require.NotNil(t, table.LookupGlobal("gCount"))
+	})
+
+	t.Run("explicit GVL name like an existing POU is a redeclaration", func(t *testing.T) {
+		files := parseGVLFiles(t, []gvlFile{{"main.st", "PROGRAM G\nEND_PROGRAM\n"}, {"other.st", gvlG}})
+		require.True(t, ast.SetGVLName(files[1], "G"))
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations(files)
+		got := diagsWithCode(diags.All(), CodeRedeclared)
+		require.Len(t, got, 1)
+		assert.Equal(t, diag.Error, got[0].Severity)
+		assert.Nil(t, table.LookupGlobal("x"))
 	})
 
 	t.Run("bare variable clash between plain GVLs is a redeclaration", func(t *testing.T) {
