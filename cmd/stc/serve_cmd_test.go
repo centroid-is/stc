@@ -394,3 +394,25 @@ func firstDiff(want, got string) string {
 	return "line " + strconv.Itoa(i+1) + "\n--- golden\n" + strings.Join(wl[lo:hiW], "\n") +
 		"\n+++ served\n" + strings.Join(gl[lo:hiG], "\n")
 }
+
+// TestServeTwinCATProject serves an imported TwinCAT solution: the scan
+// cycle defaults to the first task's cycle time.
+func TestServeTwinCATProject(t *testing.T) {
+	proj := filepath.Join("..", "..", "pkg", "twincat", "testdata", "sln", "Demo", "Demo solution.tsproj")
+	s := startServe(t, true, proj, "--opcua", freeServeAddr(t), "--run-for", "300ms")
+	assert.Equal(t, "1ms", s.info.Cycle)
+	require.NoError(t, s.wait(t))
+}
+
+// TestServeJSONScanStopped reports a runtime error as a JSON event and
+// keeps serving until --run-for expires.
+func TestServeJSONScanStopped(t *testing.T) {
+	proj := filepath.Join("..", "..", "pkg", "twincat", "testdata", "broken", "Broken.plcproj")
+	s := startServe(t, true, proj, "--opcua", freeServeAddr(t), "--run-for", "500ms")
+	require.NoError(t, s.wait(t))
+	var ev map[string]string
+	line, _, _ := strings.Cut(s.stderr.String(), "\n")
+	require.NoError(t, json.Unmarshal([]byte(line), &ev), s.stderr.String())
+	assert.Equal(t, "scan_stopped", ev["event"])
+	assert.Contains(t, ev["error"], "undeclared_name")
+}

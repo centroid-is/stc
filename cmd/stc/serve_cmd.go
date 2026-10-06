@@ -174,7 +174,7 @@ func serveConfig(cmd *cobra.Command) (opcua.Config, error) {
 	cfg.CertFile, _ = cmd.Flags().GetString("cert")
 	cfg.KeyFile, _ = cmd.Flags().GetString("key")
 	cfg.PKIDir, _ = cmd.Flags().GetString("pki-dir")
-	cfg.SoftwareVersion = rootVersion(cmd)
+	cfg.SoftwareVersion = cmd.Root().Version
 	sec, _ := cmd.Flags().GetString("security")
 	switch strings.ToLower(sec) {
 	case "none":
@@ -185,14 +185,6 @@ func serveConfig(cmd *cobra.Command) (opcua.Config, error) {
 		return cfg, fmt.Errorf("invalid --security %q: want none or basic256sha256", sec)
 	}
 	return cfg, nil
-}
-
-// rootVersion returns the root command's version string.
-func rootVersion(cmd *cobra.Command) string {
-	if v := cmd.Root().Version; v != "" {
-		return v
-	}
-	return "dev"
 }
 
 // errorsOnly keeps the error diagnostics: warnings of a large project would
