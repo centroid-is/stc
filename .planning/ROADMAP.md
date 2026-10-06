@@ -560,8 +560,8 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 22. Symbol Tree & Value Semantics | v1.2 | 5/5 | Complete    | 2026-10-06 |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete    | 2026-10-06 |
-| 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
-| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 4/4 | Complete   | 2026-10-06 |
+| 25. EtherCAT Terminal Models | v1.2 | 4/4 | Complete    | 2026-10-06 |
+| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
-| 28. OPC UA Address Space | v1.2 | 4/4 | Complete   | 2026-10-06 |
+| 28. OPC UA Address Space | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 29. Live HMI & Agent Integration | v1.2 | 0/TBD | Not started | - |
