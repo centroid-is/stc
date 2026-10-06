@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: ready_to_plan
-stopped_at: Phase 24 complete (4/4) — ready to discuss Phase 25
-last_updated: 2026-10-06T07:18:10.683Z
+stopped_at: Phase 22 complete (5/5) — ready to discuss Phase 24
+last_updated: 2026-10-06T07:32:23.754Z
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 17
   total_plans: 63
-  completed_plans: 67
+  completed_plans: 75
   percent: 59
 ---
 
@@ -21,11 +21,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 25 — ethercat terminal models
+**Current focus:** Phase 24 — ethercat topology link binding
 
 ## Current Position
 
-Phase: 25
+Phase: 24
 Plan: Not started
 Status: Ready to plan
 Last activity: 2026-10-06
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 61 (v1.0) + 10 (v1.1) = 42
+- Total plans completed: 66 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 
