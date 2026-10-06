@@ -349,7 +349,7 @@ func (s *ecatServices) encodeValue(buf []byte, v Value) ([]byte, error) {
 		return append(buf, tmp[:n]...), nil
 	case ValArray:
 		var err error
-		for _, el := range v.Array {
+		for _, el := range arrayElems(v) {
 			if buf, err = s.encodeValue(buf, el); err != nil {
 				return nil, err
 			}
@@ -372,7 +372,7 @@ func (s *ecatServices) encodeValue(buf []byte, v Value) ([]byte, error) {
 func (s *ecatServices) decodeValue(cur Value, img []byte, pos *int) Value {
 	switch cur.Kind {
 	case ValArray:
-		for i := range cur.Array {
+		for i := len(cur.Array) - len(arrayElems(cur)); i < len(cur.Array); i++ {
 			cur.Array[i] = s.decodeValue(cur.Array[i], img, pos)
 		}
 		return cur
