@@ -501,7 +501,7 @@ Plans:
 
 Plans:
 - [x] 28-01-PLAN.md -- Server core: pin awcullen/opcua v1.4.0, SymbolNode/NodeSource contract + MapSource, certs, Config/Start/Stop, namespace index 4, anonymous writes, i=2259, None + Basic256Sha256 client tests
-- [ ] 28-02-PLAN.md -- Value layer: PLCopen type mapping, toUA/fromUA, enum + StructuredType DataTypes (StructureDefinition, reflect.StructOf, nested), Space/Publish with access levels, descriptions, arrays
+- [x] 28-02-PLAN.md -- Value layer: PLCopen type mapping, toUA/fromUA, enum + StructuredType DataTypes (StructureDefinition, reflect.StructOf, nested), Space/Publish with access levels, descriptions, arrays
 - [ ] 28-03-PLAN.md -- Builder: TF6100 exposure rules over SymbolNode, DeviceSet/PLC1, diagnostics, ST301-shaped fixture, golden browse snapshot
 - [ ] 28-04-PLAN.md -- (after Phases 21-23 merge) symtree/Runtime adapters, `stc serve`, parsed-ST parity with golden, VALIDATION + coverage gate
 
@@ -551,5 +551,5 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
-| 28. OPC UA Address Space | v1.2 | 1/4 | In Progress|  |
+| 28. OPC UA Address Space | v1.2 | 2/4 | In Progress|  |
 | 29. Live HMI & Agent Integration | v1.2 | 0/TBD | Not started | - |

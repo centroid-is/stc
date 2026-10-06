@@ -58,9 +58,9 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 - [x] **OPCUA-01**: `stc serve --project ... --opcua :4840` starts an OPC UA server (awcullen/opcua) with SecurityPolicy None + Anonymous by default and optional Basic256Sha256 with self-signed certificates
 - [x] **OPCUA-02**: The PLC namespace `urn:BeckhoffAutomation:Ua:PLC1` is registered at index 4; nodes are addressable as `ns=4;s=<GVL|PROGRAM>.<path>[i].<member>` with declared case; the standard Server object including `i=2259` ServerStatus.State is served
 - [ ] **OPCUA-03**: Exposure follows TF6100 rules: a symbol is published if it or any ancestor instance or type-level member has `OPC.UA.DA := '1'`; `'1'` inherits to children; `'0'` prunes a subtree; `'2'` publishes a struct without member nodes; type-level attributes inside FB/STRUCT declarations apply to every instance; intermediate FB/array object nodes are created when a descendant is exposed
-- [ ] **OPCUA-04**: `OPC.UA.DA.Access` 1/2/3 maps to AccessLevel (missing = read/write) and `OPC.UA.DA.Description` to the Description attribute
-- [ ] **OPCUA-05**: Structs with `OPC.UA.DA.StructuredType` (on the variable or on the TYPE/FB header) are readable as ExtensionObjects with a served DataTypeDefinition, while members remain individually addressable; enums are Int32 with EnumStrings/EnumValues; arrays are single nodes with ValueRank/ArrayDimensions
-- [ ] **OPCUA-06**: Data types map per PLCopen OPC 30000 (BOOL Boolean, INT Int16, UINT/WORD UInt16, DINT Int32, UDINT/DWORD UInt32, REAL Float, LREAL Double, STRING String, TIME Int64 ms, DT DateTime, TOD UInt32, BYTE Byte)
+- [x] **OPCUA-04**: `OPC.UA.DA.Access` 1/2/3 maps to AccessLevel (missing = read/write) and `OPC.UA.DA.Description` to the Description attribute
+- [x] **OPCUA-05**: Structs with `OPC.UA.DA.StructuredType` (on the variable or on the TYPE/FB header) are readable as ExtensionObjects with a served DataTypeDefinition, while members remain individually addressable; enums are Int32 with EnumStrings/EnumValues; arrays are single nodes with ValueRank/ArrayDimensions
+- [x] **OPCUA-06**: Data types map per PLCopen OPC 30000 (BOOL Boolean, INT Int16, UINT/WORD UInt16, DINT Int32, UDINT/DWORD UInt32, REAL Float, LREAL Double, STRING String, TIME Int64 ms, DT DateTime, TOD UInt32, BYTE Byte)
 - [ ] **OPCUA-07**: Writes go through the symbol tree with coercion so the `p_cmd_*` set-TRUE / FB-clears handshake works while the scan runs
 - [ ] **OPCUA-08**: Subscriptions and monitored items deliver data changes sampled from the running scan
 - [ ] **OPCUA-09**: The emulated address space for ST301 is diffed in CI against a stored browse fixture of the real TF6100 server (node ids, data types, access levels, struct definitions)
@@ -147,9 +147,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPCUA-01 | Phase 28 | Complete |
 | OPCUA-02 | Phase 28 | Complete |
 | OPCUA-03 | Phase 28 | Pending |
-| OPCUA-04 | Phase 28 | Pending |
-| OPCUA-05 | Phase 28 | Pending |
-| OPCUA-06 | Phase 28 | Pending |
+| OPCUA-04 | Phase 28 | Complete |
+| OPCUA-05 | Phase 28 | Complete |
+| OPCUA-06 | Phase 28 | Complete |
 | OPCUA-07 | Phase 29 | Pending |
 | OPCUA-08 | Phase 29 | Pending |
 | OPCUA-09 | Phase 29 | Pending |
