@@ -37,6 +37,30 @@ type Resolver struct {
 	// typed with a DUT from a later file gets the real struct type instead of
 	// resolveTypeSpec's placeholder FunctionBlockType.
 	pendingGVLs []pendingGVL
+
+	// shells maps each FB, PROGRAM, FUNCTION, INTERFACE and STRUCT or enum
+	// TYPE declaration to a type object allocated before any declaration is
+	// resolved. The resolveX functions fill these objects in place, so a
+	// type resolved before its declaration in file order is the final one.
+	shells map[ast.Declaration]types.Type
+	// aliases holds the resolved type of each winning alias-like TYPE
+	// declaration (named, ARRAY, POINTER, REFERENCE, subrange, STRING spec).
+	aliases map[ast.Declaration]types.Type
+	// forward maps an upper-cased type name to the type of the declaration
+	// that ends up owning the name: the first user or mock declaration,
+	// otherwise the first library declaration.
+	forward map[string]types.Type
+
+	// probing makes resolveTypeSpec record an unknown name in missed instead
+	// of reporting it. Used by the alias fixpoint sweep.
+	probing bool
+	missed  bool
+}
+
+// fileGroup is a set of source files that share an IsLibrary flag.
+type fileGroup struct {
+	files     []*ast.SourceFile
+	isLibrary bool
 }
 
 type pendingGVL struct {
@@ -55,22 +79,25 @@ func NewResolver(table *symbols.Table, diags *diag.Collector) *Resolver {
 // no opts. When opts are provided, LibraryFiles are registered first with
 // IsLibrary=true, before user code is processed.
 func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveOpts) {
-	// Register library files first (if provided)
-	if len(opts) > 0 && opts[0].LibraryFiles != nil {
-		for _, libFile := range opts[0].LibraryFiles {
-			r.collectFileDeclarations(libFile, true)
-		}
+	var opt ResolveOpts
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	// Library files first, then user files, then mock files (highest
+	// priority, they override library symbols).
+	groups := []fileGroup{
+		{files: opt.LibraryFiles, isLibrary: true},
+		{files: files},
+		{files: opt.MockFiles},
 	}
 
-	// Register user files
-	for _, file := range files {
-		r.collectFileDeclarations(file, false)
-	}
+	// Pass 0: allocate a type object for every named type so forward
+	// references resolve to the object that is filled later.
+	r.preRegister(groups)
 
-	// Register mock files (highest priority, override library symbols)
-	if len(opts) > 0 && opts[0].MockFiles != nil {
-		for _, mockFile := range opts[0].MockFiles {
-			r.collectFileDeclarations(mockFile, false) // false = not library
+	for _, g := range groups {
+		for _, file := range g.files {
+			r.collectFileDeclarations(file, g.isLibrary)
 		}
 	}
 
@@ -79,6 +106,126 @@ func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveO
 		r.resolveGVL(pg.decl, pg.isLibrary)
 	}
 	r.pendingGVLs = nil
+}
+
+// preRegister allocates the shell type of every declaration, chooses the
+// declaration that owns each name (mirroring the redeclaration rules of the
+// resolveX functions) and resolves alias-like TYPE declarations in a
+// fixpoint sweep.
+func (r *Resolver) preRegister(groups []fileGroup) {
+	r.shells = make(map[ast.Declaration]types.Type)
+	r.aliases = make(map[ast.Declaration]types.Type)
+	r.forward = make(map[string]types.Type)
+
+	type owner struct {
+		decl      ast.Declaration
+		isLibrary bool
+	}
+	owners := make(map[string]owner)
+	var order []string
+	for _, g := range groups {
+		for _, file := range g.files {
+			if file == nil {
+				continue
+			}
+			for _, decl := range file.Declarations {
+				name, shell := declShell(decl)
+				if name == "" {
+					continue
+				}
+				if shell != nil {
+					r.shells[decl] = shell
+				}
+				key := strings.ToUpper(name)
+				prev, seen := owners[key]
+				if !seen {
+					order = append(order, key)
+				}
+				if !seen || (prev.isLibrary && !g.isLibrary) {
+					owners[key] = owner{decl: decl, isLibrary: g.isLibrary}
+				}
+			}
+		}
+	}
+
+	var pending []*ast.TypeDecl
+	for _, key := range order {
+		o := owners[key]
+		if shell, ok := r.shells[o.decl]; ok {
+			r.forward[key] = shell
+		} else if td, ok := o.decl.(*ast.TypeDecl); ok {
+			pending = append(pending, td)
+		}
+	}
+
+	// Alias chains may point forward (TYPE T1 : T2; ... TYPE T2 : INT;).
+	// Each sweep resolves every alias whose names are all known; stop when
+	// a sweep makes no progress. Aliases left over (self-referential,
+	// mutually recursive, or naming an unknown type) resolve with
+	// diagnostics in resolveTypeDecl.
+	for len(pending) > 0 {
+		var next []*ast.TypeDecl
+		for _, td := range pending {
+			if typ, ok := r.probe(td.Type); ok {
+				r.aliases[td] = typ
+				r.forward[strings.ToUpper(td.Name.Name)] = typ
+			} else {
+				next = append(next, td)
+			}
+		}
+		if len(next) == len(pending) {
+			break
+		}
+		pending = next
+	}
+}
+
+// declShell returns the declared name and a fresh, empty type object for a
+// declaration. Alias-like TYPE declarations return a nil shell; GVLs and
+// unnamed declarations return an empty name.
+func declShell(decl ast.Declaration) (string, types.Type) {
+	switch d := decl.(type) {
+	case *ast.ProgramDecl:
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionBlockType{Name: d.Name.Name}
+		}
+	case *ast.FunctionBlockDecl:
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionBlockType{Name: d.Name.Name}
+		}
+	case *ast.FunctionDecl:
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionType{Name: d.Name.Name}
+		}
+	case *ast.InterfaceDecl:
+		// Interfaces have no type of their own yet; a variable of interface
+		// type resolves to an empty FB type carrying the interface name.
+		if d.Name != nil {
+			return d.Name.Name, &types.FunctionBlockType{Name: d.Name.Name}
+		}
+	case *ast.TypeDecl:
+		if d.Name == nil {
+			return "", nil
+		}
+		switch d.Type.(type) {
+		case *ast.StructType:
+			return d.Name.Name, &types.StructType{Name: d.Name.Name}
+		case *ast.EnumType:
+			return d.Name.Name, &types.EnumType{Name: d.Name.Name, BaseType: types.KindINT}
+		}
+		return d.Name.Name, nil
+	}
+	return "", nil
+}
+
+// probe resolves ts without reporting diagnostics. ok is false when any
+// named type inside ts is unknown.
+func (r *Resolver) probe(ts ast.TypeSpec) (typ types.Type, ok bool) {
+	r.probing, r.missed = true, false
+	typ = r.resolveTypeSpec(ts)
+	ok = !r.missed
+	r.probing, r.missed = false, false
+	return typ, ok
 }
 
 // collectFileDeclarations processes a single source file's declarations.
@@ -234,7 +381,7 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 
 	// Set type on the global symbol
 	if sym := r.table.LookupGlobal(name); sym != nil {
-		sym.Type = &types.FunctionBlockType{Name: name}
+		sym.Type = r.fbShell(d, name)
 		sym.IsLibrary = isLibrary
 	}
 
@@ -324,8 +471,8 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 
 	pouScope := r.table.RegisterPOU(name, symbols.KindFunctionBlock, pos)
 
-	// Build the FunctionBlockType from var blocks
-	fbType := &types.FunctionBlockType{Name: name}
+	// Fill the pre-registered FunctionBlockType from the var blocks
+	fbType := r.fbShell(d, name)
 
 	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
 	r.resolveMethods(d.Methods, pouScope)
@@ -390,10 +537,11 @@ func (r *Resolver) resolveFunction(d *ast.FunctionDecl, isLibrary bool) {
 		retType = r.resolveTypeSpec(d.ReturnType)
 	}
 
-	fnType := &types.FunctionType{
-		Name:       name,
-		ReturnType: retType,
+	fnType, ok := r.shells[d].(*types.FunctionType)
+	if !ok {
+		fnType = &types.FunctionType{Name: name}
 	}
+	fnType.ReturnType = retType
 
 	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
 
@@ -447,7 +595,7 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 		}
 	}
 
-	resolvedType := r.resolveTypeSpec(d.Type)
+	resolvedType := r.typeDeclType(d)
 
 	// Set the name on struct types that don't have one
 	if st, ok := resolvedType.(*types.StructType); ok && st.Name == "" {
@@ -479,6 +627,39 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 			_ = r.table.GlobalScope().Insert(enumSym)
 		}
 	}
+}
+
+// fbShell returns the pre-registered FunctionBlockType of a PROGRAM or
+// FUNCTION_BLOCK declaration, or a new one when the declaration has none.
+func (r *Resolver) fbShell(d ast.Declaration, name string) *types.FunctionBlockType {
+	if fb, ok := r.shells[d].(*types.FunctionBlockType); ok {
+		return fb
+	}
+	return &types.FunctionBlockType{Name: name}
+}
+
+// typeDeclType resolves a TYPE declaration's spec. STRUCT and enum specs
+// fill the pre-registered shell in place; aliases resolved by the fixpoint
+// sweep reuse that result; anything else resolves now.
+func (r *Resolver) typeDeclType(d *ast.TypeDecl) types.Type {
+	if typ, ok := r.aliases[d]; ok {
+		return typ
+	}
+	resolved := r.resolveTypeSpec(d.Type)
+	switch sh := r.shells[d].(type) {
+	case *types.StructType:
+		if st, ok := resolved.(*types.StructType); ok {
+			sh.Members = st.Members
+		}
+		return sh
+	case *types.EnumType:
+		if et, ok := resolved.(*types.EnumType); ok {
+			sh.BaseType = et.BaseType
+			sh.Values = et.Values
+		}
+		return sh
+	}
+	return resolved
 }
 
 func (r *Resolver) resolveInterface(d *ast.InterfaceDecl, isLibrary bool) {
@@ -549,7 +730,13 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 		if typ, ok := types.LookupElementaryType(name); ok {
 			return typ
 		}
-		// Look up user-defined type in table
+		// A declared type: the pre-registered object of the declaration that
+		// owns the name, so forward references get the final, filled type.
+		if typ, ok := r.forward[strings.ToUpper(name)]; ok {
+			return typ
+		}
+		// Any other global symbol (library symbols registered outside the
+		// pre-pass, such as the standard FBs)
 		if sym := r.table.GlobalScope().Lookup(name); sym != nil {
 			if sym.Type != nil {
 				if typ, ok := sym.Type.(types.Type); ok {
@@ -557,8 +744,11 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 				}
 			}
 		}
-		// Forward reference -- create a placeholder FunctionBlockType.
-		// This handles cases where an FB is referenced before its declaration.
+		if r.probing {
+			r.missed = true
+			return types.Invalid
+		}
+		// Unknown name -- create a placeholder FunctionBlockType.
 		return &types.FunctionBlockType{Name: name}
 
 	case *ast.ArrayType:
