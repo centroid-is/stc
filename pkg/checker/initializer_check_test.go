@@ -1,9 +1,13 @@
 package checker
 
 import (
+	"math"
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/source"
+	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,6 +72,7 @@ func TestInitializerCheck(t *testing.T) {
 		require.Len(t, errs, 1)
 		assert.Equal(t, CodeNoMember, errs[0].Code)
 		assert.Contains(t, errs[0].Message, "bNope")
+		assert.Empty(t, initErrors(t, "fbTime : FB_LocalSystemTime := (bValid := TRUE);"))
 		errs = initErrors(t, "fbTime : FB_LocalSystemTime := (bEnable := 'x');")
 		require.Len(t, errs, 1)
 		assert.Equal(t, CodeTypeMismatch, errs[0].Code)
@@ -91,6 +96,9 @@ func TestInitializerCheck(t *testing.T) {
 		errs = initErrors(t, "arr : ARRAY[0..9] OF INT := [9223372036854775807(0), 9223372036854775807(0), 4294967295(0)];")
 		require.Len(t, errs, 1)
 		assert.Contains(t, errs[0].Message, "too many initialisers")
+
+		// Capacity saturates instead of overflowing.
+		assert.Empty(t, initErrors(t, "arr : ARRAY[0..4294967295, 0..4294967295, 0..4294967295] OF INT := [1, 2];"))
 
 		errs = initErrors(t, "arr : ARRAY[0..1, 0..1] OF INT := [1, 2, 3, 4, 5];")
 		require.Len(t, errs, 1)
@@ -139,7 +147,7 @@ func TestInitializerCheck(t *testing.T) {
 			"r : REAL := 0;",
 			"lr : LREAL := 2;",
 			"w : WORD := 16#FFFF;",
-			"by : BYTE := BYTE#16#10;",
+			"bt : BYTE := BYTE#16#10;",
 			"d : DINT := INT#5;",
 			"s : STRING := 'abc';",
 			"ws : WSTRING := \"abc\";",
@@ -150,7 +158,7 @@ func TestInitializerCheck(t *testing.T) {
 		} {
 			assert.Empty(t, initErrors(t, vars), vars)
 		}
-		for _, vars := range []string{"n : INT := 'x';", "b : BOOL := 'x';", "n : INT := 1.5;", "s : STRING := 5;", "d : DINT := UINT#5;"} {
+		for _, vars := range []string{"n : INT := 'x';", "b : BOOL := 'x';", "n : INT := 1.5;", "s : STRING := 5;"} {
 			errs := initErrors(t, vars)
 			require.Len(t, errs, 1, vars)
 			assert.Equal(t, CodeTypeMismatch, errs[0].Code, vars)
@@ -159,6 +167,9 @@ func TestInitializerCheck(t *testing.T) {
 		errs := initErrors(t, "e : E_S := 1;")
 		require.Len(t, errs, 1)
 		assert.Equal(t, CodeEnumRule, errs[0].Code)
+		errs = initErrors(t, "e : E_T := 'x';")
+		require.Len(t, errs, 1)
+		assert.Equal(t, CodeTypeMismatch, errs[0].Code)
 	})
 
 	t.Run("nonliteral_clean", func(t *testing.T) {
@@ -186,14 +197,13 @@ func TestInitializerCheck(t *testing.T) {
 		require.Len(t, errs, 1)
 		assert.Equal(t, CodeUndeclaredType, errs[0].Code)
 		assert.Empty(t, initErrors(t, "arr : ARRAY[1..GVL.MAX] OF INT := [1, 2, 3, 4];"))
-		assert.Empty(t, initErrors(t, "arr : ARRAY[0..1] OF INT := [C(0)];"))
 	})
 
 	t.Run("struct members and GVLs", func(t *testing.T) {
 		ds, _ := runGVL(t, []gvlFile{
 			{"types.st", initTypes},
 			{"st.st", "TYPE ST_B : STRUCT\n\ta : ST_A := (zz := 1);\n\tn : INT := 'x';\n\tok : ARRAY[0..1] OF INT := [1, 2];\n\tk : INT := C;\nEND_STRUCT\nEND_TYPE\n"},
-			{"G.st", "VAR_GLOBAL\n\tg : ARRAY[0..1] OF INT := [1, 2, 3];\n\tgs : ST_A := (a := 1);\nEND_VAR\n"},
+			{"G.st", "VAR_GLOBAL\n\tgArr : ARRAY[0..1] OF INT := [1, 2, 3];\n\tgs : ST_A := (a := 1);\nEND_VAR\n"},
 			{"Q.st", "{attribute 'qualified_only'}\nVAR_GLOBAL\n\tq : INT := 'x';\nEND_VAR\n"},
 		})
 		assert.ElementsMatch(t, []string{CodeNoMember, CodeTypeMismatch, CodeTypeMismatch, CodeTypeMismatch}, codesOf(errorsOf(ds)))
@@ -214,4 +224,44 @@ func TestInitializerCheck(t *testing.T) {
 		b := table.LookupGlobal("T_B").Type.(*types.ArrayType)
 		assert.False(t, b.Dimensions[0].Known)
 	})
+}
+
+// TestInitializerCheckDefensive covers inputs the parser and resolver do not
+// produce today: nil fields and elements, non-literal repetition counts,
+// unresolved scopes and symbols without a type.
+func TestInitializerCheckDefensive(t *testing.T) {
+	table := symbols.NewTable()
+	diags := diag.NewCollector()
+	c := NewChecker(table, diags)
+	scope := table.RegisterPOU("P", symbols.KindProgram, source.Pos{})
+	require.NoError(t, scope.Insert(&symbols.Symbol{Name: "C", Kind: symbols.KindVariable, Type: types.TypeINT}))
+	require.NoError(t, scope.Insert(&symbols.Symbol{Name: "untyped", Kind: symbols.KindVariable}))
+
+	lit := &ast.Literal{LitKind: ast.LitInt, Value: "1"}
+	blocks := []*ast.VarBlock{{Declarations: []*ast.VarDecl{
+		{Names: []*ast.Ident{{Name: "missing"}}, InitValue: lit},
+		{Names: []*ast.Ident{{Name: "untyped"}}, InitValue: lit},
+		{InitValue: lit},
+	}}}
+	c.checkVarInitializers(blocks, nil)
+	c.checkVarInitializers(blocks, scope)
+	c.checkGVLInitializers(&ast.GVLDecl{})
+
+	c.currentScope = scope
+	st := &types.StructType{Name: "ST", Members: []types.StructMember{{Name: "a", Type: types.TypeINT}}}
+	c.checkInitializer(&ast.StructInit{Fields: []*ast.FieldInit{nil, {}, {Name: &ast.Ident{Name: "a"}}}}, st)
+	arr := &types.ArrayType{ElementType: types.TypeINT, Dimensions: []types.ArrayDimension{{Low: 0, High: 0, Known: true}}}
+	c.checkInitializer(&ast.ArrayInit{Elements: []*ast.ArrayInitElem{
+		nil,
+		{Count: &ast.Ident{Name: "C"}, Value: lit},
+		{Count: &ast.UnaryExpr{Op: ast.Token{Text: "-"}, Operand: lit}, Value: lit},
+	}}, arr)
+	assert.Empty(t, errorsOf(diags.All()))
+	assert.Equal(t, types.Invalid, structMemberType(st, "zz"))
+	assert.Equal(t, int64(math.MaxInt64), satMul(math.MaxInt64, 2))
+}
+
+func TestInitializerRedeclaredType(t *testing.T) {
+	ds, _ := runGVL(t, []gvlFile{{"t.st", "TYPE X : (xa, xb); END_TYPE\nTYPE X : STRUCT\n\tn : INT := 'x';\nEND_STRUCT\nEND_TYPE\n"}})
+	assert.Equal(t, []string{CodeRedeclared}, codesOf(errorsOf(ds)))
 }

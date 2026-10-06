@@ -40,12 +40,14 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 			case *ast.ProgramDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "PROGRAM")
+					c.checkVarInitializers(d.VarBlocks, c.table.LookupPOU(d.Name.Name))
 					c.checkPOUBody(d.Name.Name, d.Body)
 					c.checkActionBodies(d.Name.Name, d.Actions)
 				}
 			case *ast.FunctionBlockDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION_BLOCK")
+					c.checkVarInitializers(d.VarBlocks, c.table.LookupPOU(d.Name.Name))
 					c.currentFB = d
 					c.checkPOUBody(d.Name.Name, d.Body)
 					c.checkActionBodies(d.Name.Name, d.Actions)
@@ -54,12 +56,17 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 			case *ast.TypeDecl:
 				if st, ok := d.Type.(*ast.StructType); ok {
 					c.checkStructATAddresses(st)
+					if d.Name != nil {
+						c.checkStructMemberInitializers(d, st)
+					}
 				}
 			case *ast.GVLDecl:
 				c.checkATAddresses(d.Blocks, "GVL")
+				c.checkGVLInitializers(d)
 			case *ast.FunctionDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION")
+					c.checkVarInitializers(d.VarBlocks, c.table.LookupPOU(d.Name.Name))
 					// Set return type for RETURN checks
 					if sym := c.table.LookupGlobal(d.Name.Name); sym != nil {
 						if fnType, ok := sym.Type.(*types.FunctionType); ok {

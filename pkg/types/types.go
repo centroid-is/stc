@@ -127,9 +127,12 @@ type Parameter struct {
 }
 
 // ArrayDimension represents a single array dimension with low and high bounds.
+// Known is set when both bounds are integer literals; a bound such as
+// GVL.MAX is not evaluated yet and leaves Known false (Low and High 0).
 type ArrayDimension struct {
-	Low  int
-	High int
+	Low   int
+	High  int
+	Known bool
 }
 
 // StructMember represents a named member of a struct type.

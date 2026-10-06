@@ -1033,9 +1033,13 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 		elemType := r.resolveTypeSpec(t.ElementType)
 		dims := make([]types.ArrayDimension, len(t.Ranges))
 		for i, rng := range t.Ranges {
-			low := evalConstInt(rng.Low)
-			high := evalConstInt(rng.High)
-			dims[i] = types.ArrayDimension{Low: low, High: high}
+			low, lowOK := ast.IntLiteralValue(rng.Low)
+			high, highOK := ast.IntLiteralValue(rng.High)
+			if lowOK && highOK {
+				dims[i] = types.ArrayDimension{Low: int(low), High: int(high), Known: true}
+				continue
+			}
+			dims[i] = types.ArrayDimension{Low: evalConstInt(rng.Low), High: evalConstInt(rng.High)}
 		}
 		return &types.ArrayType{ElementType: elemType, Dimensions: dims}
 

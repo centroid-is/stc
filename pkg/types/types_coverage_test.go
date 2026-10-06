@@ -265,15 +265,15 @@ func TestPrimitiveType_NotEqualToOtherTypes(t *testing.T) {
 
 func TestArrayType_DimensionMismatch(t *testing.T) {
 	elem := &PrimitiveType{Kind_: KindINT}
-	a1 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{0, 9}}}
-	a2 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{0, 9}, {0, 4}}}
+	a1 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{Low: 0, High: 9}}}
+	a2 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{Low: 0, High: 9}, {Low: 0, High: 4}}}
 	assert.False(t, a1.Equal(a2))
 }
 
 func TestArrayType_DimensionBoundsMismatch(t *testing.T) {
 	elem := &PrimitiveType{Kind_: KindINT}
-	a1 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{0, 9}}}
-	a2 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{1, 10}}}
+	a1 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{Low: 0, High: 9}}}
+	a2 := &ArrayType{ElementType: elem, Dimensions: []ArrayDimension{{Low: 1, High: 10}}}
 	assert.False(t, a1.Equal(a2))
 }
 
