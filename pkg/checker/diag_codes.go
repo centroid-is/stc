@@ -38,6 +38,9 @@ const (
 	CodeUndeclaredType = "SEMA037" // undeclared type name
 	CodeRefThisSuper   = "SEMA038" // invalid REF=, THIS or SUPER use
 
+	// Phase 21: TwinCAT project import
+	CodeAttrDoubleQuoted = "SEMA039" // attribute name in double quotes (ignored by TwinCAT)
+
 	// Vendor warnings
 	CodeVendorOOP       = "VEND001" // OOP not supported by target vendor
 	CodeVendorPointer   = "VEND002" // POINTER TO not supported

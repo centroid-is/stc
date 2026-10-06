@@ -5,31 +5,40 @@ import "strings"
 // Attribute represents a TwinCAT/CODESYS attribute pragma such as
 // {attribute 'qualified_only'} or {attribute 'OPC.UA.DA' := '1'}.
 // Value holds the unescaped text; HasValue distinguishes a valueless
-// attribute from one with an empty value.
+// attribute from one with an empty value. DoubleQuoted records that the
+// name was written in double quotes; TwinCAT ignores such attributes, so
+// HasAttribute skips them and String keeps the double quotes.
 type Attribute struct {
 	NodeBase
-	Name     string `json:"name"`
-	Value    string `json:"value,omitempty"`
-	HasValue bool   `json:"-"`
+	Name         string `json:"name"`
+	Value        string `json:"value,omitempty"`
+	HasValue     bool   `json:"-"`
+	DoubleQuoted bool   `json:"double_quoted,omitempty"`
 }
 
 // Children returns nil (attributes are leaf nodes).
 func (n *Attribute) Children() []Node { return nil }
 
-// String renders the attribute in canonical form. Name and value are always
-// single-quoted and every quote character is doubled (two quote characters),
-// so the output cannot close the quoted string early. The lexer ends a
+// String renders the attribute in canonical form. Name and value are
+// single-quoted, or double-quoted when DoubleQuoted is set so a formatter
+// never turns an ignored attribute into an active one. Every occurrence of
+// the quote character is doubled, so the output cannot close the quoted
+// string early. The lexer ends a
 // pragma at the first closing brace regardless of quotes, so a closing brace
 // in a programmatically built name or value is replaced by a closing
 // parenthesis; otherwise the output would re-parse as a truncated pragma
 // followed by stray tokens. A parsed attribute never contains one.
 func (n *Attribute) String() string {
 	var b strings.Builder
+	quote := quoteAttr
+	if n.DoubleQuoted {
+		quote = quoteAttrDouble
+	}
 	b.WriteString("{attribute ")
-	b.WriteString(quoteAttr(n.Name))
+	b.WriteString(quote(n.Name))
 	if n.HasValue {
 		b.WriteString(" := ")
-		b.WriteString(quoteAttr(n.Value))
+		b.WriteString(quote(n.Value))
 	}
 	b.WriteString("}")
 	return b.String()
@@ -41,11 +50,18 @@ func quoteAttr(s string) string {
 	return "'" + attrEscaper.Replace(s) + "'"
 }
 
+var attrEscaperDouble = strings.NewReplacer(`"`, `""`, "}", ")")
+
+func quoteAttrDouble(s string) string {
+	return `"` + attrEscaperDouble.Replace(s) + `"`
+}
+
 // HasAttribute reports whether attrs contains an attribute with the given
-// name, compared case-insensitively.
+// name, compared case-insensitively. Attributes whose name was written in
+// double quotes are skipped: TwinCAT ignores them.
 func HasAttribute(attrs []*Attribute, name string) bool {
 	for _, a := range attrs {
-		if a != nil && strings.EqualFold(a.Name, name) {
+		if a != nil && !a.DoubleQuoted && strings.EqualFold(a.Name, name) {
 			return true
 		}
 	}

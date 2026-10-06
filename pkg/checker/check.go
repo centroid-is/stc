@@ -36,6 +36,7 @@ func NewChecker(table *symbols.Table, diags *diag.Collector) *Checker {
 func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 	for _, file := range files {
 		for _, decl := range file.Declarations {
+			c.checkDoubleQuotedAttrs(decl)
 			switch d := decl.(type) {
 			case *ast.ProgramDecl:
 				if d.Name != nil {
@@ -418,6 +419,19 @@ func (c *Checker) checkCaseStmt(s *ast.CaseStmt) {
 	for _, stmt := range s.ElseBranch {
 		c.checkStmt(stmt)
 	}
+}
+
+// checkDoubleQuotedAttrs warns once for every attribute anywhere in decl
+// whose name is written in double quotes. TwinCAT ignores such attributes
+// (e.g. {attribute "qualified_only"} has no effect), and so does stc.
+func (c *Checker) checkDoubleQuotedAttrs(decl ast.Declaration) {
+	ast.Inspect(decl, func(n ast.Node) bool {
+		if a, ok := n.(*ast.Attribute); ok && a.DoubleQuoted {
+			c.diags.Warnf(astPosToSource(a.Span().Start), CodeAttrDoubleQuoted,
+				"attribute name in double quotes is ignored by TwinCAT; use single quotes")
+		}
+		return true
+	})
 }
 
 // isFBInstanceCallee reports whether callee is a plain name that resolves to

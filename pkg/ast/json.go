@@ -700,6 +700,9 @@ func nodeToMap(n Node) map[string]interface{} {
 		if v.HasValue {
 			m["value"] = v.Value
 		}
+		if v.DoubleQuoted {
+			m["double_quoted"] = true
+		}
 
 	default:
 		m["error"] = fmt.Sprintf("unknown node type: %T", n)

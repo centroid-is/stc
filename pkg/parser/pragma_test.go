@@ -96,6 +96,8 @@ func TestAttributeTextDoubleQuotedFlag(t *testing.T) {
 		{`{attribute 'x' := "y"}`, false, true},
 		{`{attribute "unterminated}`, false, false},
 		{`{attribute "x" := "y}`, false, false},
+		{"{attribute }", false, false},
+		{"{attribute \t}", false, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.text, func(t *testing.T) {

@@ -80,7 +80,9 @@ func TestFormatAttributeCommentOrder(t *testing.T) {
 func TestFormatAttributeCanonicalQuoting(t *testing.T) {
 	src := "{attribute \"qualified_only\"}\n{attribute 'd' := 'it''s'}\n{warning disable C0001}\nPROGRAM P\nEND_PROGRAM\n"
 	out := formatClean(t, src)
-	want := "{attribute 'qualified_only'}\n{attribute 'd' := 'it''s'}\n{warning disable C0001}\nPROGRAM P\nEND_PROGRAM\n"
+	// A double-quoted name keeps its double quotes: TwinCAT ignores such
+	// attributes, and rewriting the quotes would activate them.
+	want := "{attribute \"qualified_only\"}\n{attribute 'd' := 'it''s'}\n{warning disable C0001}\nPROGRAM P\nEND_PROGRAM\n"
 	if out != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", out, want)
 	}

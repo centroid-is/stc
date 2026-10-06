@@ -31,7 +31,7 @@ func TestEmitGVL(t *testing.T) {
 		out := emitClean(t, string(data), DefaultOptions())
 		assertEmitInOrder(t, out,
 			"END_TYPE",
-			"{attribute 'qualified_only'}",
+			`{attribute "qualified_only"}`,
 			"VAR_GLOBAL RETAIN PERSISTENT",
 			"{attribute 'TcLinkTo'",
 			"X : ST_EL1008;",

@@ -121,7 +121,11 @@ func TestGVL(t *testing.T) {
 		data, err := os.ReadFile("../../tests/twincat_probes/ECT.st")
 		require.NoError(t, err)
 		ds, _ := runGVL(t, []gvlFile{{"ECT.st", string(data)}, progUsing("b := ECT.X.I1;")})
-		assert.Empty(t, ds)
+		// The probe writes {attribute "qualified_only"} in double quotes,
+		// as the real ECT GVL does; that only warns (SEMA039).
+		assert.Empty(t, errorsOf(ds))
+		require.Len(t, ds, 1, "%v", ds)
+		assert.Equal(t, CodeAttrDoubleQuoted, ds[0].Code)
 		ds, _ = runGVL(t, []gvlFile{{"ECT.st", string(data)}, progUsing("ECT.X.I1 := 5;")})
 		assert.Len(t, diagsWithCode(ds, CodeTypeMismatch), 1, "ECT.X.I1 should type as BOOL")
 	})
