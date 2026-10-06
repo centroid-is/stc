@@ -7,6 +7,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,9 +15,9 @@ import (
 // fixtureSources is the scenario fixture project: the Beckhoff stubs as
 // libraries, demo_types.st, demo_ect.st as GVL ECT, ECT_Diag.st and
 // MAIN.st (no tasks: MAIN every DefaultBaseTick).
-func fixtureSources(t *testing.T) ProjectSources {
+func fixtureSources(t *testing.T) interp.ProjectSpec {
 	t.Helper()
-	var src ProjectSources
+	var src interp.ProjectSpec
 	for _, n := range []string{"tc2_system.st", "tc2_ethercat.st"} {
 		src.LibraryFiles = append(src.LibraryFiles, parseFile(t, beckhoffStub(n)))
 	}

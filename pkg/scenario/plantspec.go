@@ -11,24 +11,15 @@ import (
 	"github.com/centroid-is/stc/pkg/interp"
 )
 
-// DefaultBaseTick is the scan period of a Plant whose sources set none
-// (the TwinCAT default PlcTask cycle).
-const DefaultBaseTick = 10 * time.Millisecond
-
-// ProjectSources is the parsed project a Plant runs: library files
-// (registered first), the project files and the scan period. It stands in
-// for the Phase 23 interp.ProjectSpec until that lands.
-type ProjectSources struct {
-	LibraryFiles []*ast.SourceFile
-	Files        []*ast.SourceFile
-	BaseTick     time.Duration // 0 means DefaultBaseTick
-}
+// DefaultBaseTick is the scan period of a Plant whose project has no
+// tasks (the default PlcTask running MAIN).
+const DefaultBaseTick = interp.DefaultTaskCycle
 
 // PlantSpec is everything needed to build fresh, independent Plants: the
 // sources, the EtherCAT topology (nil without --io) and the resolved
 // TcLinkTo bindings with their warnings.
 type PlantSpec struct {
-	Sources     ProjectSources
+	Sources     interp.ProjectSpec
 	Topology    *ecat.Topology
 	Bindings    []ecat.Binding
 	Diagnostics []diag.Diagnostic
@@ -39,7 +30,7 @@ type PlantSpec struct {
 // in Diagnostics; any error diagnostic makes BuildPlantSpec fail (the
 // spec is still returned with every diagnostic). No ioFiles means no
 // network.
-func BuildPlantSpec(src ProjectSources, ioFiles []string) (PlantSpec, error) {
+func BuildPlantSpec(src interp.ProjectSpec, ioFiles []string) (PlantSpec, error) {
 	spec := PlantSpec{Sources: src}
 	if len(ioFiles) == 0 {
 		return spec, nil
@@ -49,8 +40,7 @@ func BuildPlantSpec(src ProjectSources, ioFiles []string) (PlantSpec, error) {
 		return spec, err
 	}
 	spec.Topology = topo
-	all := spec.allFiles()
-	vars, cds := ecat.CollectLinks(all)
+	vars, cds := ecat.CollectLinksWithLibraries(src.Files, src.LibraryFiles)
 	bindings, rds := ecat.Resolve(topo, vars)
 	spec.Bindings = bindings
 	spec.Diagnostics = append(append(spec.Diagnostics, cds...), rds...)
@@ -73,40 +63,37 @@ func (s PlantSpec) allFiles() []*ast.SourceFile {
 	return append(all, s.Sources.Files...)
 }
 
-// Plant is a simulated plant: a Runtime over the project sources, and when
-// a topology is loaded an EtherCAT network with the Tc2_EtherCAT mocks and
-// an IOBinder. It implements Target; it is not safe for concurrent use.
+// Plant is a simulated plant: an interp.Project over the project sources
+// (its task schedule, clock and AT I/O), and when a topology is loaded an
+// EtherCAT network with the Tc2_EtherCAT mocks and an IOBinder. It
+// implements Target; it is not safe for concurrent use.
 type Plant struct {
+	proj   *interp.Project
 	rt     *interp.Runtime
 	net    *ecat.Network // nil without --io
 	binder *interp.IOBinder
-	base   time.Duration
-	clock  time.Duration
 	// atIn holds the upper-case ROOT.VAR paths declared with an explicit
 	// AT %I address (not %I*); the AT sync overwrites them (D-13).
 	atIn map[string]bool
 }
 
-// New builds a fresh Plant. Each call creates its own Runtime, Network and
+// New builds a fresh Plant. Each call loads its own Project, Network and
 // IOBinder, so Plants never share state.
 func (s PlantSpec) New() (*Plant, error) {
-	p := &Plant{base: s.Sources.BaseTick, atIn: atInputs(s.allFiles())}
-	if p.base <= 0 {
-		p.base = DefaultBaseTick
-	}
-	opts := interp.RuntimeOpts{LibraryFiles: s.Sources.LibraryFiles}
+	p := &Plant{atIn: atInputs(s.allFiles())}
+	ps := s.Sources
 	if s.Topology != nil {
 		p.net = ecat.NewNetwork(s.Topology, nil)
-		opts.Network = p.net
+		ps.Network = p.net
 	}
-	rt, err := interp.NewRuntime(s.Sources.Files, opts)
+	proj, err := interp.LoadProject(ps)
 	if err != nil {
 		return nil, err
 	}
-	p.rt = rt
+	p.proj, p.rt = proj, proj.Runtime()
 	if p.net != nil {
 		p.binder = interp.NewIOBinder(s.Bindings, p.net)
-		rt.SetIOBinder(p.binder)
+		proj.SetIOBinder(p.binder)
 	}
 	return p, nil
 }
@@ -153,6 +140,9 @@ func atInputs(files []*ast.SourceFile) map[string]bool {
 	return out
 }
 
+// Project returns the plant's Project (tasks, persistence, Run).
+func (p *Plant) Project() *interp.Project { return p.proj }
+
 // Runtime returns the plant's Runtime (Get, Set, Snapshot, ToJSON).
 func (p *Plant) Runtime() *interp.Runtime { return p.rt }
 
@@ -162,17 +152,12 @@ func (p *Plant) Network() *ecat.Network { return p.net }
 // IOBinder returns the plant's TcLinkTo binder, nil without --io.
 func (p *Plant) IOBinder() *interp.IOBinder { return p.binder }
 
-// BaseTick is the scan period of one Tick.
-func (p *Plant) BaseTick() time.Duration { return p.base }
+// BaseTick is the scan period of one Tick (the GCD of the task cycles).
+func (p *Plant) BaseTick() time.Duration { return p.proj.BaseTick() }
 
 // Clock is the simulated time before the next Tick.
-func (p *Plant) Clock() time.Duration { return p.clock }
+func (p *Plant) Clock() time.Duration { return p.proj.Clock() }
 
-// Tick runs one scan of every PROGRAM and advances the clock by BaseTick.
-func (p *Plant) Tick() error {
-	if err := p.rt.Tick(p.base); err != nil {
-		return err
-	}
-	p.clock += p.base
-	return nil
-}
+// Tick runs one Project tick: every due task, then the clock advances by
+// BaseTick.
+func (p *Plant) Tick() error { return p.proj.Tick() }

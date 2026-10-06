@@ -8,6 +8,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,9 +47,9 @@ func parseFile(t *testing.T, path string) *ast.SourceFile {
 
 // demoSources is the Beckhoff stubs as libraries plus demo_types.st,
 // demo_ect.st (GVL ECT) and extra sources (MAIN when none is given).
-func demoSources(t *testing.T, extra ...string) ProjectSources {
+func demoSources(t *testing.T, extra ...string) interp.ProjectSpec {
 	t.Helper()
-	var src ProjectSources
+	var src interp.ProjectSpec
 	for _, n := range []string{"tc2_system.st", "tc2_ethercat.st"} {
 		src.LibraryFiles = append(src.LibraryFiles, parseFile(t, beckhoffStub(n)))
 	}
@@ -120,7 +121,7 @@ func TestPlantSpecUnresolvedLink(t *testing.T) {
 
 func TestPlantSpecNoIO(t *testing.T) {
 	src := demoSources(t)
-	src.BaseTick = time.Millisecond
+	src.Tasks = []interp.TaskSpec{{Name: "T", Cycle: time.Millisecond, Programs: []string{"MAIN"}}}
 	spec, err := BuildPlantSpec(src, nil)
 	require.NoError(t, err)
 	p, err := spec.New()

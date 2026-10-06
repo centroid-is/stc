@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/ecat"
 	"github.com/centroid-is/stc/pkg/iomap"
 )
 
@@ -35,6 +36,9 @@ type ProjectSpec struct {
 	LibraryFiles []*ast.SourceFile
 	Files        []*ast.SourceFile
 	Tasks        []TaskSpec
+	// Network, when set, backs the Tc2_EtherCAT mocks (RuntimeOpts.Network);
+	// the services scan is counted once per Tick that runs a task.
+	Network *ecat.Network
 }
 
 // TaskStats reports one task of a Project.
@@ -80,7 +84,7 @@ type Project struct {
 // DefaultTaskCycle. It rejects non-positive cycles, unknown programs and
 // programs bound to more than one task, reporting all problems joined.
 func LoadProject(spec ProjectSpec) (*Project, error) {
-	rt, err := NewRuntime(spec.Files, RuntimeOpts{LibraryFiles: spec.LibraryFiles})
+	rt, err := NewRuntime(spec.Files, RuntimeOpts{LibraryFiles: spec.LibraryFiles, Network: spec.Network})
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +210,9 @@ func (p *Project) Tick() error {
 			ran = true
 			if p.binder != nil {
 				p.binder.preScan(p.base)
+			}
+			if p.rt.ecat != nil {
+				p.rt.ecat.preScan(p.base, p.binder)
 			}
 			p.syncIOIn()
 		}

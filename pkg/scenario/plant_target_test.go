@@ -9,6 +9,7 @@ import (
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/ecat"
 	"github.com/centroid-is/stc/pkg/ecat/devices"
+	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -175,7 +176,7 @@ func TestPlantDriveFault(t *testing.T) {
 // mainOnly is a project without links, for single-export networks.
 func mainOnly(t *testing.T, io string) *Plant {
 	t.Helper()
-	src := ProjectSources{Files: []*ast.SourceFile{parseST(t, "main.st", "PROGRAM MAIN\nVAR n : INT; END_VAR\nEND_PROGRAM\n")}}
+	src := interp.ProjectSpec{Files: []*ast.SourceFile{parseST(t, "main.st", "PROGRAM MAIN\nVAR n : INT; END_VAR\nEND_PROGRAM\n")}}
 	spec, err := BuildPlantSpec(src, ioPaths(io))
 	require.NoError(t, err)
 	p, err := spec.New()
@@ -330,12 +331,12 @@ func TestPlantNoNetwork(t *testing.T) {
 }
 
 func TestPlantTickError(t *testing.T) {
-	src := ProjectSources{Files: []*ast.SourceFile{parseST(t, "main.st",
+	src := interp.ProjectSpec{Files: []*ast.SourceFile{parseST(t, "main.st",
 		"PROGRAM MAIN\nVAR a : ARRAY[1..2] OF INT; i : INT := 5; END_VAR\na[i] := 1;\nEND_PROGRAM\n")}}
 	spec, err := BuildPlantSpec(src, nil)
 	require.NoError(t, err)
 	p, err := spec.New()
 	require.NoError(t, err)
 	assert.Error(t, p.Tick())
-	assert.Zero(t, p.Clock(), "a failed Tick does not advance the clock")
+	assert.Equal(t, p.BaseTick(), p.Clock(), "Project semantics: the clock advances past a failing task")
 }

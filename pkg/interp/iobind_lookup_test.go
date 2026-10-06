@@ -151,3 +151,47 @@ func TestEngineSetNetworkNilDetaches(t *testing.T) {
 	assert.False(t, ok)
 	assert.Nil(t, eng.interp.fbOverrides)
 }
+
+func TestProjectNetworkScanOncePerTick(t *testing.T) {
+	libs, files := demoRuntimeFiles(t, `
+PROGRAM MAIN
+VAR fb : FB_EcGetAllSlaveStates; END_VAR
+END_PROGRAM
+`, `
+PROGRAM P2
+VAR
+	{attribute 'TcLinkTo' := '`+lookupI2+`'}
+	x AT %I* : BOOL;
+END_VAR
+END_PROGRAM
+`)
+	topo, err := ecat.LoadProject(ecatFixture("Demo Device 1.xml"), ecatFixture("Demo Device 2.xml"))
+	require.NoError(t, err)
+	net := ecat.NewNetwork(topo, nil)
+	p, err := LoadProject(ProjectSpec{LibraryFiles: libs, Files: files, Network: net, Tasks: []TaskSpec{
+		{Name: "Fast", Cycle: 10 * time.Millisecond, Programs: []string{"MAIN"}},
+		{Name: "Slow", Cycle: 20 * time.Millisecond, Programs: []string{"P2"}},
+	}})
+	require.NoError(t, err)
+	v, err := p.Runtime().Get("MAIN.fb")
+	require.NoError(t, err)
+	require.NotNil(t, v.FBRef)
+	assert.NotNil(t, v.FBRef.FB, "Tc2_EtherCAT mock instantiated")
+
+	require.NoError(t, p.Tick())
+	assert.Equal(t, uint64(1), p.rt.ecat.scan, "two tasks due, one services scan")
+
+	all := append(append([]*ast.SourceFile{}, libs...), files...)
+	vars, _ := ecat.CollectLinks(all)
+	bindings, _ := ecat.Resolve(topo, vars)
+	b := NewIOBinder(bindings, net)
+	p.SetIOBinder(b)
+	require.NoError(t, net.ForceInput(lookupI2, 1))
+	require.NoError(t, p.Tick())
+	require.NoError(t, p.Tick())
+	assert.Equal(t, uint64(3), p.rt.ecat.scan)
+	assert.Empty(t, b.Errors())
+	x, err := p.Runtime().Get("P2.x")
+	require.NoError(t, err)
+	assert.True(t, x.Bool, "link resolved through the project binder")
+}
