@@ -2,6 +2,7 @@ package symbols
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -34,10 +35,10 @@ func (k ScopeKind) String() string {
 // Scopes form a tree: Global -> POU -> Method -> Block.
 // Name lookup walks up the parent chain until a match is found.
 type Scope struct {
-	Parent   *Scope     // Enclosing scope (nil for global)
-	Kind     ScopeKind  // Level in the hierarchy
-	Name     string     // Scope name (POU name, method name, etc.)
-	Children []*Scope   // Child scopes
+	Parent   *Scope    // Enclosing scope (nil for global)
+	Kind     ScopeKind // Level in the hierarchy
+	Name     string    // Scope name (POU name, method name, etc.)
+	Children []*Scope  // Child scopes
 
 	symbols map[string]*Symbol // Keyed by UPPERCASE name for case-insensitive lookup
 }
@@ -98,12 +99,25 @@ func (s *Scope) Delete(name string) bool {
 	return false
 }
 
-// Symbols returns all symbols defined in this scope.
+// Symbols returns all symbols defined in this scope, ordered by declaration
+// site (file, offset) then name.
 // Useful for iterating over symbols for unused variable detection.
 func (s *Scope) Symbols() []*Symbol {
 	result := make([]*Symbol, 0, len(s.symbols))
 	for _, sym := range s.symbols {
 		result = append(result, sym)
 	}
+	// Map order is random: sort by declaration site, then name, so every
+	// diagnostic derived from a scope walk comes out in the same order.
+	sort.Slice(result, func(i, j int) bool {
+		a, b := result[i], result[j]
+		if a.Pos.File != b.Pos.File {
+			return a.Pos.File < b.Pos.File
+		}
+		if a.Pos.Offset != b.Pos.Offset {
+			return a.Pos.Offset < b.Pos.Offset
+		}
+		return a.Name < b.Name
+	})
 	return result
 }

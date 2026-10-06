@@ -217,3 +217,26 @@ func TestCasePreservation(t *testing.T) {
 		t.Fatalf("Lookup(MYVAR).Name = %q, want %q", got.Name, "myVar")
 	}
 }
+
+func TestScopeSymbolsDeterministicOrder(t *testing.T) {
+	s := NewScope(nil, ScopeGlobal, "g")
+	for i, name := range []string{"zeta", "alpha", "mid", "beta"} {
+		sym := &Symbol{Name: name}
+		sym.Pos.File = "b.st"
+		sym.Pos.Offset = 100 - i
+		if name == "beta" {
+			sym.Pos.File = "a.st"
+		}
+		s.Insert(sym)
+	}
+	var got []string
+	for _, sym := range s.Symbols() {
+		got = append(got, sym.Name)
+	}
+	want := []string{"beta", "mid", "alpha", "zeta"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order %v, want %v", got, want)
+		}
+	}
+}
