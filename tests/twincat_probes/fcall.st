@@ -1,0 +1,9 @@
+FUNCTION F_X : INT
+VAR_INPUT a : INT; b : INT; END_VAR
+F_X := a + b;
+END_FUNCTION
+PROGRAM MAIN
+VAR n : INT; END_VAR
+n := F_X(1, 2);
+n := F_X(a := 1, b := 2);
+END_PROGRAM

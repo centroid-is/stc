@@ -3,11 +3,15 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/analyzer"
+	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/format"
 	"github.com/centroid-is/stc/pkg/parser"
 )
@@ -95,17 +99,11 @@ func TestOwnedLine(t *testing.T) {
 	}
 }
 
-// TestTwinCATProbeFixtures is the CI-safe half of the Phase 19 acceptance
-// gate. Every committed probe must parse clean except for the lines that
-// Phase 20 owns, and every clean probe must format idempotently.
+// TestTwinCATProbeFixtures is the CI-safe half of the Phase 19 and Phase 20
+// acceptance gates. Every committed probe must parse with zero diagnostics
+// and format idempotently. There are no per-line allowances.
 func TestTwinCATProbeFixtures(t *testing.T) {
 	dir := probesDir(t)
-	// Lines deliberately left for Phase 20 (see tests/twincat_probes/README.md).
-	allowed := map[string]map[int]bool{
-		"prog.st": {9: true},           // b := w.3; bit access
-		"link.st": {9: true, 10: true}, // named function arguments to F_X
-	}
-
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("read %s: %v", dir, err)
@@ -128,8 +126,7 @@ func TestTwinCATProbeFixtures(t *testing.T) {
 				text := lineText(src, l)
 				if ownedLine(text) {
 					t.Errorf("%s:%d: diagnostic on Phase 19 owned line: %s", name, l, text)
-				}
-				if !allowed[name][l] {
+				} else {
 					t.Errorf("%s:%d: unexpected diagnostic: %s", name, l, text)
 				}
 			}
@@ -150,21 +147,83 @@ func TestTwinCATProbeFixtures(t *testing.T) {
 			}
 		})
 	}
-	if count < 11 {
-		t.Errorf("expected at least 11 probe fixtures, found %d", count)
+	if count < 15 {
+		t.Errorf("expected at least 15 probe fixtures, found %d", count)
 	}
 }
 
-// TestTwinCATProbeOracle runs the Phase 19 classification gate over the large
-// flattened customer sources. They are never committed, so the test only runs
-// when STC_PROBES_DIR points at a local directory containing them; it logs
-// counts and line numbers and never copies the sources.
+// parseCode is the diagnostic code the parser reports (pkg/parser/error.go).
+const parseCode = "P001"
+
+// elementaryTypes are type names, keywords and attribute names kept verbatim
+// when templating diagnostic messages; every
+// other identifier-like word that is not plain lower-case prose is replaced.
+var elementaryTypes = map[string]bool{
+	"BOOL": true, "BYTE": true, "WORD": true, "DWORD": true, "LWORD": true,
+	"SINT": true, "INT": true, "DINT": true, "LINT": true,
+	"USINT": true, "UINT": true, "UDINT": true, "ULINT": true,
+	"REAL": true, "LREAL": true, "TIME": true, "LTIME": true, "DATE": true,
+	"TOD": true, "DT": true, "STRING": true, "WSTRING": true, "VOID": true,
+	"FUNCTION_BLOCK": true, "FUNCTION": true, "PROGRAM": true, "METHOD": true,
+	"REFERENCE": true, "POINTER": true, "TO": true, "ARRAY": true, "OF": true,
+	"THIS": true, "SUPER": true, "REF": true, "ANY": true, "GVL": true,
+	"AND": true, "OR": true, "XOR": true, "NOT": true, "MOD": true,
+	"qualified_only": true, "strict": true, "to_string": true,
+}
+
+var (
+	quotedRe = regexp.MustCompile(`"[^"]*"|'[^']*'`)
+	wordRe   = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_.]*`)
+	numberRe = regexp.MustCompile(`\b[0-9]+\b`)
+)
+
+// templateMessage replaces identifiers and numbers in a diagnostic message
+// with placeholders so oracle buckets can be logged without leaking customer
+// names (T-19-18, T-20-22).
+func templateMessage(msg string) string {
+	msg = quotedRe.ReplaceAllString(msg, "<id>")
+	msg = wordRe.ReplaceAllStringFunc(msg, func(w string) string {
+		if elementaryTypes[w] || w == "id" {
+			return w
+		}
+		if strings.ToLower(w) == w && !strings.ContainsAny(w, "_.0123456789") {
+			return w // ordinary prose
+		}
+		return "<id>"
+	})
+	return numberRe.ReplaceAllString(msg, "<n>")
+}
+
+// TestTemplateMessage pins the anonymisation used by the oracle log.
+func TestTemplateMessage(t *testing.T) {
+	cases := map[string]string{
+		`undeclared identifier "fbMotor_1"`:            `undeclared identifier <id>`,
+		`cannot assign DINT to INT`:                    `cannot assign DINT to INT`,
+		`cannot assign ST_Recipe to E_Mode`:            `cannot assign <id> to <id>`,
+		`F_Calc expects 3 argument(s), got 2`:          `<id> expects <n> argument(s), got <n>`,
+		`type 'Tc2_System.T_MaxString' is not defined`: `type <id> is not defined`,
+		`GVL 'G' is qualified_only; use G.x`:           `GVL <id> is qualified_only; use <id>`,
+		`boolean operator AND requires BOOL operands`:  `boolean operator AND requires BOOL operands`,
+	}
+	for in, want := range cases {
+		if got := templateMessage(in); got != want {
+			t.Errorf("templateMessage(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestTwinCATProbeOracle runs the Phase 19 classification gate and the Phase
+// 20 zero-parse-error gate over the large flattened customer sources. They
+// are never committed, so the test only runs when STC_PROBES_DIR points at a
+// local directory containing them; it logs counts, line numbers and
+// templated messages and never copies the sources.
 func TestTwinCATProbeOracle(t *testing.T) {
 	dir := os.Getenv("STC_PROBES_DIR")
 	if dir == "" {
 		t.Skip("STC_PROBES_DIR not set; oracle sources are local-only")
 	}
-	for _, name := range []string{"st301.st", "svncorecomponents.st"} {
+	var parsed []*ast.SourceFile
+	for _, name := range []string{"svncorecomponents.st", "st301.st"} {
 		t.Run(name, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(dir, name))
 			if err != nil {
@@ -172,12 +231,67 @@ func TestTwinCATProbeOracle(t *testing.T) {
 			}
 			src := string(data)
 			lines, total := diagLines(name, src)
-			t.Logf("%s: %d parse diagnostics on %d lines", name, total, len(lines))
+			t.Logf("%s: %d parse diagnostics", name, total)
 			for _, l := range lines {
 				if text := lineText(src, l); ownedLine(text) {
-					t.Errorf("%s:%d: diagnostic on Phase 19 owned line: %s", name, l, strings.TrimSpace(text))
+					t.Errorf("%s:%d: diagnostic on Phase 19 owned line", name, l)
+				} else {
+					t.Errorf("%s:%d: parse diagnostic", name, l)
 				}
 			}
+			if total != 0 {
+				t.Errorf("%s: want 0 parse diagnostics, got %d", name, total)
+			}
+
+			// The stc check path: analyzer.Analyze must not report parse errors either.
+			file := parser.Parse(name, src).File
+			parsed = append(parsed, file)
+			res := analyzer.Analyze([]*ast.SourceFile{file}, nil)
+			p001, errs := 0, 0
+			for _, d := range res.Diags {
+				if d.Code == parseCode {
+					p001++
+				}
+				if d.Severity == diag.Error {
+					errs++
+				}
+			}
+			t.Logf("%s: %d %s diagnostics and %d errors from analyzer.Analyze", name, p001, parseCode, errs)
+			if p001 != 0 {
+				t.Errorf("%s: want 0 %s diagnostics from analyzer.Analyze, got %d", name, parseCode, p001)
+			}
 		})
+	}
+	if len(parsed) < 2 {
+		return
+	}
+
+	// Combined run, logged only: the remaining stc check buckets for Phases 21 and 22.
+	res := analyzer.Analyze(parsed, nil)
+	buckets := map[string]int{}
+	errs := 0
+	for _, d := range res.Diags {
+		if d.Severity != diag.Error {
+			continue
+		}
+		errs++
+		buckets[d.Code+" "+templateMessage(d.Message)]++
+	}
+	keys := make([]string, 0, len(buckets))
+	for k := range buckets {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if buckets[keys[i]] != buckets[keys[j]] {
+			return buckets[keys[i]] > buckets[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
+	t.Logf("combined analyzer.Analyze: %d errors in %d buckets", errs, len(keys))
+	for i, k := range keys {
+		if i == 15 {
+			break
+		}
+		t.Logf("  %5d  %s", buckets[k], k)
 	}
 }

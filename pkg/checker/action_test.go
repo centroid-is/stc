@@ -60,6 +60,64 @@ END_PROGRAM
 		require.Empty(t, ds)
 	})
 
+	t.Run("action drives a TON and an R_TRIG and reads their outputs", func(t *testing.T) {
+		ds := runAction(t, `PROGRAM MAIN
+VAR
+	x : BOOL;
+	b : BOOL;
+	done : BOOL;
+	edge : BOOL;
+	elapsed : TIME;
+	t : TON;
+	trig : R_TRIG;
+END_VAR
+A_Timers();
+ACTION A_Timers
+t(IN := x, PT := T#1s);
+trig(CLK := b);
+done := t.Q;
+elapsed := t.ET;
+edge := trig.Q;
+END_ACTION
+END_PROGRAM
+`)
+		require.Empty(t, ds)
+	})
+
+	t.Run("FB action drives a TON and an R_TRIG with Tc2 input names", func(t *testing.T) {
+		ds := runAction(t, `FUNCTION_BLOCK FB_Debounce
+VAR_INPUT
+	raw : BOOL;
+END_VAR
+VAR_OUTPUT
+	stable : BOOL;
+	rising : BOOL;
+END_VAR
+VAR
+	t : TON;
+	trig : R_TRIG;
+END_VAR
+A_Filter();
+ACTION A_Filter
+t(IN := raw, PT := T#50MS);
+trig(CLK := t.Q);
+stable := t.Q;
+rising := trig.Q;
+END_ACTION
+END_FUNCTION_BLOCK
+PROGRAM MAIN
+VAR
+	d : FB_Debounce;
+	y : BOOL;
+END_VAR
+d(raw := TRUE);
+d.A_Filter();
+y := d.stable AND d.rising;
+END_PROGRAM
+`)
+		require.Empty(t, ds)
+	})
+
 	t.Run("after-POU actions resolve in the owning POU", func(t *testing.T) {
 		ds := runAction(t, "PROGRAM MAIN\nVAR x : BOOL; END_VAR\nA1();\nEND_PROGRAM\nACTION A1\nx := NOT x;\nEND_ACTION\n")
 		require.Empty(t, ds)
