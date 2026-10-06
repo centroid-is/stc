@@ -5,6 +5,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // sdoBufSrc reads and writes an SDO through 1-based byte arrays (HI-01)
@@ -132,4 +133,49 @@ func TestEcatPtrRefErrors(t *testing.T) {
 	env.Define("ARR", Value{Kind: ValArray, Array: []Value{{Kind: ValInt, IECType: types.KindBYTE}}})
 	bad := Value{Kind: ValPointer, Ref: &RefPath{Env: env, Var: "ARR", Steps: []RefStep{{Index: 5, IsIndex: true}}}}
 	assert.Error(t, s.writePtrBytes(bad, []byte{1}))
+}
+
+// TestEcatPtrBytesDeclaredOrder is the LO-05 regression: two DUTs with the
+// same member names in a different order encode in their own declared
+// order, not in that of the first type with matching names.
+func TestEcatPtrBytesDeclaredOrder(t *testing.T) {
+	src := `
+TYPE ST_A :
+STRUCT
+	x : BYTE;
+	y : UINT;
+END_STRUCT
+END_TYPE
+TYPE ST_B :
+STRUCT
+	y : UINT;
+	x : BYTE;
+END_STRUCT
+END_TYPE
+PROGRAM P
+VAR
+	a  : ST_A := (x := 1, y := 16#0302);
+	b  : ST_B := (y := 16#0302, x := 1);
+	pa, pb : POINTER TO BYTE;
+END_VAR
+pa := ADR(a);
+pb := ADR(b);
+END_PROGRAM
+`
+	e := ecatEngine(t, src, ioNet())
+	tick(t, e, 1)
+	got, err := e.ecat.readPtrBytes(envVal(t, e, "pa"), 10)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{1, 2, 3}, got)
+	got, err = e.ecat.readPtrBytes(envVal(t, e, "pb"), 10)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{2, 3, 1}, got)
+	require.NoError(t, e.ecat.writePtrBytes(envVal(t, e, "pb"), []byte{4, 5, 6}))
+	b := envVal(t, e, "b").Struct
+	assert.Equal(t, int64(0x0504), b["Y"].Int)
+	assert.Equal(t, int64(6), b["X"].Int)
+
+	// Fields that do not name the members fall back to the type search.
+	odd := Value{Kind: ValStruct, Struct: map[string]Value{"Q": BoolValue(true), "P": BoolValue(false)}, Fields: []string{"z", "p"}}
+	assert.Equal(t, []string{"P", "Q"}, e.ecat.memberOrder(odd))
 }

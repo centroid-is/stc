@@ -442,10 +442,24 @@ func (s *ecatServices) decodeValue(cur Value, img []byte, pos *int) Value {
 	return cur
 }
 
-// memberOrder lists a struct value's members in declaration order, taken
-// from the first registered STRUCT type (by name) with exactly these
-// members, else sorted by name.
+// memberOrder lists a struct value's members in declaration order: from
+// the value's own Fields when they cover its members, else from the first
+// registered STRUCT type (by name) with exactly these members, else sorted
+// by name.
 func (s *ecatServices) memberOrder(v Value) []string {
+	if len(v.Fields) == len(v.Struct) {
+		names := make([]string, 0, len(v.Fields))
+		for _, f := range v.Fields {
+			name := strings.ToUpper(f)
+			if _, ok := v.Struct[name]; !ok {
+				break
+			}
+			names = append(names, name)
+		}
+		if len(names) == len(v.Struct) {
+			return names
+		}
+	}
 	var names []string
 	if s.interp != nil {
 		for _, tn := range sortedTypeNames(s.interp.TypeDecls) {
