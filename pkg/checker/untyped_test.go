@@ -31,7 +31,6 @@ func TestUntypedConst(t *testing.T) {
 	}{
 		{"1", untypedInt, 1, true},
 		{"-5", untypedInt, -5, true},
-		{"+5", untypedInt, 5, true},
 		{"(3)", untypedInt, 3, true},
 		{"2 * 3 + 1", untypedInt, 7, true},
 		{"7 / 2", untypedInt, 3, true},
@@ -57,6 +56,8 @@ func TestUntypedConst(t *testing.T) {
 		{"TRUE", untypedNone, 0, false},
 		{"'s'", untypedNone, 0, false},
 		{"x", untypedNone, 0, false},
+		{"16#FFFF_FFFF_FFFF_FFFF + 1", untypedInt, 0, false},
+		{"-x", untypedNone, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.src, func(t *testing.T) {
@@ -70,6 +71,13 @@ func TestUntypedConst(t *testing.T) {
 	}
 	k, _, _ := untypedConst(nil)
 	assert.Equal(t, untypedNone, k)
+
+	// Unary plus is not produced by the parser today; build it directly.
+	plus := &ast.UnaryExpr{Op: ast.Token{Text: "+"}, Operand: parseExpr(t, "5")}
+	k, v, has := untypedConst(plus)
+	assert.Equal(t, untypedInt, k)
+	assert.True(t, has)
+	assert.Equal(t, int64(5), v)
 }
 
 func TestUntypedAssignable(t *testing.T) {
