@@ -172,3 +172,17 @@ func TestFormatEndPragmasKeepTheirAnchor(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatInterfaceSignatures checks that interface METHOD and PROPERTY
+// signatures keep their attributes, var blocks and END_ keywords, so the
+// output re-parses and {attribute 'TcRpcEnable'} survives a reformat.
+func TestFormatInterfaceSignatures(t *testing.T) {
+	src := "INTERFACE I_X\n{attribute 'TcRpcEnable'}\nMETHOD M : BOOL\nVAR_INPUT\n    a : INT;\nEND_VAR\nEND_METHOD\n{attribute 'monitoring' := 'call'}\nPROPERTY P : INT\nEND_PROPERTY\n{warning restore C0195}\nEND_INTERFACE\n"
+	out := formatClean(t, src)
+	assertInOrder(t, out,
+		"INTERFACE I_X\n",
+		"{attribute 'TcRpcEnable'}\n", "METHOD M : BOOL\n", "VAR_INPUT\n", "a : INT;", "END_VAR\n", "END_METHOD\n",
+		"{attribute 'monitoring' := 'call'}\n", "PROPERTY P : INT\n", "END_PROPERTY\n",
+		"{warning restore C0195}\n", "END_INTERFACE\n")
+	assertIdempotent(t, out)
+}

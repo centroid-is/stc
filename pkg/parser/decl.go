@@ -390,16 +390,24 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 	// Parse method and property signatures
 	var methods []*ast.MethodSignature
 	var properties []*ast.PropertySignature
+	var tailAttrs []*ast.Attribute
+	var tailPragmas []*ast.PragmaNode
 
 	for !p.atEnd() && !p.at(lexer.KwEndInterface) {
+		// Pragmas may precede a method or property signature; those before
+		// END_INTERFACE stay with the interface.
+		attrs, pragmas := p.collectPragmas()
 		switch p.peek().Kind {
-		case lexer.Pragma:
-			// Pragmas may precede a method or property signature.
-			p.advance()
 		case lexer.KwMethod:
-			methods = append(methods, p.parseMethodSignature())
+			sig := p.parseMethodSignature()
+			sig.Attributes, sig.Pragmas = attrs, pragmas
+			methods = append(methods, sig)
 		case lexer.KwProperty:
-			properties = append(properties, p.parsePropertySignature())
+			sig := p.parsePropertySignature()
+			sig.Attributes, sig.Pragmas = attrs, pragmas
+			properties = append(properties, sig)
+		case lexer.KwEndInterface, lexer.EOF:
+			tailAttrs, tailPragmas = attrs, pragmas
 		default:
 			// Skip unexpected tokens
 			p.error("unexpected %s in interface", p.peek().Kind.String())
@@ -415,10 +423,12 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 			NodeKind: ast.KindInterfaceDecl,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Name:       name,
-		Extends:    extends,
-		Methods:    methods,
-		Properties: properties,
+		Name:          name,
+		Extends:       extends,
+		Methods:       methods,
+		Properties:    properties,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 

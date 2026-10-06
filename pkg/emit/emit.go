@@ -313,6 +313,7 @@ func (e *emitter) emitInterfaceDecl(d *ast.InterfaceDecl) {
 	for _, p := range d.Properties {
 		e.emitPropertySignature(p)
 	}
+	e.emitAttrs(d.EndAttributes, d.EndPragmas)
 	e.write(e.kw("END_INTERFACE"))
 	e.newline()
 	e.emitTrailingTrivia(&d.NodeBase)
@@ -382,32 +383,35 @@ func (e *emitter) emitPropertyDecl(d *ast.PropertyDecl) {
 }
 
 func (e *emitter) emitMethodSignature(d *ast.MethodSignature) {
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
-	e.indent++
-	e.emitIndent()
 	e.writef("%s %s", e.kw("METHOD"), d.Name.Name)
 	if d.ReturnType != nil {
 		e.write(" : ")
 		e.emitTypeSpec(d.ReturnType)
 	}
-	e.write(";")
 	e.newline()
-	e.indent--
+	for _, vb := range d.VarBlocks {
+		e.emitVarBlock(vb)
+	}
+	e.write(e.kw("END_METHOD"))
+	e.newline()
 	e.emitTrailingTrivia(&d.NodeBase)
 }
 
+// emitPropertySignature prints PROPERTY name : type and END_PROPERTY, the
+// form parsePropertySignature accepts.
 func (e *emitter) emitPropertySignature(d *ast.PropertySignature) {
+	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
-	e.indent++
-	e.emitIndent()
 	e.writef("%s %s", e.kw("PROPERTY"), d.Name.Name)
 	if d.Type != nil {
 		e.write(" : ")
 		e.emitTypeSpec(d.Type)
 	}
-	e.write(";")
 	e.newline()
-	e.indent--
+	e.write(e.kw("END_PROPERTY"))
+	e.newline()
 	e.emitTrailingTrivia(&d.NodeBase)
 }
 

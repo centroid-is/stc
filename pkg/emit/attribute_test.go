@@ -157,3 +157,16 @@ func TestEmitEndPragmasKeepTheirAnchor(t *testing.T) {
 		})
 	}
 }
+
+func TestEmitInterfaceSignatures(t *testing.T) {
+	src := "INTERFACE I_X\n{attribute 'TcRpcEnable'}\nMETHOD M : BOOL\nVAR_INPUT\n    a : INT;\nEND_VAR\nEND_METHOD\n{attribute 'monitoring' := 'call'}\nPROPERTY P : INT\nEND_PROPERTY\n{warning restore C0195}\nEND_INTERFACE\n"
+	out := emitClean(t, src, DefaultOptions())
+	assertEmitInOrder(t, out,
+		"INTERFACE I_X\n",
+		"{attribute 'TcRpcEnable'}\n", "METHOD M : BOOL\n", "VAR_INPUT\n", "a : INT;", "END_VAR\n", "END_METHOD\n",
+		"{attribute 'monitoring' := 'call'}\n", "PROPERTY P : INT\n", "END_PROPERTY\n",
+		"{warning restore C0195}\n", "END_INTERFACE\n")
+	if again := emitClean(t, out, DefaultOptions()); again != out {
+		t.Fatalf("emit is not idempotent.\nfirst:\n%s\nsecond:\n%s", out, again)
+	}
+}

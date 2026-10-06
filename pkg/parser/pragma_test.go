@@ -303,6 +303,24 @@ END_FUNCTION_BLOCK
 		require.Equal(t, ast.KindPragma, vd.Pragmas[0].Kind())
 	})
 
+	t.Run("pragmas inside an interface attach to signatures", func(t *testing.T) {
+		f := parseClean(t, "INTERFACE I\n{attribute 'TcRpcEnable'}\nMETHOD M : BOOL\nEND_METHOD\n{warning disable C0001}\nPROPERTY P : INT\nEND_PROPERTY\n{endregion}\nEND_INTERFACE\n")
+		it := f.Declarations[0].(*ast.InterfaceDecl)
+		require.Len(t, it.Methods, 1)
+		require.Equal(t, []string{"TcRpcEnable"}, attrNames(it.Methods[0].Attributes))
+		require.Len(t, it.Properties, 1)
+		require.Len(t, it.Properties[0].Pragmas, 1)
+		require.Len(t, it.EndPragmas, 1)
+		require.Equal(t, "{endregion}", it.EndPragmas[0].Text)
+	})
+
+	t.Run("pragma at EOF of an unterminated interface is kept", func(t *testing.T) {
+		r := Parse("t.st", "INTERFACE I\n{endregion}\n")
+		require.NotEmpty(t, r.Diags)
+		it := r.File.Declarations[0].(*ast.InterfaceDecl)
+		require.Len(t, it.EndPragmas, 1)
+	})
+
 	t.Run("pragma before END_VAR is a block end pragma", func(t *testing.T) {
 		f := parseClean(t, "PROGRAM P\nVAR\n    x : INT;\n    {attribute 'tail'}\n    {region}\nEND_VAR\nEND_PROGRAM\n")
 		vb := f.Declarations[0].(*ast.ProgramDecl).VarBlocks[0]

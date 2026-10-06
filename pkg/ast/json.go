@@ -107,6 +107,7 @@ func nodeToMap(n Node) map[string]interface{} {
 			}
 			m["extends"] = exts
 		}
+		marshalEndAttrs(m, v.EndAttributes, v.EndPragmas)
 
 	case *MethodDecl:
 		m["span"] = v.NodeSpan
@@ -156,6 +157,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *MethodSignature:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}
@@ -167,6 +169,7 @@ func nodeToMap(n Node) map[string]interface{} {
 	case *PropertySignature:
 		m["span"] = v.NodeSpan
 		marshalTrivia(m, &v.NodeBase)
+		marshalAttrs(m, v.Attributes, v.Pragmas)
 		if v.Name != nil {
 			m["name"] = nodeToMap(v.Name)
 		}

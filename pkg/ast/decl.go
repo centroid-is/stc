@@ -157,6 +157,10 @@ type InterfaceDecl struct {
 	Properties []*PropertySignature `json:"properties,omitempty"`
 	Attributes []*Attribute         `json:"attributes,omitempty"`
 	Pragmas    []*PragmaNode        `json:"pragmas,omitempty"`
+	// EndAttributes and EndPragmas sit after the last signature, just
+	// before END_INTERFACE.
+	EndAttributes []*Attribute  `json:"end_attributes,omitempty"`
+	EndPragmas    []*PragmaNode `json:"end_pragmas,omitempty"`
 }
 
 func (n *InterfaceDecl) Children() []Node {
@@ -174,7 +178,7 @@ func (n *InterfaceDecl) Children() []Node {
 	for _, p := range n.Properties {
 		nodes = append(nodes, p)
 	}
-	return nodes
+	return appendAttrs(nodes, n.EndAttributes, n.EndPragmas)
 }
 func (n *InterfaceDecl) declNode() {}
 
@@ -246,13 +250,16 @@ func (n *PropertyDecl) declNode() {}
 // MethodSignature represents a method declaration inside an INTERFACE (no body).
 type MethodSignature struct {
 	NodeBase
-	Name       *Ident      `json:"name"`
-	ReturnType TypeSpec    `json:"return_type,omitempty"`
-	VarBlocks  []*VarBlock `json:"var_blocks,omitempty"`
+	Name       *Ident        `json:"name"`
+	ReturnType TypeSpec      `json:"return_type,omitempty"`
+	VarBlocks  []*VarBlock   `json:"var_blocks,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *MethodSignature) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -269,12 +276,15 @@ func (n *MethodSignature) declNode() {}
 // PropertySignature represents a property declaration inside an INTERFACE (no body).
 type PropertySignature struct {
 	NodeBase
-	Name *Ident   `json:"name"`
-	Type TypeSpec `json:"type,omitempty"`
+	Name       *Ident        `json:"name"`
+	Type       TypeSpec      `json:"type,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *PropertySignature) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
