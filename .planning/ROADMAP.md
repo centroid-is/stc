@@ -507,7 +507,7 @@ Plans:
 
 Plans:
 - [x] 27-01-PLAN.md -- Scenario TOML schema, parser with SCN diagnostics, deterministic executor (ECAT-09)
-- [ ] 27-02-PLAN.md -- Plant target: Network input forces, slave lookup and presets, fixture project, end-to-end jam scenario (ECAT-09)
+- [x] 27-02-PLAN.md -- Plant target: Network input forces, slave lookup and presets, fixture project, end-to-end jam scenario (ECAT-09)
 - [ ] 27-03-PLAN.md -- `stc sim --scenario` with JSON/text report, plus the ST built-in library (ECAT-10, DEVX-01)
 - [ ] 27-04-PLAN.md -- `stc test --project --io` project mode, env-gated ST301 run, docs, validation and coverage gate (DEVX-01)
 
@@ -574,6 +574,6 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 25. EtherCAT Terminal Models | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 4/4 | Complete    | 2026-10-06 |
-| 27. Plant Scenarios & Simulation CLI | v1.2 | 1/4 | In Progress|  |
+| 27. Plant Scenarios & Simulation CLI | v1.2 | 2/4 | In Progress|  |
 | 28. OPC UA Address Space | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 29. Live HMI & Agent Integration | v1.2 | 0/TBD | Not started | - |
