@@ -84,6 +84,8 @@ myfile.st:22:3: warning: unused variable 'temp' (SEMA008)
 
 **Exit codes**: 0 if no errors (warnings allowed), 1 if errors exist.
 
+**TwinCAT projects**: `stc check <x.tsproj|x.plcproj>` imports the project on the fly (see `stc vendor import`) and checks it with its sibling libraries and shipped stubs. Positions point into the original `.TcPOU`/`.TcGVL`/`.TcDUT` files. TwinCAT-specific checker code: SEMA039 warns about an attribute name in double quotes, which TwinCAT ignores.
+
 ---
 
 ### `stc test`
@@ -137,6 +139,8 @@ ok
 
 **Exit codes**: 0 if all tests pass, 1 if any test fails.
 
+**TwinCAT projects**: `stc test tests/ --project x.tsproj` loads the project's POUs, GVLs and DUTs (and sibling library sources) as real code under the tests. Only embedded stubs and `library_paths` stubs are auto-stubbed.
+
 ---
 
 ### `stc sim`
@@ -184,6 +188,8 @@ Cycle    Time         OUTPUT1
 **Output (JSON)**: Full simulation result with per-cycle input/output snapshots.
 
 **Exit codes**: 0 on success, 1 on error.
+
+**TwinCAT projects**: `stc sim <x.tsproj|x.plcproj>` runs the program called by the first task (falling back to the first PROGRAM). `--dt` defaults to that task's cycle time. User FBs and methods from other project files are not registered yet (Phase 23).
 
 ---
 
@@ -356,9 +362,54 @@ No flags. Designed to be launched by editors (e.g., VS Code). Communicates via J
 
 ---
 
+### `stc vendor import`
+
+Import a TwinCAT solution or PLC project into one stc project model.
+
+```
+stc vendor import <x.tsproj|x.plcproj> [--out dir] [--format json] [-D sym]
+```
+
+Reads the tsproj (and `_Config/PLC/*.xti`), the plcproj and every TcPOU, TcGVL and TcDUT it lists, including methods, actions and properties. It reads the PLC name, AMS port and tasks, and resolves library references (project, sibling plcproj, `[build.library_paths]`, embedded stubs; see docs/VENDOR_LIBRARIES.md). Text output summarises the PLC, tasks, source counts and library resolution. `--out dir` writes compact `.st` files at the plcproj paths, libraries under `libs/`, and an `stc.toml`; every target is validated before the first write.
+
+**JSON example** (abridged):
+```json
+{
+  "plc_name": "ST301",
+  "ams_port": 851,
+  "tasks": [{"name": "PlcTask", "cycle_time_ns": 1000000, "priority": 20, "programs": ["MAIN"]}],
+  "sources": [{"rel_path": "POUs/MAIN.TcPOU", "kind": "pou", "name": "MAIN"}],
+  "libraries": [
+    {"name": "SVNCoreComponents", "resolved_from": "sibling"},
+    {"name": "Tc2_EtherCAT", "resolved_from": "stub"},
+    {"name": "Tc2_Standard", "resolved_from": "builtin"}
+  ],
+  "diagnostics": []
+}
+```
+
+`resolved_from` is one of `project`, `sibling`, `library_path`, `stub`, `builtin` or `unresolved`.
+
+**Import diagnostics**:
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| VEND020 | warning | Library reference resolved nowhere |
+| VEND021 | warning | plcproj Compile item with an unsupported extension |
+| VEND022 | info | TwinSAFE project, extra PLC project or non-ST implementation skipped |
+| VEND023 | warning | A CDATA segment could not be placed at its XML line |
+| VEND024 | warning | No task information; a 10 ms default task is used |
+| VEND025 | warning | tsproj and TcTTO cycle times disagree |
+| VEND026 | warning | More than one sibling library candidate |
+| VEND027 | error | A project or object file is not valid XML |
+
+**Exit codes**: 0 on success, 1 on error.
+
+---
+
 ### `stc vendor extract`
 
-Extract function block stubs from TwinCAT project files.
+Extract declaration-only stubs from a TwinCAT project.
 
 ```
 stc vendor extract <path.plcproj> [flags]
@@ -371,19 +422,14 @@ stc vendor extract <path.plcproj> [flags]
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--output` | `-o` | (stdout) | Output directory for extracted `.st` files |
+| `--format` | `-f` | `text` | `json` prints `{"stubs": [...], "diagnostics": [...]}` |
 
-Parses the `.plcproj` XML, finds all referenced `.TcPOU` files, and extracts `FUNCTION_BLOCK` declarations without implementation bodies.
+Renders every POU, GVL, DUT and interface the plcproj lists, in plcproj order. Methods and properties keep their signatures and bodies are dropped. Every stub parses. Items that cannot be converted are reported as diagnostics instead of being skipped.
 
 **Example**:
 ```bash
-# Extract to stdout
-stc vendor extract MyProject.plcproj
-
-# Extract to directory
 stc vendor extract MyProject.plcproj --output vendor/custom/
-# Extracted: FB_Motor -> vendor/custom/FB_Motor.st
-# Extracted: FB_Valve -> vendor/custom/FB_Valve.st
-# 2 POU(s) extracted to vendor/custom/
+stc vendor extract MyProject.plcproj --format json
 ```
 
 **Exit codes**: 0 on success, 1 on error.
