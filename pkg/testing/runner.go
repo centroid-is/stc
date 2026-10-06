@@ -12,6 +12,7 @@ import (
 	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/iomap"
 	"github.com/centroid-is/stc/pkg/pipeline"
+	"github.com/centroid-is/stc/pkg/scenario"
 )
 
 // RunOpts configures mock and library files for the test runner.
@@ -26,6 +27,11 @@ type RunOpts struct {
 	// name wins. Project FBs are real implementations, never auto-stubs.
 	ProjectFiles []*ast.SourceFile
 	Defines      map[string]bool // Preprocessor defines (e.g., STC_TEST)
+	// Plant, when set, switches to project mode (stc test --project with
+	// .st sources or --io): every TEST_CASE runs on a fresh Plant built
+	// from the spec, with the scenario built-ins registered. Library, mock
+	// and project files are then ignored; the spec carries the sources.
+	Plant *scenario.PlantSpec
 }
 
 // DiscoverTestFiles finds all *_test.st files under dir recursively.
@@ -75,7 +81,13 @@ func RunWithOpts(dir string, opts RunOpts) (*RunResult, error) {
 	autoStubbed := make(map[string]bool)
 
 	for _, file := range files {
-		suiteResult, stubs, err := runFileWithOpts(file, dir, extCtx, opts.Defines)
+		var suiteResult *SuiteResult
+		var stubs map[string]bool
+		if opts.Plant != nil {
+			suiteResult, err = runProjectFile(file, dir, opts.Plant, opts.Defines)
+		} else {
+			suiteResult, stubs, err = runFileWithOpts(file, dir, extCtx, opts.Defines)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("running %s: %w", file, err)
 		}
@@ -409,18 +421,7 @@ func executeTestCase(tc *ast.TestCaseDecl, filePath string, ctx *fileContext) Te
 		Error:    runtimeErr,
 	}
 
-	// Convert assertion results
-	for _, ar := range collector.Results {
-		pos := ""
-		if ar.Pos.Line > 0 {
-			pos = fmt.Sprintf("%s:%d:%d", ar.Pos.File, ar.Pos.Line, ar.Pos.Col)
-		}
-		tr.Assertions = append(tr.Assertions, AssertionResultJSON{
-			Passed:   ar.Passed,
-			Message:  ar.Message,
-			Position: pos,
-		})
-	}
+	tr.Assertions = assertionsJSON(collector)
 
 	return tr
 }

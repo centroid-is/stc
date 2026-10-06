@@ -1,0 +1,44 @@
+# Jam scenario on the Demo Device 1/2 fixture project (10 ms scans).
+[scenario]
+name = "jam"
+description = "Photo eye on, OCP trip, EL1008 pulled, drive fault; setpoint ramp"
+
+[[step]]
+cycle = 0
+set = { path = "ECT.A1_01.I1", value = true }
+expect = { path = "ECT.A1_02.O1", value = true, within = 2 }
+
+[[step]]
+at = "50ms"
+ramp = { path = "ECT_Diag.rSetpoint", from = 0.0, to = 50.0, over = "100ms" }
+
+[[step]]
+at = "100ms"
+trip = { slave = "DEMO.A1.03 (EL9222-5500)", channel = 1 }
+expect = { path = "ECT.A1_03.p_stat_Enabled", value = false, within = 2 }
+
+[[step]]
+at = "100ms"
+expect = { path = "ECT.A1_02.O1", value = false, within = 3 }
+
+[[step]]
+at = "160ms"
+expect = { path = "ECT_Diag.rSetpoint", value = 50.0, tol = 1e-3 }
+
+[[step]]
+at = "190ms"
+expect = { path = "ECT_Diag.Device_1_Diag[2].p_stat_bOk", value = true }
+
+[[step]]
+at = "200ms"
+slave_state = { slave = "DEMO.A1.01 (EL1008)", state = "not_present" }
+expect = { path = "ECT_Diag.Device_1_Diag[2].p_stat_bOk", value = false, within = 20 }
+
+[[step]]
+at = "290ms"
+expect = { path = "MAIN.xDriveFault", value = false }
+
+[[step]]
+at = "300ms"
+drive_fault = { slave = "DEMO.CN01.FD01 (ATV320 EtherCAT)", lft = 16 }
+expect = { path = "MAIN.xDriveFault", value = true, within = 10 }

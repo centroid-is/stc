@@ -1,0 +1,9 @@
+# Scenario fixture project: Beckhoff library stubs for stc sim/test runs.
+[project]
+name = "scenario-fixture"
+
+[build]
+vendor_target = "beckhoff"
+
+[build.library_paths]
+beckhoff = "../../../stdlib/vendor/beckhoff"

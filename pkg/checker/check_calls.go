@@ -153,7 +153,7 @@ func (c *Checker) checkInputArg(p types.Parameter, a *ast.CallArg, index int) {
 		if derefRef(ref).Equal(derefRef(argType)) {
 			return
 		}
-	} else if p.Type.Equal(argType) || types.CanWiden(argType.Kind(), p.Type.Kind()) {
+	} else if p.Type.Equal(argType) || untypedAddress(argType, p.Type) || types.CanWiden(argType.Kind(), p.Type.Kind()) {
 		return
 	}
 	c.reportInputArg(p, a, index, argType)
@@ -222,4 +222,16 @@ func findParam(params []types.Parameter, name string) (types.Parameter, bool) {
 		}
 	}
 	return types.Parameter{}, false
+}
+
+// untypedAddress reports whether from is POINTER TO BYTE (the type of
+// ADR) and to is any POINTER TO: TwinCAT converts an address to a typed
+// pointer implicitly (pStateBuf := ADR(aStateBuf)).
+func untypedAddress(from, to types.Type) bool {
+	fp, ok := from.(*types.PointerType)
+	if !ok || fp.BaseType == nil || fp.BaseType.Kind() != types.KindBYTE {
+		return false
+	}
+	_, ok = to.(*types.PointerType)
+	return ok
 }

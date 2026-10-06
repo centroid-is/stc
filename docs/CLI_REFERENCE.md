@@ -141,6 +141,15 @@ ok
 
 **TwinCAT projects**: `stc test tests/ --project x.tsproj` loads the project's POUs, GVLs and DUTs (and sibling library sources) as real code under the tests. Only embedded stubs and `library_paths` stubs are auto-stubbed.
 
+**Project (plant) mode**: `stc test tests/ --project a.st --project b.st ... --io "Device*.xml"` runs every TEST_CASE against a fresh simulated plant. The plant is the whole project with its task schedule and, with `--io`, its EtherCAT network. The test body runs on the project's interpreter, so GVL paths resolve directly, and the scenario built-ins (SET, GET, SIM_*, RUN_CYCLES) are registered. Test files may then contain only TEST_CASEs.
+
+| Flag | Description |
+|------|-------------|
+| `--project` | A `.tsproj`/`.plcproj`, or `.st` files and directories of a project (repeatable, comma-separated allowed) |
+| `--io` | `Device N.xml` EtherCAT exports, globs expanded in sorted order (repeatable) |
+
+Plant mode is selected by any `--io`, or by `--project` values that are `.st` files. A single `.tsproj` without `--io` keeps the import mode above. `--io` without `--project` is a usage error. Without `--io`, SET, GET and RUN_CYCLES work, and the SIM_* built-ins fail with "no --io network loaded".
+
 ---
 
 ### `stc sim`
@@ -206,6 +215,25 @@ Cycle    Time         OUTPUT1
 Deterministic vs realtime: without `--realtime` the run is a pure function of the inputs (virtual clock, no wall-clock reads), so two runs print identical JSON. `--realtime` sleeps to the wall clock and counts a task overrun whenever a tick finishes after the next one was due.
 
 **Output (JSON, project mode)**: `cycles`, `sim_time_ns`, `tasks[{name, cycle_ns, priority, programs, runs, overruns}]`, `get`, `diagnostics`, `warnings`.
+
+**Scenarios**: `--scenario x.toml` runs a scenario file (see [EtherCAT Simulation, Scenarios](ETHERCAT_SIMULATION.md#scenarios)) against the project in deterministic mode. Scenario errors (SCN001 to SCN007) print and exit 1 before the first Tick. `--cycles` overrides the scenario's own length only when given. `--set` applies before the run and `--get` reads after it.
+
+`--io` values containing `*`, `?` or `[` are expanded with a glob, in sorted order. Quote the pattern so the shell passes it through. A pattern without a match is an error.
+
+The scenario JSON keeps every project-mode key and adds four:
+
+| Key | Content |
+|-----|---------|
+| `scenario` | `name`, `cycles`, `sim_time_ns`, `passed`, `steps[]` (each fired step and its Tick), `assertions[{step, path, expected, actual, cycle, pass, message}]`, `diagnostics` |
+| `outputs` | Every TcLinkTo output variable path mapped to its value after the run |
+| `ethercat` | Slaves not in OP, with a bad link or a bad working counter at the end: `{master, slave, name, state, link, wc_bad}` |
+| `diagnostics` | Load, network (ECAT010), binder (SIM001) and scenario (SCN) diagnostics merged and sorted |
+
+Exit codes with `--scenario`: 0 when every assertion passes and no error diagnostic exists, 1 otherwise (including validation errors and runtime errors). SCN010 warnings do not fail the run. Two runs with the same inputs print byte-identical JSON.
+
+```bash
+stc sim MAIN.st ECT.st ECT_Diag.st demo_types.st --io "Demo Device [12].xml" --scenario jam.toml --format json
+```
 
 ```bash
 stc sim "ST301 solution.tsproj" --io "Device 1.xml" --io "Device 2.xml" --cycles 1000 --get ECT_Diag.Device_1_SlaveCount --format json

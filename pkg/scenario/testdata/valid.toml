@@ -1,0 +1,50 @@
+[scenario]
+name = "jam"
+description = "every action kind"
+cycles = 300
+
+[[step]]
+cycle = 0
+set = { path = "ECT.A1_01.I1", value = true }
+
+[[step]]
+at = "100ms"
+trip = { slave = "DEMO.A1.03 (EL9222-5500)", channel = 1 }
+expect = { path = "ECT.A1_03.p_stat_Enabled", value = false, within = 2 }
+
+[[step]]
+at = "200ms"
+slave_state = { slave = "DEMO.A1.01 (EL1008)", state = "not_present" }
+expect = { path = "ECT_Diag.Device_1_Diag[2].p_stat_bOk", value = false, within = 20 }
+
+[[step]]
+cycle = 5
+link = { path = "TIID^Device 1 (EtherCAT)^Term 1^Channel 1^Input", value = "16#FF" }
+
+[[step]]
+cycle = 6
+analog = { slave = "DEMO.A1.04 (EL3024)", channel = 2, ma = 12 }
+
+[[step]]
+cycle = 7
+drive_fault = { slave = "DEMO.A1.05 (ATV320)", lft = 23 }
+
+[[step]]
+cycle = 8
+ramp = { path = "GVL.rSpeed", from = 0, to = 100.5, over = "50ms" }
+
+[[step]]
+cycle = 9
+ramp = { slave = "DEMO.A1.04 (EL3024)", channel = 1, unit = "mA", from = 4, to = 20, over = "1s" }
+
+[[step]]
+cycle = 10
+slave_state = { slave = "DEMO.A1.01 (EL1008)", state = 17 }
+
+[[step]]
+cycle = 11
+serial_peer = { slave = "DEMO.A1.06 (EL6001)", script = "Baader" }
+
+[[step]]
+cycle = 12
+expect = { path = "GVL.rSpeed", value = 100.5, tol = 0.01 }

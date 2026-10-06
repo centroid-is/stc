@@ -503,7 +503,13 @@ Plans:
   1. `stc sim --project ST301.tsproj --io "Device*.xml" --scenario jam.toml --cycles N --format json` runs the project against the simulator and reports outputs and diagnostics, with identical output on repeated runs
   2. A scenario can set an input by variable path or link path, set an analog value, trip an EL9222 channel, pull a slave (not present / link error), raise an ATV320 fault with an LFT code and ramp a value over time, each at a chosen scan
   3. A `*_test.st` using `SET`, `GET`, `SIM_SET_LINK`, `SIM_TRIP`, `SIM_SLAVE_STATE` and `RUN_CYCLES` passes under `stc test` with the project and I/O config loaded, e.g. a removed slave shows up in `ECT_Diag` after N cycles
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 27-01-PLAN.md -- Scenario TOML schema, parser with SCN diagnostics, deterministic executor (ECAT-09)
+- [x] 27-02-PLAN.md -- Plant target: Network input forces, slave lookup and presets, fixture project, end-to-end jam scenario (ECAT-09)
+- [x] 27-03-PLAN.md -- `stc sim --scenario` with JSON/text report, plus the ST built-in library (ECAT-10, DEVX-01)
+- [x] 27-04-PLAN.md -- `stc test --project --io` project mode, env-gated ST301 run, docs, validation and coverage gate (DEVX-01)
 
 ### Phase 28: OPC UA Address Space
 **Goal**: `stc serve` publishes the same OPC UA address space TF6100 would for the project: Beckhoff namespace and NodeIds, exposure decided by `OPC.UA.DA` attributes, correct access levels, data types and struct definitions
@@ -574,6 +580,6 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 25. EtherCAT Terminal Models | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 4/4 | Complete    | 2026-10-06 |
-| 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
+| 27. Plant Scenarios & Simulation CLI | v1.2 | 4/4 | Complete   | 2026-10-06 |
 | 28. OPC UA Address Space | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 29. Live HMI & Agent Integration | v1.2 | 4/4 | Complete   | 2026-10-06 |

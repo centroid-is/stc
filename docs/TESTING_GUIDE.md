@@ -166,22 +166,7 @@ In project mode (`stc sim` and `stc serve` on a project), every `%I*`, `%Q*` and
 
 ### Whole-project tests with EtherCAT and scenarios
 
-> **Lands with Phase 27.** The `--io` flag on `stc test` and the built-ins below are specified but not in this build yet.
-
-```bash pending-phase-27
-stc test tests/ --project project.tsproj --io "Device*.xml"
-```
-
-Each TEST_CASE gets a fresh project and network. The test body runs on the project's interpreter, so GVL paths resolve directly. In this mode a test file may contain only TEST_CASEs.
-
-| Built-in | Effect |
-|----------|--------|
-| `SET(path, value)`, `GET(path)` | Set or read any project variable by path |
-| `RUN_CYCLES(n)` | Run n project ticks on the task schedule |
-| `ADVANCE_TIME(d)` | Run d divided by the base tick |
-| `SIM_SET_LINK`, `SIM_TRIP`, `SIM_SLAVE_STATE`, `SIM_ANALOG`, `SIM_DRIVE_FAULT`, `SIM_RAMP`, `SIM_SERIAL_PEER` | Drive the EtherCAT device models |
-
-SET, GET and RUN_CYCLES work without `--io`. The SIM_* built-ins fail with "no --io network loaded" when no exports are given. Scenario files use the same stimuli; see [ETHERCAT_SIMULATION.md](ETHERCAT_SIMULATION.md#scenarios).
+`stc test --project ... --io "Device*.xml"` runs each TEST_CASE against a fresh project and EtherCAT network, with the SET, GET, RUN_CYCLES and SIM_* built-ins registered. See [Testing against the simulated plant](#testing-against-the-simulated-plant). Scenario files use the same stimuli; see [ETHERCAT_SIMULATION.md](ETHERCAT_SIMULATION.md#scenarios).
 
 ## Vendor FB Mocking
 
@@ -253,6 +238,54 @@ stc ships behavioral mocks for common Beckhoff FBs in `stdlib/mocks/beckhoff/`. 
 - MC_Home: Simulates homing sequence
 - MC_Stop: Simulates deceleration
 - ADSREAD: Returns configurable response data
+
+## Testing against the simulated plant
+
+`stc test` can run tests against the whole project and its EtherCAT network instead of isolated units. Pass the project sources with `--project` and the EtherCAT exports with `--io`:
+
+```bash
+stc test tests/ --project demo_types.st --project ECT.st --project ECT_Diag.st --project MAIN.st \
+  --io "Demo Device [12].xml"
+```
+
+Each TEST_CASE starts from a fresh project and network, so a slave pulled in one case is healthy in the next. The body runs on the project's interpreter: GVL paths such as `ECT.A1_01.I1` read directly, and program variables read through `GET('MAIN.x')`. In this mode a test file may contain only TEST_CASEs. Declare functions, function blocks, types and GVLs in the project.
+
+| Built-in | Arguments | Effect |
+|----------|-----------|--------|
+| `SET` | `path : STRING, value : ANY` | Writes a variable. A TcLinkTo-bound input is forced on its slot and reads back after the next scan. |
+| `GET` | `path : STRING` returns ANY | Reads a variable or a `TIID^...` link slot. Enums return their name as a STRING. |
+| `SIM_SET_LINK` | `link : STRING, value : ANY` | Forces an input slot by link path. |
+| `SIM_TRIP` | `slave : STRING, channel : INT` | Trips an EL9222 OCP channel. |
+| `SIM_SLAVE_STATE` | `slave : STRING, state : STRING or INT` | Applies a preset (`not_present`, `link_error`, `init`, `preop`, `safeop`, `op`, `ok`) or a raw state. |
+| `SIM_ANALOG` | `slave : STRING, channel : INT, value : REAL [, unit : STRING]` | Sets an analog input. The unit is `mA`, `V` or `raw`, and defaults to `raw` (the process-data count). |
+| `SIM_DRIVE_FAULT` | `slave : STRING, lft : INT` | Injects an ATV320 fault code (0 clears it). |
+| `SIM_SERIAL_PEER` | `slave : STRING, script : STRING` | Attaches the `baader` or `loopback` peer to an EL6001, or detaches it with `none`. |
+| `SIM_RAMP` | `path : STRING, from : REAL, to : REAL, over : TIME` | Ramps a variable linearly, written before every following scan. |
+| `RUN_CYCLES` | `n : DINT` | Runs n scans of the whole project (0 to 10 000 000). |
+| `ADVANCE_TIME` | `d : TIME` | Runs d / base tick scans. d must be a multiple of the base tick. |
+
+Slave names follow the scenario rules: exact, then case-insensitive, then the unique prefix before ` (`. The semantics match the scenario actions in [EtherCAT Simulation](ETHERCAT_SIMULATION.md#scenarios). Without `--io`, SET, GET, RUN_CYCLES and ADVANCE_TIME work, and the SIM_* built-ins fail with "no --io network loaded".
+
+Example from `tests/ecat_fixtures/scenario/scenario_test.st`:
+
+```iecst
+TEST_CASE 'removed slave shows in ECT_Diag'
+RUN_CYCLES(20);
+ASSERT_TRUE(ECT_Diag.Device_1_Diag[2].p_stat_bOk, 'EL1008 OK before removal');
+SIM_SLAVE_STATE('DEMO.A1.01 (EL1008)', 'not_present');
+RUN_CYCLES(20);
+ASSERT_FALSE(ECT_Diag.Device_1_Diag[2].p_stat_bOk, 'EL1008 not OK after removal');
+ASSERT_TRUE(ECT_Diag.Device_1_Diag[2].p_stat_nLinkState <> 0, 'link state reports the removal');
+END_TEST_CASE
+
+TEST_CASE 'drive fault'
+RUN_CYCLES(30);
+ASSERT_FALSE(GET('MAIN.xDriveFault'), 'no fault before');
+SIM_DRIVE_FAULT('DEMO.CN01.FD01 (ATV320 EtherCAT)', 16);
+RUN_CYCLES(10);
+ASSERT_TRUE(GET('MAIN.xDriveFault'), 'CiA402 fault bit in ETA');
+END_TEST_CASE
+```
 
 ## JUnit XML for CI
 

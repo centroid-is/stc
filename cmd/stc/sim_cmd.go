@@ -35,7 +35,13 @@ MAIN every 10ms), to --project, and whenever --io, --persist, --realtime or
 cycles) and the JSON result has cycles, sim_time_ns, tasks (runs, overruns),
 get, diagnostics and warnings. --realtime runs free-running against the wall
 clock for --duration (or until SIGINT/SIGTERM) instead of --cycles.
---wave and --dt apply to single-file mode only.`,
+--wave and --dt apply to single-file mode only. --io values may be globs
+("Device*.xml").
+
+--scenario x.toml (project mode) drives the project with a scenario: timed
+input sets, ramps, EtherCAT faults and expects. --cycles overrides the
+scenario length. The result adds a scenario report; a failed expect or a
+scenario that does not validate exits 1.`,
 		RunE: runSim,
 	}
 
@@ -51,6 +57,7 @@ clock for --duration (or until SIGINT/SIGTERM) instead of --cycles.
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
 	cmd.Flags().StringSlice("project", nil, "Run in project mode: a .tsproj/.plcproj or .st files (alternative to positional arguments)")
 	cmd.Flags().Bool("realtime", false, "Project mode: run free-running against the wall clock for --duration (or until SIGINT/SIGTERM)")
+	cmd.Flags().String("scenario", "", "Project mode: run a scenario TOML file (inputs, faults, expects) and report it")
 	cmd.Flags().Duration("duration", 0, "Wall time to run with --realtime (0 = until SIGINT/SIGTERM)")
 	addProjectRunFlags(cmd)
 
@@ -86,6 +93,9 @@ func runSim(cmd *cobra.Command, args []string) error {
 
 	if isSimProjectMode(cmd, args) {
 		return runSimProject(cmd, args, defines, format)
+	}
+	if cmd.Flags().Changed("scenario") {
+		return errors.New("--scenario requires project mode: pass several .st files, a .tsproj/.plcproj, --project or --io")
 	}
 	if len(args) != 1 {
 		return fmt.Errorf("accepts 1 arg(s), received %d", len(args))
@@ -199,6 +209,10 @@ func runSimProject(cmd *cobra.Command, args []string, defines map[string]bool, f
 	case cycles < 0:
 		return fmt.Errorf("--cycles must not be negative, got %d", cycles)
 	}
+	scenarioPath, _ := cmd.Flags().GetString("scenario")
+	if realtime && scenarioPath != "" {
+		return errors.New("--scenario runs deterministic ticks; it cannot be combined with --realtime")
+	}
 	setFlags, _ := cmd.Flags().GetStringArray("set")
 	getFlags, _ := cmd.Flags().GetStringArray("get")
 	sets, err := parseSetFlags(setFlags)
@@ -210,6 +224,13 @@ func runSimProject(cmd *cobra.Command, args []string, defines map[string]bool, f
 	r, err := projectSetup(cmd, inputs, defines, projectSetupOpts{Sets: sets}, errOut)
 	if err != nil {
 		return err
+	}
+	if scenarioPath != "" {
+		n := 0 // the scenario's own length (D-09)
+		if cmd.Flags().Changed("cycles") {
+			n = cycles
+		}
+		return errors.Join(runSimScenario(cmd, r, scenarioPath, n, getFlags, format), r.save())
 	}
 	if realtime {
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/projectload"
+	"github.com/centroid-is/stc/pkg/scenario"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +38,7 @@ func addProjectRunFlags(cmd *cobra.Command) {
 // projectRunner is a loaded project ready to run.
 type projectRunner struct {
 	P        *interp.Project
+	Plant    *scenario.Plant // P with its EtherCAT network (scenarios)
 	Spec     interp.ProjectSpec
 	Analysis analyzer.AnalysisResult // symbol table for the OPC UA address space
 	// BeforeTick hooks run on the scan goroutine between Ticks of runFree
@@ -80,30 +84,31 @@ func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, 
 			return nil, fmt.Errorf("--cycle cannot override the %d task cycles of the project", len(spec.Tasks))
 		}
 	}
-	p, err := interp.LoadProject(spec)
+	ioFlags, _ := cmd.Flags().GetStringSlice("io")
+	ioFiles, err := expandIOGlobs(ioFlags)
 	if err != nil {
-		return nil, fmt.Errorf("initialisation error: %w", err)
+		return nil, err
 	}
-	r := &projectRunner{P: p, Spec: spec, Analysis: res}
+	plant, eds, err := buildPlant(spec, ioFiles)
+	for _, d := range eds {
+		if d.Severity == diag.Error {
+			fmt.Fprintln(errOut, d.String())
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	p := plant.Project()
+	r := &projectRunner{P: p, Plant: plant, Spec: spec, Analysis: res, Binder: plant.IOBinder()}
 	for _, d := range ds {
 		if d.Severity != diag.Error {
 			r.Diags = append(r.Diags, d)
 		}
 	}
-	ioFiles, _ := cmd.Flags().GetStringSlice("io")
-	if len(ioFiles) > 0 {
-		b, eds, err := attachECat(p, spec, ioFiles)
-		for _, d := range eds {
-			if d.Severity == diag.Error {
-				fmt.Fprintln(errOut, d.String())
-			} else {
-				r.Diags = append(r.Diags, d)
-			}
+	for _, d := range eds {
+		if d.Severity != diag.Error {
+			r.Diags = append(r.Diags, d)
 		}
-		if err != nil {
-			return nil, err
-		}
-		r.Binder = b
 	}
 	r.PersistPath, _ = cmd.Flags().GetString("persist")
 	r.PersistEvery, _ = cmd.Flags().GetDuration("persist-interval")
@@ -127,14 +132,51 @@ func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, 
 	return r, nil
 }
 
-// attachECat attaches the --io network to p; see projectload.AttachECat.
-func attachECat(p *interp.Project, spec interp.ProjectSpec, ioFiles []string) (*interp.IOBinder, []diag.Diagnostic, error) {
-	e, ds, err := projectload.AttachECat(p, spec, ioFiles)
+// buildPlant loads the project as a scenario.Plant: with ioFiles it loads
+// the EtherCAT exports, resolves the project's TcLinkTo links against them
+// and attaches the network (Tc2_EtherCAT mocks and IOBinder). Resolve
+// errors (unresolved links, size or direction mismatches) fail with every
+// diagnostic returned; warnings are returned with a nil error.
+func buildPlant(spec interp.ProjectSpec, ioFiles []string) (*scenario.Plant, []diag.Diagnostic, error) {
+	ps, err := scenario.BuildPlantSpec(spec, ioFiles)
 	if err != nil {
-		return nil, ds, err
+		if ps.Topology == nil {
+			return nil, nil, fmt.Errorf("--io: %w", err)
+		}
+		return nil, ps.Diagnostics, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", countErrors(ps.Diagnostics))
 	}
-	return e.Binder, ds, nil
+	plant, err := ps.New()
+	if err != nil {
+		return nil, ps.Diagnostics, fmt.Errorf("initialisation error: %w", err)
+	}
+	return plant, ps.Diagnostics, nil
 }
+
+// expandIOGlobs expands --io values containing *, ? or [ with
+// filepath.Glob (sorted); a pattern without a match is an error. Other
+// values are kept as given.
+func expandIOGlobs(values []string) ([]string, error) {
+	var out []string
+	for _, v := range values {
+		if !strings.ContainsAny(v, "*?[") {
+			out = append(out, v)
+			continue
+		}
+		m, err := filepath.Glob(v)
+		if err != nil {
+			return nil, fmt.Errorf("--io %q: %w", v, err)
+		}
+		if len(m) == 0 {
+			return nil, fmt.Errorf("--io %q matches no file", v)
+		}
+		sort.Strings(m)
+		out = append(out, m...)
+	}
+	return out, nil
+}
+
+// countErrors counts the error-severity diagnostics of ds.
+func countErrors(ds []diag.Diagnostic) int { return projectload.CountErrors(ds) }
 
 // ticks runs n deterministic Ticks; the first Tick error stops the run.
 func (r *projectRunner) ticks(n int) error {

@@ -47,16 +47,18 @@ type ecatServices struct {
 // by the IOBinder when one is attached to the same network, otherwise by the
 // mocks themselves at the same point of the scan.
 func (e *ScanCycleEngine) SetNetwork(net *ecat.Network) {
-	in := e.interp
 	if net == nil {
 		e.ecat = nil
-		in.fbOverrides = nil
-		delete(in.LocalFunctions, "F_CREATEAMSNETID")
-		delete(in.localParams, "F_CREATEAMSNETID")
+		e.interp.detachNetwork()
 		return
 	}
+	e.ecat = e.interp.attachNetwork(net)
+}
+
+// attachNetwork installs the Tc2_EtherCAT mocks for net on the interpreter
+// and returns their shared backend.
+func (in *Interpreter) attachNetwork(net *ecat.Network) *ecatServices {
 	s := &ecatServices{net: net, interp: in}
-	e.ecat = s
 	in.fbOverrides = ecatFBFactories(s)
 	in.RegisterFunction("F_CREATEAMSNETID", func(args []Value, _ ast.Pos) (Value, error) {
 		return createAmsNetID(args)
@@ -65,6 +67,14 @@ func (e *ScanCycleEngine) SetNetwork(net *ecat.Network) {
 		in.localParams = map[string][]string{}
 	}
 	in.localParams["F_CREATEAMSNETID"] = []string{"NIDS"}
+	return s
+}
+
+// detachNetwork removes the Tc2_EtherCAT mocks from the interpreter.
+func (in *Interpreter) detachNetwork() {
+	in.fbOverrides = nil
+	delete(in.LocalFunctions, "F_CREATEAMSNETID")
+	delete(in.localParams, "F_CREATEAMSNETID")
 }
 
 // preScan counts the scan and steps the network unless the IOBinder steps it.

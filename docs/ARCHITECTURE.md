@@ -180,7 +180,7 @@ The interpreter side is `interp.IOBinder`, attached with `ScanCycleEngine.SetIOB
 
 The codec decodes by declared type and slot width and never reads past a slot. Bindings that cannot be decoded are dropped and reported through `IOBinder.Errors()`. A nil binder leaves the scan cycle unchanged.
 
-Device models for specific terminals and drives arrive in Phases 25 and 26 through the `Registry`. Scenario scripting on top of the fault API arrives in Phase 27.
+Device models for specific terminals and drives arrive in Phases 25 and 26 through the `Registry`. Scenario files (`stc sim --scenario`) script the fault API; see ETHERCAT_SIMULATION.md.
 
 ### Project runtime (pkg/interp)
 

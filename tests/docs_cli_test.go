@@ -22,8 +22,7 @@ type helpFunc func(binary string, path []string) (string, error)
 //
 // Only blocks tagged bash, sh, shell, console or untagged are checked. A
 // block whose info string has a second word (for example
-// "bash pending-phase-27") documents a feature that has not landed and is
-// skipped. Each line may start with a "$ " prompt.
+// "bash not-checked") is skipped. Each line may start with a "$ " prompt.
 func checkDocLines(file, content string, help helpFunc) []string {
 	c := &docChecker{help: help, cache: map[string]helpInfo{}}
 	var fails []string
@@ -236,7 +235,7 @@ func TestDocsCLICheckerUnit(t *testing.T) {
 		"```text",                   // 9
 		"stc serve --notchecked",    // 10
 		"```",                       // 11
-		"```bash pending-phase-27",  // 12
+		"```bash not-checked",       // 12
 		"stc serve --scenario x",    // 13
 		"```",                       // 14
 		"stc serve --outside-fence", // 15

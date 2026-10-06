@@ -140,6 +140,17 @@ func (interp *Interpreter) SetDt(dt time.Duration) {
 	interp.clock += dt
 }
 
+// SaveCallState saves the scan dt and the call depth and resets the depth,
+// returning a function that restores both. Built-ins that tick the project
+// from inside a running ST body (RUN_CYCLES) use it so the PROGRAMs start
+// at depth 0 and the caller resumes with its own dt; the virtual clock
+// keeps the time the ticks advanced.
+func (interp *Interpreter) SaveCallState() (restore func()) {
+	dt, depth := interp.dt, interp.callDepth
+	interp.callDepth = 0
+	return func() { interp.dt, interp.callDepth = dt, depth }
+}
+
 // Clock returns the interpreter's virtual time, advanced by ADVANCE_TIME.
 func (interp *Interpreter) Clock() time.Duration {
 	return interp.clock
