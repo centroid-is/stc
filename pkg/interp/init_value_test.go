@@ -249,7 +249,6 @@ func TestInitErrors(t *testing.T) {
 	cases := map[string]struct{ decl, want string }{
 		"too many elements":   {"a : ARRAY[1..2] OF INT := [1, 2, 3];", "more elements"},
 		"repetition overflow": {"a : ARRAY[1..2] OF INT := [5(1)];", "more elements"},
-		"bad repetition":      {"a : ARRAY[1..2] OF INT := [K(1)];", "repetition count"},
 		"unknown field":       {"s : ST_A := (zz := 1);", "no member 'zz'"},
 		"array init on INT":   {"i : INT := [1, 2];", "array initialiser"},
 		"struct init on INT":  {"i : INT := (a := 1);", "structure initialiser"},
@@ -373,4 +372,74 @@ END_PROGRAM`)
 	}
 	require.NoError(t, eng.Tick(0))
 	assert.Equal(t, int64(20), initVar(t, eng, "r").Int)
+}
+
+func TestInitRepetitionCountAST(t *testing.T) {
+	// The parser only builds N(v) with a literal N; a non-constant count can
+	// still reach evalInit from a hand-built AST.
+	in := New()
+	at := &ast.ArrayType{
+		Ranges: []*ast.SubrangeSpec{{
+			Low:  &ast.Literal{LitKind: ast.LitInt, Value: "1"},
+			High: &ast.Literal{LitKind: ast.LitInt, Value: "2"},
+		}},
+		ElementType: &ast.NamedType{Name: &ast.Ident{Name: "INT"}},
+	}
+	init := &ast.ArrayInit{Elements: []*ast.ArrayInitElem{{
+		Count: &ast.Ident{Name: "K"},
+		Value: &ast.Literal{LitKind: ast.LitInt, Value: "1"},
+	}}}
+	env := NewEnv(nil)
+	_, err := in.evalInit(env, at, init, in.zeroOf(at, env))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "repetition count K")
+}
+
+func TestInitHelpers(t *testing.T) {
+	res := parser.Parse("X.st", `PROGRAM P VAR x : INT := -(G.a + 2) * b; END_VAR END_PROGRAM`)
+	init := res.File.Declarations[0].(*ast.ProgramDecl).VarBlocks[0].Declarations[0].InitValue
+	assert.Equal(t, "-(G.a + 2) * b", exprText(init))
+	assert.Equal(t, "<expression>", exprText(&ast.StructInit{}))
+	assert.Equal(t, "<expression>", exprText(&ast.MemberAccessExpr{Object: &ast.Ident{Name: "G"}}))
+
+	in := New()
+	_, ok := in.constLookup(nil)("NOGVL", "C")
+	assert.False(t, ok)
+	_, ok = in.constLookup(nil)("", "C")
+	assert.False(t, ok)
+
+	eng := initEngine(t, initSource{"G.st", "VAR_GLOBAL C : INT := 3; S : STRING := 'x'; END_VAR"})
+	n, ok := eng.interp.constLookup(nil)("", "C")
+	assert.True(t, ok)
+	assert.Equal(t, int64(3), n)
+	_, ok = eng.interp.constLookup(nil)("G", "S")
+	assert.False(t, ok)
+
+	// A named type that resolves to an unknown name stops at that name.
+	in.TypeDecls = map[string]ast.TypeSpec{"T_A": &ast.NamedType{Name: &ast.Ident{Name: "T_MISSING"}}}
+	ts := in.resolveSpec(&ast.NamedType{Name: &ast.Ident{Name: "T_A"}})
+	assert.Equal(t, "T_MISSING", ts.(*ast.NamedType).Name.Name)
+	// A self-referential alias stops after the nesting limit.
+	in.TypeDecls = map[string]ast.TypeSpec{"T_A": &ast.NamedType{Name: &ast.Ident{Name: "T_A"}}}
+	ts = in.resolveSpec(&ast.NamedType{Name: &ast.Ident{Name: "T_A"}})
+	assert.Equal(t, "T_A", ts.(*ast.NamedType).Name.Name)
+}
+
+func TestInitBoundEdges(t *testing.T) {
+	eng := initEngine(t, initSource{"P.st", `
+PROGRAM P
+VAR
+    a : ARRAY[LOW_UNKNOWN..3] OF INT;
+    b : ARRAY[20000..20005] OF INT;
+    t1 : TON := (PT := nope);
+END_VAR
+END_PROGRAM`})
+	txt := initErrText(eng)
+	assert.Contains(t, txt, "LOW_UNKNOWN")
+	assert.Contains(t, txt, "exceeds")
+	assert.Contains(t, txt, "undefined variable: nope")
+	assert.Len(t, initVar(t, eng, "a").Array, 4)
+	b := initVar(t, eng, "b")
+	assert.Len(t, b.Array, maxArraySlots)
+	assert.Equal(t, 0, b.ArrayLow)
 }

@@ -163,15 +163,15 @@ func (interp *Interpreter) bindArgs(env, callee *Env, blocks []*ast.VarBlock, po
 // value of its type when it has none or the initialiser cannot be evaluated
 // yet (aggregate initialisers are applied at runtime from Phase 22 on).
 func (interp *Interpreter) initialValue(env *Env, vd *ast.VarDecl, resolve TypeResolver) Value {
+	// Per-call locals: constant bounds resolve, but failures are not
+	// recorded in InitErrors (they would repeat on every call).
+	zero := zeroFromType(vd.Type, typeCtx{resolve: resolve, consts: interp.constLookup(env)}, 0)
 	if vd.InitValue != nil {
-		if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-			if iv.IsAggregate() {
-				iv = iv.Clone()
-			}
-			return iv
+		if iv, err := interp.evalInit(env, vd.Type, vd.InitValue, zero); err == nil {
+			return iv.Clone()
 		}
 	}
-	return zeroFromTypeSpecWith(vd.Type, resolve, 0)
+	return zero
 }
 
 // writeBack copies VAR_IN_OUT values and `=>` outputs from callee to their

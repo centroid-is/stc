@@ -197,41 +197,10 @@ func (e *ScanCycleEngine) SetGlobals(gvls []*ast.GVLDecl) {
 	}
 }
 
-// initVarDecl defines every name of vd in env. Stdlib FB types become fresh
-// stdlib instances, user FB types registered in FBDecls become live user FB
-// instances whose env has fbParent as parent, and anything else gets the zero value
-// of its type (resolving user TYPEs through TypeDecls) or its initialiser.
-// Each name gets its own value, so aggregates are never shared between names.
+// initVarDecl defines every name of vd in env through instantiateVar.
 // Shared by program and GVL environments.
 func (interp *Interpreter) initVarDecl(env, fbParent *Env, vd *ast.VarDecl) {
-	typeName := typeNameFromSpec(vd.Type)
-	upperType := strings.ToUpper(typeName)
-	factory, isStdlibFB := StdlibFBFactory[upperType]
-	var fbDecl *ast.FunctionBlockDecl
-	if !isStdlibFB && typeName != "" && interp.FBDecls != nil {
-		fbDecl = interp.FBDecls[upperType]
-	}
-
-	for _, n := range vd.Names {
-		var val Value
-		switch {
-		case isStdlibFB:
-			val = Value{Kind: ValFBInstance, FBRef: &FBInstance{TypeName: typeName, FB: factory()}}
-		case fbDecl != nil:
-			val = Value{Kind: ValFBInstance, FBRef: NewUserFBInstance(typeName, fbDecl, interp, fbParent)}
-		default:
-			val = interp.zeroOf(vd.Type, env)
-			if vd.InitValue != nil {
-				if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-					val = storeAs(val, iv)
-				}
-			}
-			if val.IsAggregate() {
-				val = val.Clone()
-			}
-		}
-		env.Define(n.Name, val)
-	}
+	interp.instantiateVar(env, fbParent, vd, 0)
 }
 
 // initializeEnv creates and populates the program environment from VarBlocks.

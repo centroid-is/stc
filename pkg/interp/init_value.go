@@ -161,9 +161,32 @@ func (interp *Interpreter) resolveSpec(ts ast.TypeSpec) ast.TypeSpec {
 	return ts
 }
 
-// evalInit applies initialiser init to zero, the current value of a
-// variable of type ts.
+// evalInit applies initialiser init to zero, the current (default) value of
+// a variable of type ts, and returns the result:
+//
+//   - an ArrayInit fills elements from the lower bound on, expanding N(v)
+//     repetitions; elements it does not reach keep their default;
+//   - a StructInit sets the named members and leaves the others at their
+//     TYPE defaults;
+//   - anything else is evaluated and stored with storeAs.
+//
+// Nested initialisers recurse with the element or member type. On error the
+// value built so far is returned with the error.
 func (interp *Interpreter) evalInit(env *Env, ts ast.TypeSpec, init ast.Expr, zero Value) (Value, error) {
+	switch in := init.(type) {
+	case *ast.ArrayInit:
+		at, ok := interp.resolveSpec(ts).(*ast.ArrayType)
+		if !ok || zero.Kind != ValArray {
+			return zero, initError(in, "array initialiser for non-array type")
+		}
+		return interp.evalArrayInit(env, at, in, zero.Clone())
+	case *ast.StructInit:
+		st, ok := interp.resolveSpec(ts).(*ast.StructType)
+		if !ok || zero.Kind != ValStruct {
+			return zero, initError(in, "structure initialiser for non-structure type")
+		}
+		return interp.evalStructInit(env, st, in, zero.Clone())
+	}
 	v, err := interp.evalExpr(env, init)
 	if err != nil {
 		return zero, err
@@ -172,6 +195,168 @@ func (interp *Interpreter) evalInit(env *Env, ts ast.TypeSpec, init ast.Expr, ze
 		v = v.Clone()
 	}
 	return storeAs(zero, v), nil
+}
+
+// evalArrayInit fills out from in. The number of elements, repetitions
+// included, is checked against the array length before anything is
+// expanded, so a huge repetition count cannot allocate or loop.
+func (interp *Interpreter) evalArrayInit(env *Env, at *ast.ArrayType, in *ast.ArrayInit, out Value) (Value, error) {
+	length := int64(len(out.Array) - out.ArrayLow)
+	j := int64(0)
+	for _, el := range in.Elements {
+		count := int64(1)
+		if el.Count != nil {
+			n, ok := ast.ConstIntValue(el.Count, interp.constLookup(env))
+			if !ok || n < 0 {
+				return out, initError(el, "cannot evaluate repetition count "+exprText(el.Count))
+			}
+			count = n
+		}
+		if count > length-j {
+			return out, initError(el, fmt.Sprintf("array initialiser has more elements than the array length %d", length))
+		}
+		for range count {
+			slot := out.ArrayLow + int(j)
+			j++
+			if el.Value == nil {
+				continue // N() keeps the default
+			}
+			v, err := interp.evalInit(env, at.ElementType, el.Value, out.Array[slot])
+			out.Array[slot] = v
+			if err != nil {
+				return out, err
+			}
+		}
+	}
+	return out, nil
+}
+
+// evalStructInit sets the members named in in on out.
+func (interp *Interpreter) evalStructInit(env *Env, st *ast.StructType, in *ast.StructInit, out Value) (Value, error) {
+	for _, f := range in.Fields {
+		key := strings.ToUpper(f.Name.Name)
+		cur, ok := out.Struct[key]
+		var member *ast.StructMember
+		for _, m := range st.Members {
+			if m.Name != nil && strings.EqualFold(m.Name.Name, f.Name.Name) {
+				member = m
+			}
+		}
+		if !ok || member == nil {
+			return out, initError(f, fmt.Sprintf("structure has no member '%s'", f.Name.Name))
+		}
+		v, err := interp.evalInit(env, member.Type, f.Value, cur)
+		out.Struct[key] = v
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// initFB applies a FB variable's initialiser (fb : FB_X := (a := 1)) to the
+// fresh instance inst. Members are inputs or variables of the FB (and its
+// EXTENDS bases); values evaluate in env, the declaring scope.
+func (interp *Interpreter) initFB(env *Env, inst *FBInstance, init ast.Expr) error {
+	si, ok := init.(*ast.StructInit)
+	if !ok {
+		return initError(init, "structure initialiser expected for function block "+inst.TypeName)
+	}
+	for _, f := range si.Fields {
+		if inst.FB != nil {
+			v, err := interp.evalExpr(env, f.Value)
+			if err != nil {
+				return err
+			}
+			inst.FB.SetInput(f.Name.Name, v)
+			continue
+		}
+		cur, found := inst.Env.GetLocal(f.Name.Name)
+		vd := fbVarDecl(inst.Decl, interp, f.Name.Name)
+		if !found || vd == nil {
+			return initError(f, fmt.Sprintf("function block %s has no member '%s'", inst.TypeName, f.Name.Name))
+		}
+		v, err := interp.evalInit(env, vd.Type, f.Value, cur)
+		if err != nil {
+			return err
+		}
+		inst.Env.Define(f.Name.Name, v)
+	}
+	return nil
+}
+
+// fbVarDecl finds the declaration of variable name in decl or its EXTENDS
+// bases; the most derived declaration wins.
+func fbVarDecl(decl *ast.FunctionBlockDecl, interp *Interpreter, name string) *ast.VarDecl {
+	var found *ast.VarDecl
+	for _, d := range fbExtendsChain(decl, interp) {
+		for _, vb := range d.VarBlocks {
+			for _, vd := range vb.Declarations {
+				for _, n := range vd.Names {
+					if strings.EqualFold(n.Name, name) {
+						found = vd
+					}
+				}
+			}
+		}
+	}
+	return found
+}
+
+// instantiateVar defines every name of vd in env. It is the one
+// instantiation path for program, GVL and FB variables (and so for the
+// variables inherited through EXTENDS):
+//
+//   - stdlib FB types become fresh stdlib instances;
+//   - user FB types registered in FBDecls become live instances at nesting
+//     depth depth, whose env has fbParent as parent;
+//   - anything else gets its type's default (constant bounds, TYPE and
+//     member defaults) with the initialiser applied by evalInit.
+//
+// Each name gets its own value, so aggregates are never shared. Initialiser
+// failures are recorded in InitErrors; the variable keeps the value built so
+// far.
+func (interp *Interpreter) instantiateVar(env, fbParent *Env, vd *ast.VarDecl, depth int) {
+	typeName := typeNameFromSpec(vd.Type)
+	upperType := strings.ToUpper(typeName)
+	var factory func() StandardFB
+	var fbDecl *ast.FunctionBlockDecl
+	if typeName != "" && depth <= maxFBNestDepth {
+		factory = StdlibFBFactory[upperType]
+		if factory == nil && interp.FBDecls != nil {
+			fbDecl = interp.FBDecls[upperType]
+		}
+	}
+
+	for _, n := range vd.Names {
+		var val Value
+		switch {
+		case factory != nil:
+			val = MakeFBInstanceValue(typeName, factory())
+		case fbDecl != nil:
+			val = Value{Kind: ValFBInstance, FBRef: newUserFBInstanceDepth(typeName, fbDecl, interp, fbParent, depth)}
+		default:
+			val = interp.zeroOf(vd.Type, env)
+			if vd.InitValue != nil {
+				v, err := interp.evalInit(env, vd.Type, vd.InitValue, val)
+				if err != nil {
+					interp.recordInitErr(err)
+				}
+				val = v
+			}
+			if val.IsAggregate() {
+				val = val.Clone()
+			}
+			env.Define(n.Name, val)
+			continue
+		}
+		if vd.InitValue != nil {
+			if err := interp.initFB(env, val.FBRef, vd.InitValue); err != nil {
+				interp.recordInitErr(err)
+			}
+		}
+		env.Define(n.Name, val)
+	}
 }
 
 // exprText renders a constant expression for error messages.

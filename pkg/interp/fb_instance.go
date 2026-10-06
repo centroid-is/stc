@@ -91,56 +91,25 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 		}
 	}
 
-	// Walk VarBlocks, initialize variables, and track input/output names
-	resolve := interp.TypeResolverFunc()
-	var varBlocks []*ast.VarBlock
-	for _, d := range chain {
-		varBlocks = append(varBlocks, d.VarBlocks...)
+	if interp == nil {
+		interp = New()
 	}
-	for _, vb := range varBlocks {
-		for _, vd := range vb.Declarations {
-			// FB-typed member: instantiate rather than zero-fill. One shared
-			// value must never be defined for several names, so instantiate
-			// per name below.
-			typeName := typeNameFromSpec(vd.Type)
-			upperType := strings.ToUpper(typeName)
-			isStdlibFB := false
-			var nestedDecl *ast.FunctionBlockDecl
-			if typeName != "" && depth < maxFBNestDepth {
-				if _, ok := StdlibFBFactory[upperType]; ok {
-					isStdlibFB = true
-				} else if interp != nil && interp.FBDecls != nil {
-					nestedDecl = interp.FBDecls[upperType]
-				}
-			}
-
-			for _, n := range vd.Names {
-				var val Value
-				switch {
-				case isStdlibFB:
-					val = MakeFBInstanceValue(typeName, StdlibFBFactory[upperType]())
-				case nestedDecl != nil:
-					nested := newUserFBInstanceDepth(typeName, nestedDecl, interp, env, depth+1)
-					val = Value{Kind: ValFBInstance, FBRef: nested}
-				default:
-					val = zeroFromTypeSpecWith(vd.Type, resolve, 0)
-					// If there is an init value, try to evaluate it
-					if vd.InitValue != nil && interp != nil {
-						if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-							val = storeAs(val, iv)
-						}
+	// Variables of the whole chain, base first, through the shared
+	// instantiation path; nested FB members are one level deeper.
+	for _, d := range chain {
+		for _, vb := range d.VarBlocks {
+			for _, vd := range vb.Declarations {
+				interp.instantiateVar(env, env, vd, depth+1)
+				for _, n := range vd.Names {
+					upper := strings.ToUpper(n.Name)
+					switch vb.Section {
+					case ast.VarInput:
+						inst.inputNames = append(inst.inputNames, upper)
+					case ast.VarOutput:
+						inst.outputNames = append(inst.outputNames, upper)
+					case ast.VarInOut:
+						inst.inoutNames = append(inst.inoutNames, upper)
 					}
-				}
-
-				env.Define(n.Name, val)
-				upper := strings.ToUpper(n.Name)
-				switch vb.Section {
-				case ast.VarInput:
-					inst.inputNames = append(inst.inputNames, upper)
-				case ast.VarOutput:
-					inst.outputNames = append(inst.outputNames, upper)
-				case ast.VarInOut:
-					inst.inoutNames = append(inst.inoutNames, upper)
 				}
 			}
 		}
@@ -482,10 +451,6 @@ func zeroArray(at *ast.ArrayType) Value {
 	return zeroArrayCtx(at, typeCtx{}, 0)
 }
 
-func zeroArrayWith(at *ast.ArrayType, resolve TypeResolver, depth int) Value {
-	return zeroArrayCtx(at, typeCtx{resolve: resolve}, depth)
-}
-
 func zeroArrayCtx(at *ast.ArrayType, ctx typeCtx, depth int) Value {
 	if len(at.Ranges) == 0 {
 		return Value{Kind: ValArray, Array: []Value{}}
@@ -523,10 +488,6 @@ func zeroArrayCtx(at *ast.ArrayType, ctx typeCtx, depth int) Value {
 // Keys are stored in UPPER case to match the interpreter's member access logic.
 func zeroStruct(st *ast.StructType) Value {
 	return zeroStructCtx(st, typeCtx{}, 0)
-}
-
-func zeroStructWith(st *ast.StructType, resolve TypeResolver, depth int) Value {
-	return zeroStructCtx(st, typeCtx{resolve: resolve}, depth)
 }
 
 // zeroStructCtx builds a struct value with every member at its declared
