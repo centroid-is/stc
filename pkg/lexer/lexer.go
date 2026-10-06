@@ -245,8 +245,11 @@ func (l *Lexer) scanNumber(start Pos) Token {
 	// Check for base prefix: digits followed by #
 	if !l.atEnd() && l.peek() == '#' {
 		// This is a multi-base integer: 16#FF, 2#1010, 8#77
+		base := l.src[start.Offset:l.pos]
 		l.advance() // consume #
-		l.scanBaseDigits()
+		if !l.scanBasedValue(base) {
+			return l.makeToken(Illegal, start)
+		}
 		return l.makeToken(IntLiteral, start)
 	}
 
@@ -294,6 +297,16 @@ func (l *Lexer) scanBaseDigits() {
 	for !l.atEnd() && (isHexDigit(l.peek()) || l.peek() == '_') {
 		l.advance()
 	}
+}
+
+// scanBasedValue consumes the digits after the # of a based integer and
+// reports whether the literal is valid: IEC 61131-3 allows only the bases
+// 2, 8 and 16, and at least one digit must follow the #.
+func (l *Lexer) scanBasedValue(base string) bool {
+	digitsStart := l.pos
+	l.scanBaseDigits()
+	digits := strings.ReplaceAll(l.src[digitsStart:l.pos], "_", "")
+	return (base == "2" || base == "8" || base == "16") && digits != ""
 }
 
 // timePrefixes maps uppercased time/date prefix keywords to their literal token kinds.
@@ -354,8 +367,11 @@ func (l *Lexer) scanIdentOrKeyword(start Pos) Token {
 			// decimal base, and a second # introduces the digits.
 			if l.pos > valueStart && allDecimal(l.src[valueStart:l.pos]) &&
 				!l.atEnd() && l.peek() == '#' {
+				base := l.src[valueStart:l.pos]
 				l.advance() // consume the second #
-				l.scanBaseDigits()
+				if !l.scanBasedValue(base) {
+					return l.makeToken(Illegal, start)
+				}
 			}
 			return l.makeToken(TypedLiteral, start)
 		}

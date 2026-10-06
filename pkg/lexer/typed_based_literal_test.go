@@ -57,10 +57,18 @@ func TestTypedBasedLiteral(t *testing.T) {
 		require.Equal(t, "BYTE#16#10", texts[2])
 	})
 
-	t.Run("no digits after base", func(t *testing.T) {
-		kinds, texts := sig("BYTE#16#")
-		require.Equal(t, []TokenKind{TypedLiteral}, kinds)
-		require.Equal(t, []string{"BYTE#16#"}, texts)
+	// Review LO-04: only bases 2, 8 and 16 are valid, and digits must
+	// follow the #. Invalid based literals lex as one Illegal token.
+	for _, src := range []string{"BYTE#16#", "DINT#16#", "WORD#3#10", "INT#10#5", "16#", "3#10", "16#__"} {
+		t.Run("invalid based literal "+src, func(t *testing.T) {
+			kinds, texts := sig(src)
+			require.Equal(t, []TokenKind{Illegal}, kinds)
+			require.Equal(t, []string{src}, texts)
+		})
+	}
+	t.Run("valid untyped bases", func(t *testing.T) {
+		kinds, _ := sig("2#1010 8#17 16#FF")
+		require.Equal(t, []TokenKind{IntLiteral, IntLiteral, IntLiteral}, kinds)
 	})
 
 	t.Run("non-decimal value before hash is not a base", func(t *testing.T) {
