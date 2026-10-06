@@ -533,7 +533,13 @@ Plans:
   3. The Flutter HMI (tfc-hmi / open62541_dart) connects to `stc serve` running ST301 with the EtherCAT simulator and shows live sensor, conveyor and drive HMI structs with enum names like `rdy(2)`
   4. An agent can step the simulation, read and write variables and browse the OPC UA tree through the `stc_sim_step`, `stc_sim_read`, `stc_sim_write` and `stc_opcua_browse` MCP tools
   5. `docs/` has a TwinCAT import, EtherCAT simulation and OPC UA guide, and the stale claims in `TESTING_GUIDE.md`, `ST_LANGUAGE_SUPPORT.md` and `stdlib/vendor/beckhoff/ethercat_io.md` are corrected
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 29-01-PLAN.md -- Live p_cmd write handshake, subscriptions on the running scan, stc serve --io --scenario
+- [ ] 29-02-PLAN.md -- stc opcua snapshot, TF6100 browse diff (skips without capture), HMI keymappings stand-in
+- [ ] 29-03-PLAN.md -- MCP tools stc_sim_step/read/write and stc_opcua_browse over one long-lived session
+- [ ] 29-04-PLAN.md -- TwinCAT import, EtherCAT and OPC UA guides, stale-claim fixes, docs-CLI test, coverage gate
 
 ## Progress
 
