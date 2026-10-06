@@ -1119,8 +1119,8 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 		}
 		fbInst := obj.FBRef
 		// Check for property getter
-		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Getter != nil {
-			return interp.execPropertyGetter(fbInst, prop)
+		if prop, owner := findPropertyFrom(fbInst, memberName, interp); prop != nil && prop.Getter != nil {
+			return interp.execPropertyGetter(fbInst, prop, owner)
 		}
 		return fbInst.GetMember(memberName), nil
 	case ValStruct:
@@ -1161,8 +1161,8 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 		}
 		fbInst := obj.FBRef
 		// Check for property setter
-		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Setter != nil {
-			return interp.execPropertySetter(fbInst, prop, val)
+		if prop, owner := findPropertyFrom(fbInst, memberName, interp); prop != nil && prop.Setter != nil {
+			return interp.execPropertySetter(fbInst, prop, owner, val)
 		}
 		fbInst.SetInput(memberName, val)
 		return nil
@@ -1345,12 +1345,23 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 
 // execAction runs an ACTION body in owner, the environment of the POU or FB
 // instance that owns the action. RETURN ends only the action.
+// An action of an FB instance runs in a child env whose selfDecl is the FB
+// that declares the action, so SUPER^ inside an inherited action resolves
+// relative to that FB and not to the instance's most-derived type.
 func (interp *Interpreter) execAction(owner *Env, act *ast.ActionDecl, pos ast.Pos) error {
 	if err := interp.EnterCall(act.Name.Name, pos); err != nil {
 		return err
 	}
 	defer interp.ExitCall()
-	if err := interp.execStatements(owner, act.Body); err != nil {
+	run := owner
+	if inst := owner.self; inst != nil && inst.Env == owner {
+		if decl := actionOwner(inst, act, interp); decl != nil {
+			run = NewEnv(owner)
+			run.self = inst
+			run.selfDecl = decl
+		}
+	}
+	if err := interp.execStatements(run, act.Body); err != nil {
 		if _, ok := err.(*ErrReturn); !ok {
 			return err
 		}
@@ -1402,6 +1413,17 @@ func findAction(inst *FBInstance, name string, interp *Interpreter) *ast.ActionD
 	}
 	if inst.Env != nil {
 		return inst.Env.localAction(name)
+	}
+	return nil
+}
+
+// actionOwner returns the FB in inst's EXTENDS chain that declares act, or
+// nil when act is not part of any declaration in the chain.
+func actionOwner(inst *FBInstance, act *ast.ActionDecl, interp *Interpreter) *ast.FunctionBlockDecl {
+	for _, d := range fbDeclChain(inst, interp) {
+		if slices.Contains(d.Actions, act) {
+			return d
+		}
 	}
 	return nil
 }
@@ -1598,20 +1620,38 @@ func findMethodFrom(inst *FBInstance, name string, interp *Interpreter, start *a
 // findProperty looks up a property by name in the FB declaration hierarchy:
 // the FB's own properties first, then each FB up the EXTENDS chain.
 func findProperty(inst *FBInstance, name string, interp *Interpreter) *ast.PropertyDecl {
+	p, _ := findPropertyFrom(inst, name, interp)
+	return p
+}
+
+// findPropertyFrom looks up a property like findProperty and also returns
+// the FB that declares it.
+func findPropertyFrom(inst *FBInstance, name string, interp *Interpreter) (*ast.PropertyDecl, *ast.FunctionBlockDecl) {
 	for _, d := range fbDeclChain(inst, interp) {
 		for _, p := range d.Properties {
 			if p.Name != nil && strings.EqualFold(p.Name.Name, name) {
-				return p
+				return p, d
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-// execPropertyGetter executes a property's GET accessor and returns the result.
-func (interp *Interpreter) execPropertyGetter(inst *FBInstance, prop *ast.PropertyDecl) (Value, error) {
+// accessorEnv returns the env a property accessor declared in owner runs
+// in: a child of the instance env, with THIS^ and SUPER^ resolved against
+// inst and owner.
+func accessorEnv(inst *FBInstance, owner *ast.FunctionBlockDecl) *Env {
+	env := NewEnv(inst.Env)
+	env.self = inst
+	env.selfDecl = owner
+	return env
+}
+
+// execPropertyGetter executes a property's GET accessor, declared in FB
+// owner, and returns the result.
+func (interp *Interpreter) execPropertyGetter(inst *FBInstance, prop *ast.PropertyDecl, owner *ast.FunctionBlockDecl) (Value, error) {
 	getter := prop.Getter
-	getterEnv := NewEnv(inst.Env)
+	getterEnv := accessorEnv(inst, owner)
 
 	// Define return variable (getter method name, typically "GET" or the property name)
 	retVal := ZeroFromTypeSpec(prop.Type)
@@ -1659,10 +1699,11 @@ func (interp *Interpreter) execPropertyGetter(inst *FBInstance, prop *ast.Proper
 	return retVal, nil
 }
 
-// execPropertySetter executes a property's SET accessor with the given value.
-func (interp *Interpreter) execPropertySetter(inst *FBInstance, prop *ast.PropertyDecl, val Value) error {
+// execPropertySetter executes a property's SET accessor, declared in FB
+// owner, with the given value.
+func (interp *Interpreter) execPropertySetter(inst *FBInstance, prop *ast.PropertyDecl, owner *ast.FunctionBlockDecl, val Value) error {
 	setter := prop.Setter
-	setterEnv := NewEnv(inst.Env)
+	setterEnv := accessorEnv(inst, owner)
 
 	// Define the property name variable for assignment
 	if prop.Name != nil {

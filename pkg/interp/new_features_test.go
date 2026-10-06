@@ -500,7 +500,7 @@ func TestExecPropertyGetter(t *testing.T) {
 	}
 	inst := &FBInstance{TypeName: "MyFB", Decl: &ast.FunctionBlockDecl{Name: ident("MyFB")}, Env: fbEnv}
 
-	v, err := interp.execPropertyGetter(inst, prop)
+	v, err := interp.execPropertyGetter(inst, prop, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -540,7 +540,7 @@ func TestExecPropertySetter(t *testing.T) {
 	}
 	inst := &FBInstance{TypeName: "MyFB", Decl: &ast.FunctionBlockDecl{Name: ident("MyFB")}, Env: fbEnv}
 
-	err := interp.execPropertySetter(inst, prop, IntValue(99))
+	err := interp.execPropertySetter(inst, prop, nil, IntValue(99))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1268,7 +1268,7 @@ func TestExecPropertyGetter_WithLocalVars(t *testing.T) {
 	}
 	inst := &FBInstance{TypeName: "MyFB", Decl: &ast.FunctionBlockDecl{Name: ident("MyFB")}, Env: fbEnv}
 
-	v, err := interp.execPropertyGetter(inst, prop)
+	v, err := interp.execPropertyGetter(inst, prop, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1297,7 +1297,7 @@ func TestExecPropertyGetter_ReturnViaPropertyName(t *testing.T) {
 	}
 	inst := &FBInstance{TypeName: "MyFB", Decl: &ast.FunctionBlockDecl{Name: ident("MyFB")}, Env: fbEnv}
 
-	v, err := interp.execPropertyGetter(inst, prop)
+	v, err := interp.execPropertyGetter(inst, prop, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1349,7 +1349,7 @@ func TestExecPropertySetter_WithLocalVars(t *testing.T) {
 	}
 	inst := &FBInstance{TypeName: "MyFB", Decl: &ast.FunctionBlockDecl{Name: ident("MyFB")}, Env: fbEnv}
 
-	err := interp.execPropertySetter(inst, prop, IntValue(50))
+	err := interp.execPropertySetter(inst, prop, nil, IntValue(50))
 	if err != nil {
 		t.Fatal(err)
 	}
