@@ -445,11 +445,23 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 	}
 
 	// Validate named arguments against FB inputs/outputs
+	bound := make(map[string]bool)
 	for _, arg := range s.Args {
 		if arg.Name == nil {
 			continue
 		}
 		argName := strings.ToUpper(arg.Name.Name)
+		// An alias (CTU.R) and its canonical input (RESET) set the same
+		// field, so binding both is a double binding.
+		canon := argName
+		if c, ok := fbType.ParamAliases[argName]; ok && !arg.IsOutput {
+			canon = c
+		}
+		if bound[canon] {
+			c.diags.Errorf(astPosToSource(arg.Span().Start), CodeNoMember,
+				"parameter %q of %s is bound more than once", arg.Name.Name, fbType.Name)
+		}
+		bound[canon] = true
 
 		// Find the parameter in the FB type
 		var paramType types.Type

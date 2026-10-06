@@ -163,3 +163,22 @@ func paramNames(ps []types.Parameter) []string {
 	}
 	return out
 }
+
+// TestStdFBAliasBoundTwice covers review LO-02: binding an input and its
+// alias (CTU RESET and R) is a double binding.
+func TestStdFBAliasBoundTwice(t *testing.T) {
+	for _, tc := range []struct{ fb, body string }{
+		{"CTU", "inst(CU := b, RESET := b, R := b);"},
+		{"CTUD", "inst(LD := b, LOAD := b);"},
+		{"SR", "inst(S1 := b, SET1 := b);"},
+		{"RS", "inst(R1 := b, RESET1 := b);"},
+		{"TON", "inst(IN := b, IN := b);"},
+	} {
+		t.Run(tc.fb, func(t *testing.T) {
+			ds := errorsOf(runAction(t, stdProg(tc.fb, tc.body)))
+			require.Len(t, ds, 1, "%v", ds)
+			assert.Contains(t, ds[0].Message, "is bound more than once")
+		})
+	}
+	assert.Empty(t, errorsOf(runAction(t, stdProg("CTUD", "inst(R := b, LD := b, CU := b);"))))
+}

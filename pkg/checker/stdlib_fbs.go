@@ -21,6 +21,8 @@ type stdFBSig struct {
 	name    string
 	inputs  []types.Parameter
 	aliases []types.Parameter
+	// aliasOf names, for each alias, the canonical input it sets.
+	aliasOf []string
 	outputs []types.Parameter
 }
 
@@ -44,15 +46,17 @@ func stdFBSigs() []stdFBSig {
 	}
 	return []stdFBSig{
 		timer("TON"), timer("TOF"), timer("TP"),
-		{name: "CTU", inputs: in("CU", b, "RESET", b, "PV", i), aliases: in("R", b),
+		{name: "CTU", inputs: in("CU", b, "RESET", b, "PV", i), aliases: in("R", b), aliasOf: []string{"RESET"},
 			outputs: out("Q", b, "CV", i)},
-		{name: "CTD", inputs: in("CD", b, "LOAD", b, "PV", i), aliases: in("LD", b),
+		{name: "CTD", inputs: in("CD", b, "LOAD", b, "PV", i), aliases: in("LD", b), aliasOf: []string{"LOAD"},
 			outputs: out("Q", b, "CV", i)},
 		{name: "CTUD", inputs: in("CU", b, "CD", b, "RESET", b, "LOAD", b, "PV", i), aliases: in("R", b, "LD", b),
-			outputs: out("QU", b, "QD", b, "CV", i)},
+			aliasOf: []string{"RESET", "LOAD"}, outputs: out("QU", b, "QD", b, "CV", i)},
 		edge("R_TRIG"), edge("F_TRIG"),
-		{name: "SR", inputs: in("SET1", b, "RESET", b), aliases: in("S1", b, "R", b), outputs: out("Q1", b)},
-		{name: "RS", inputs: in("SET", b, "RESET1", b), aliases: in("S", b, "R1", b), outputs: out("Q1", b)},
+		{name: "SR", inputs: in("SET1", b, "RESET", b), aliases: in("S1", b, "R", b), aliasOf: []string{"SET1", "RESET"},
+			outputs: out("Q1", b)},
+		{name: "RS", inputs: in("SET", b, "RESET1", b), aliases: in("S", b, "R1", b), aliasOf: []string{"SET", "RESET1"},
+			outputs: out("Q1", b)},
 	}
 }
 
@@ -70,6 +74,12 @@ func (r *Resolver) registerStdFBs() {
 			Name:    sig.name,
 			Inputs:  append(append([]types.Parameter{}, sig.inputs...), sig.aliases...),
 			Outputs: sig.outputs,
+		}
+		if len(sig.aliases) > 0 {
+			fb.ParamAliases = make(map[string]string, len(sig.aliases))
+			for k, a := range sig.aliases {
+				fb.ParamAliases[a.Name] = sig.aliasOf[k]
+			}
 		}
 		scope := r.table.RegisterPOU(sig.name, symbols.KindFunctionBlock, pos)
 		sym := r.table.LookupGlobal(sig.name)

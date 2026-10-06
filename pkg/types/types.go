@@ -236,6 +236,10 @@ type FunctionBlockType struct {
 	Inputs  []Parameter
 	Outputs []Parameter
 	InOuts  []Parameter
+	// ParamAliases maps an upper-cased alternative input name to the
+	// canonical input it sets (the IEC R of CTU sets RESET). Only the
+	// standard FBs have aliases.
+	ParamAliases map[string]string
 }
 
 func (t *FunctionBlockType) Kind() TypeKind { return KindFunctionBlock }
