@@ -195,3 +195,17 @@ END_PROGRAM
 	require.NoError(t, err)
 	assert.True(t, x.Bool, "link resolved through the project binder")
 }
+
+func TestSaveCallState(t *testing.T) {
+	in := New()
+	in.SetDt(5 * time.Millisecond)
+	in.callDepth = 3
+	restore := in.SaveCallState()
+	assert.Equal(t, 0, in.callDepth)
+	in.SetDt(10 * time.Millisecond)
+	in.callDepth = 1
+	restore()
+	assert.Equal(t, 5*time.Millisecond, in.dt)
+	assert.Equal(t, 3, in.callDepth)
+	assert.Equal(t, 15*time.Millisecond, in.Clock(), "the clock keeps the advanced time")
+}

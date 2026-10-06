@@ -165,6 +165,69 @@ type ramp struct {
 	a    Action
 }
 
+// value is the ramp's linear interpolation at clock now (From at t0, To
+// from t0+Over on) and whether it has reached To.
+func (r *ramp) value(now time.Duration) (float64, bool) {
+	frac := 1.0
+	if r.a.Over > 0 {
+		frac = math.Min(1, float64(now-r.t0)/float64(r.a.Over))
+	}
+	return r.a.From + (r.a.To-r.a.From)*frac, frac >= 1
+}
+
+// rampSet holds the active ramps of an Executor or a built-in Session; at
+// most one per path or slave channel.
+type rampSet struct{ list []*ramp }
+
+// cancel drops the ramp on key.
+func (s *rampSet) cancel(key string) {
+	out := s.list[:0]
+	for _, r := range s.list {
+		if r.key != key {
+			out = append(out, r)
+		}
+	}
+	s.list = out
+}
+
+// start replaces any ramp on the same target with a ramp of a from t0.
+func (s *rampSet) start(st *Step, a Action, t0 time.Duration) {
+	key := rampKey(&a)
+	s.cancel(key)
+	s.list = append(s.list, &ramp{key: key, step: st, t0: t0, a: a})
+}
+
+// override cancels the ramp an explicit set, link or analog action
+// replaces.
+func (s *rampSet) override(a *Action) {
+	if a.Kind == ActSet || a.Kind == ActLink || a.Kind == ActAnalog {
+		s.cancel(rampKey(a))
+	}
+}
+
+// advance writes every ramp's value at t's clock, keeping the unfinished
+// ones; a failing ramp is reported through onErr and dropped.
+func (s *rampSet) advance(t Target, onErr func(r *ramp, err error)) {
+	live := s.list[:0]
+	for _, r := range s.list {
+		v, done := r.value(t.Clock())
+		var err error
+		if r.a.Path != "" {
+			err = t.SetNumber(r.a.Path, v)
+		} else {
+			err = t.Apply(Action{Kind: ActAnalog, Slave: r.a.Slave, Channel: r.a.Channel, Unit: r.a.Unit, Value: v})
+		}
+		if err != nil {
+			onErr(r, err)
+			continue
+		}
+		if !done {
+			live = append(live, r)
+		}
+	}
+	s.list = live
+}
+
 type pending struct {
 	step     *Step
 	deadline int
@@ -205,17 +268,8 @@ func (e *Executor) Run(cycles int) (*Report, error) {
 	}
 	sort.SliceStable(order, func(a, b int) bool { return due[order[a]] < due[order[b]] })
 
-	var ramps []*ramp
+	var ramps rampSet
 	var waits []*pending
-	cancel := func(key string) {
-		out := ramps[:0]
-		for _, r := range ramps {
-			if r.key != key {
-				out = append(out, r)
-			}
-		}
-		ramps = out
-	}
 	next := 0
 	var runErr error
 
@@ -230,13 +284,9 @@ func (e *Executor) Run(cycles int) (*Report, error) {
 			if a := st.Action; a != nil {
 				switch a.Kind {
 				case ActRamp:
-					key := rampKey(a)
-					cancel(key)
-					ramps = append(ramps, &ramp{key: key, step: st, t0: e.t.Clock(), a: *a})
+					ramps.start(st, *a, e.t.Clock())
 				default:
-					if a.Kind == ActSet || a.Kind == ActLink || a.Kind == ActAnalog {
-						cancel(rampKey(a))
-					}
+					ramps.override(a)
 					if err := e.t.Apply(*a); err != nil {
 						res.Error = err.Error()
 						rep.Diagnostics = append(rep.Diagnostics, e.diag(diag.Error, st, "SCN008", "step %d: %s failed: %v", st.Index, a.Kind, err))
@@ -248,32 +298,13 @@ func (e *Executor) Run(cycles int) (*Report, error) {
 			}
 		}
 
-		live := ramps[:0]
-		for _, r := range ramps {
-			frac := 1.0
-			if r.a.Over > 0 {
-				frac = math.Min(1, float64(e.t.Clock()-r.t0)/float64(r.a.Over))
+		ramps.advance(e.t, func(r *ramp, err error) {
+			i := r.step.Index - 1
+			if results[i].Error == "" {
+				results[i].Error = err.Error()
 			}
-			v := r.a.From + (r.a.To-r.a.From)*frac
-			var err error
-			if r.a.Path != "" {
-				err = e.t.SetNumber(r.a.Path, v)
-			} else {
-				err = e.t.Apply(Action{Kind: ActAnalog, Slave: r.a.Slave, Channel: r.a.Channel, Unit: r.a.Unit, Value: v})
-			}
-			if err != nil {
-				i := r.step.Index - 1
-				if results[i].Error == "" {
-					results[i].Error = err.Error()
-				}
-				rep.Diagnostics = append(rep.Diagnostics, e.diag(diag.Error, r.step, "SCN008", "step %d: ramp failed: %v", r.step.Index, err))
-				continue
-			}
-			if frac < 1 {
-				live = append(live, r)
-			}
-		}
-		ramps = live
+			rep.Diagnostics = append(rep.Diagnostics, e.diag(diag.Error, r.step, "SCN008", "step %d: ramp failed: %v", r.step.Index, err))
+		})
 
 		if err := e.t.Tick(); err != nil {
 			runErr = fmt.Errorf("tick %d: %w", k, err)
