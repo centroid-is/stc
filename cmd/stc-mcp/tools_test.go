@@ -142,5 +142,5 @@ func TestToolDescriptionsUnder100Tokens(t *testing.T) {
 		assert.LessOrEqual(t, len(tokens), 100,
 			"Tool %q description exceeds 100 tokens: %d", tool.name, len(tokens))
 	}
-	assert.Len(t, tools, 6, "Expected exactly 6 tools")
+	assert.Len(t, tools, 10, "Expected exactly 10 tools")
 }

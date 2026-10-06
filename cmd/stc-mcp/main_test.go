@@ -51,11 +51,11 @@ func TestToolRegistration(t *testing.T) {
 		registerTools(server)
 	})
 
-	// Verify all 6 tools are defined in our metadata.
+	// Verify all 10 tools are defined in our metadata.
 	tools := allToolDefinitions()
-	assert.Len(t, tools, 6)
+	assert.Len(t, tools, 10)
 
-	expectedNames := []string{"stc_parse", "stc_check", "stc_test", "stc_emit", "stc_lint", "stc_format"}
+	expectedNames := []string{"stc_parse", "stc_check", "stc_test", "stc_emit", "stc_lint", "stc_format", "stc_sim_step", "stc_sim_read", "stc_sim_write", "stc_opcua_browse"}
 	for i, tool := range tools {
 		assert.Equal(t, expectedNames[i], tool.name)
 		assert.NotEmpty(t, tool.description)

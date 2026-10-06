@@ -152,7 +152,7 @@ func TestStcCheck_TypeErrorWithVendor(t *testing.T) {
 
 func TestAllToolDefinitions_Count(t *testing.T) {
 	defs := allToolDefinitions()
-	assert.Len(t, defs, 6)
+	assert.Len(t, defs, 10)
 
 	names := make(map[string]bool)
 	for _, d := range defs {

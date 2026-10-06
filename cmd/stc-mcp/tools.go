@@ -46,6 +46,25 @@ type formatArgs struct {
 	Code string `json:"code" jsonschema:"IEC 61131-3 ST source code to format"`
 }
 
+type simStepArgs struct {
+	Cycles int `json:"cycles" jsonschema:"number of scan cycles to run (1..1000000)"`
+}
+
+type simReadArgs struct {
+	Paths []string `json:"paths" jsonschema:"variable paths such as GVL_Main.fb.HMI.p_stat_State"`
+}
+
+type simWriteArgs struct {
+	Path  string `json:"path" jsonschema:"variable path to write"`
+	Value any    `json:"value" jsonschema:"new value: bool, number, IEC literal or enum name string, array or object"`
+}
+
+type opcuaBrowseArgs struct {
+	Node     string `json:"node,omitempty" jsonschema:"start node, e.g. ns=4;s=GVL_Main.fb (default ns=4;s=PLC1)"`
+	Depth    int    `json:"depth,omitempty" jsonschema:"levels below the start node (default 2, max 10)"`
+	Endpoint string `json:"endpoint,omitempty" jsonschema:"browse this remote opc.tcp:// server instead of the session (read-only)"`
+}
+
 // --- Tool descriptions (must be under 100 tokens each per MCP-07) ---
 
 const (
@@ -55,6 +74,11 @@ const (
 	descEmit   = "Emit vendor-specific Structured Text from source code for Beckhoff, Schneider, or portable targets."
 	descLint   = "Lint IEC 61131-3 Structured Text source code for coding standard violations."
 	descFormat = "Format IEC 61131-3 Structured Text source code with consistent style."
+
+	descSimStep     = "Run N deterministic scan cycles of the live simulation (stc-mcp --project). Applies pending writes first; returns total cycles and sim time."
+	descSimRead     = "Read variables of the live simulation by path. Returns JSON values in order; unknown paths get a per-path error."
+	descSimWrite    = "Write a variable of the live simulation. EtherCAT-linked inputs are forced; others are set. Visible on the next read."
+	descOpcuaBrowse = "Browse the simulation's OPC UA address space from ns=4;s=PLC1 (or a node) to a depth, or a remote endpoint, read-only."
 )
 
 // toolDef is used for testing tool metadata.
@@ -72,6 +96,10 @@ func allToolDefinitions() []toolDef {
 		{name: "stc_emit", description: descEmit},
 		{name: "stc_lint", description: descLint},
 		{name: "stc_format", description: descFormat},
+		{name: "stc_sim_step", description: descSimStep},
+		{name: "stc_sim_read", description: descSimRead},
+		{name: "stc_sim_write", description: descSimWrite},
+		{name: "stc_opcua_browse", description: descOpcuaBrowse},
 	}
 }
 
@@ -85,6 +113,20 @@ type textContent struct {
 // callToolResult wraps the content returned by a tool handler.
 type callToolResult struct {
 	Content []interface{}
+	IsError bool
+}
+
+// textResult is a single-text tool result.
+func textResult(text string) *callToolResult {
+	return &callToolResult{Content: []interface{}{&textContent{Text: text}}}
+}
+
+// errorResult is a tool error result: the agent sees the message, the
+// server keeps running.
+func errorResult(err error) *callToolResult {
+	r := textResult(err.Error())
+	r.IsError = true
+	return r
 }
 
 // mustMarshalJSON marshals v to JSON, panicking on failure.
@@ -245,6 +287,97 @@ func wrapFormat(ctx context.Context, _ *mcp.CallToolRequest, args formatArgs) (*
 	return toMCPResult(r), nil, nil
 }
 
+// --- Simulation tools (stc-mcp --project) ---
+
+func handleSimStep(_ context.Context, args simStepArgs) (*callToolResult, error) {
+	s, err := sim.session()
+	if err != nil {
+		return errorResult(err), nil
+	}
+	res, err := s.Step(args.Cycles)
+	if err != nil {
+		return errorResult(fmt.Errorf("%w (after %d cycles)", err, res.Cycles)), nil
+	}
+	return textResult(string(mustMarshalJSON(res))), nil
+}
+
+func handleSimRead(_ context.Context, args simReadArgs) (*callToolResult, error) {
+	s, err := sim.session()
+	if err != nil {
+		return errorResult(err), nil
+	}
+	if len(args.Paths) == 0 {
+		return errorResult(fmt.Errorf("paths must name at least one variable")), nil
+	}
+	return textResult(string(mustMarshalJSON(map[string]any{"values": s.Read(args.Paths)}))), nil
+}
+
+func handleSimWrite(_ context.Context, args simWriteArgs) (*callToolResult, error) {
+	s, err := sim.session()
+	if err != nil {
+		return errorResult(err), nil
+	}
+	if args.Path == "" {
+		return errorResult(fmt.Errorf("path is required")), nil
+	}
+	res, err := s.Write(args.Path, args.Value)
+	if err != nil {
+		return errorResult(err), nil
+	}
+	return textResult(string(mustMarshalJSON(res))), nil
+}
+
+func handleOpcuaBrowse(ctx context.Context, args opcuaBrowseArgs) (*callToolResult, error) {
+	var (
+		root *browseNode
+		err  error
+	)
+	if args.Endpoint != "" {
+		root, err = browseRemote(ctx, args.Endpoint, args.Node, args.Depth)
+	} else {
+		var s *simSession
+		if s, err = sim.session(); err == nil {
+			root, err = s.Browse(args.Node, args.Depth)
+		}
+	}
+	if err != nil {
+		return errorResult(err), nil
+	}
+	return textResult(string(mustMarshalJSON(root))), nil
+}
+
+func wrapSimStep(ctx context.Context, _ *mcp.CallToolRequest, args simStepArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleSimStep(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapSimRead(ctx context.Context, _ *mcp.CallToolRequest, args simReadArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleSimRead(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapSimWrite(ctx context.Context, _ *mcp.CallToolRequest, args simWriteArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleSimWrite(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
+func wrapOpcuaBrowse(ctx context.Context, _ *mcp.CallToolRequest, args opcuaBrowseArgs) (*mcp.CallToolResult, any, error) {
+	r, err := handleOpcuaBrowse(ctx, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	return toMCPResult(r), nil, nil
+}
+
 // --- MCP registration ---
 
 func registerTools(server *mcp.Server) {
@@ -277,6 +410,26 @@ func registerTools(server *mcp.Server) {
 		Name:        "stc_format",
 		Description: descFormat,
 	}, wrapFormat)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "stc_sim_step",
+		Description: descSimStep,
+	}, wrapSimStep)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "stc_sim_read",
+		Description: descSimRead,
+	}, wrapSimRead)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "stc_sim_write",
+		Description: descSimWrite,
+	}, wrapSimWrite)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "stc_opcua_browse",
+		Description: descOpcuaBrowse,
+	}, wrapOpcuaBrowse)
 }
 
 // toMCPResult converts our internal result to MCP SDK result type.
@@ -287,5 +440,5 @@ func toMCPResult(r *callToolResult) *mcp.CallToolResult {
 			content = append(content, &mcp.TextContent{Text: tc.Text})
 		}
 	}
-	return &mcp.CallToolResult{Content: content}
+	return &mcp.CallToolResult{Content: content, IsError: r.IsError}
 }
