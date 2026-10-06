@@ -69,12 +69,27 @@ type ATV320 struct {
 	ol1r      uint16
 	sto       bool
 	fault     bool
+
+	cmd        uint16 // last CMD (0x6040)
+	lfr        int16  // last LFR (0x2037:03)
+	opMode     uint8  // modes of operation (0x6060)
+	params     map[uint32]uint32
+	eepromLeft int
+	saveCount  int
 }
+
+var _ ecat.CoEDevice = (*ATV320)(nil)
 
 // NewATV320 returns a drive with default parameters.
 func NewATV320() *ATV320 {
-	return &ATV320{HSP: defHSP, LSP: defLSP, FRS: defFRS, NCR: defNCR, ACC: defACC, DEC: defDEC,
+	d := &ATV320{HSP: defHSP, LSP: defLSP, FRS: defFRS, NCR: defNCR, ACC: defACC, DEC: defDEC,
 		slots: map[string]ecat.EntrySlot{}, hmis: HMISNst}
+	d.opMode = 2 // velocity mode
+	d.params = make(map[uint32]uint32, len(atv320ParamDefaults))
+	for k, v := range atv320ParamDefaults {
+		d.params[k] = v
+	}
+	return d
 }
 
 // Init is a no-op; entry positions arrive through SetLayout.
@@ -183,8 +198,10 @@ func (d *ATV320) ramp(dt time.Duration, target int32, acc, dec int64, fast bool)
 
 // Step runs one cycle: read outputs, advance CiA402 and the ramp, write inputs.
 func (d *ATV320) Step(dt time.Duration, out []byte, in []byte) {
-	cmd := uint16(d.get(out, "CMD"))
-	lfr := int16(d.get(out, "LFR"))
+	d.stepEEPROM()
+	d.cmd = uint16(d.get(out, "CMD"))
+	d.lfr = int16(d.get(out, "LFR"))
+	cmd, lfr := d.cmd, d.lfr
 	d.ol1r = uint16(d.get(out, "OL1R"))
 	acc := orDefault(uint16(d.get(out, "ACC")), d.ACC)
 	if acc == 0 {
