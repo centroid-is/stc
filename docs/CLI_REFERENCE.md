@@ -390,6 +390,83 @@ stc vendor extract MyProject.plcproj --output vendor/custom/
 
 ---
 
+### `stc ecat validate`
+
+Resolve `{attribute 'TcLinkTo' := '...'}` links in ST sources against TwinCAT EtherCAT exports.
+
+```
+stc ecat validate --io <Device N.xml> [--io <Device M.xml>...] [-D SYM...] <file.st>...
+```
+
+**Arguments**: One or more ST files. A file holding a GVL names the GVL after the file name, so `ECT.st` declares `ECT`. Type and function block declarations (DUTs, FBs with `AT %I*`/`%Q*` members) can be passed alongside the GVLs.
+
+**Flags**:
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--io` | | (required) | TwinCAT EtherCATConfig export (`Device N.xml`), one per master. Repeatable. |
+| `--define` | `-D` | | Define a preprocessor symbol. Repeatable. |
+| `--format` | | `text` | `text` or `json` |
+
+The exports are loaded with the same rules as `generate_gvl.py`: terminals nest under the EK coupler or CX head they hang off, and link paths read `TIID^<master>^<coupler>^<box>^<pdo or module>^<entry>`. Process image offsets come from the export's `<ProcessImage>` when present and are computed from the PDO layout otherwise. TwinCAT's pseudo-inputs are also linkable: per slave `WcState^WcState`, `InfoData^State` and `InfoData^AdsAddr`, and per master `Inputs^DevState`, `Inputs^SlaveCount`, `Inputs^Frm0State`, `Inputs^Frm0WcState`, `InfoData^AmsNetId` and `InfoData^ChangeCount`.
+
+Every linked leaf is matched to a process image slot. A struct link (`.I1 := TIID^...; .O1 := TIID^...`) produces one binding per member, and member paths may descend into nested structs and function block instances.
+
+**Example** (demo fixtures in `tests/ecat_fixtures`, with `demo_ect.st` copied to `ECT.st`):
+
+```bash
+stc ecat validate --io "Demo Device 1.xml" --io "Demo Device 2.xml" demo_types.st ECT.st
+# VARIABLE        DIR  MASTER               BYTE.BIT  BITS  LINK
+# ECT.A1_01.I1    in   Device 1 (EtherCAT)  0.0       1     TIID^Device 1 (EtherCAT)^DEMO.A1.00 (EK1200)^DEMO.A1.01 (EL1008)^Channel 1^Input
+# ECT.V1_C1       out  Device 1 (EtherCAT)  15.0      8     TIID^Device 1 (EtherCAT)^DEMO.V1 (CTEU-EtherCAT Modular)^Module 1 (VAEM-L1-S-8-PT [16DO])^Outputs^C1 Output
+# ...
+# 35 bindings, 0 errors, 0 warnings
+```
+
+**Text output**: a table with columns `VARIABLE`, `DIR` (`in` or `out`), `MASTER`, `BYTE.BIT` (offset in that master's input or output image), `BITS` and `LINK`, followed by one `file:line:col: severity: CODE message` line per diagnostic and a `N bindings, N errors, N warnings` summary.
+
+**JSON output** (`--format json`):
+
+```json
+{
+  "bindings": [
+    {
+      "var": "ECT.A1_01.I1",
+      "link": "TIID^Device 1 (EtherCAT)^DEMO.A1.00 (EK1200)^DEMO.A1.01 (EL1008)^Channel 1^Input",
+      "master": "Device 1 (EtherCAT)",
+      "dir": "in",
+      "byte": 0,
+      "bit": 0,
+      "bitLen": 1,
+      "typeName": "BOOL"
+    }
+  ],
+  "diagnostics": [],
+  "images": {
+    "Device 1 (EtherCAT)": { "inBytes": 145, "outBytes": 17 },
+    "Device 2 (EtherCAT)": { "inBytes": 227, "outBytes": 14 }
+  }
+}
+```
+
+A load or read failure prints `{"error": "..."}` in JSON mode and exits 1.
+
+**Diagnostic codes**:
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| `ECAT001` | error | Link target not found in the topology. The message lists up to three nearest child segments. |
+| `ECAT002` | error | A `.member` in a multi-member TcLinkTo is not declared by the variable's type, or the member path is deeper than 16 levels. |
+| `ECAT003` | error | Size mismatch: the variable's bit width differs from the entry's `BitLen`. |
+| `ECAT004` | error | Direction mismatch: `AT %Q*` linked to an input entry, or `AT %I*` linked to an output entry. |
+| `ECAT005` | warning | Two variables bind the same slot. Both bindings are kept. |
+| `ECAT006` | error | Malformed TcLinkTo value, such as a missing `:=` or mixed single and member forms. |
+| `ECAT007` | warning | A linked leaf has no `AT %I*`/`%Q*` declaration, or uses a non-I/O area such as `%M`. |
+
+**Exit codes**: 0 when no error is reported (warnings allowed), 1 on any error or when an export or source file cannot be loaded.
+
+---
+
 ## Exit Code Summary
 
 | Code | Meaning |
