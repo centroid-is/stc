@@ -575,3 +575,86 @@ END_PROGRAM
 	_, err = NewRuntime([]*ast.SourceFile{rec})
 	require.NoError(t, err)
 }
+
+func TestRuntimeEdgeCases(t *testing.T) {
+	rt := newRT(t)
+	errHas := func(err error, want string) {
+		t.Helper()
+		if assert.Error(t, err) {
+			assert.Contains(t, err.Error(), want)
+		}
+	}
+
+	// Coercion corners.
+	_, err := rt.coerce(Value{Kind: ValPointer}, 1)
+	errHas(err, "not writable by path")
+	_, err = rt.coerce(Value{Kind: ValInt, IECType: types.KindINT}, []any{1})
+	errHas(err, "as an integer")
+	v, err := rt.coerce(Value{Kind: ValInt, IECType: types.KindINT}, "-5")
+	require.NoError(t, err)
+	assert.Equal(t, int64(-5), v.Int)
+	v, err = rt.coerce(Value{Kind: ValInt}, json.Number("9223372036854775807"))
+	require.NoError(t, err, "untyped integer slot ranges as LINT")
+	assert.Equal(t, int64(math.MaxInt64), v.Int)
+	_, err = rt.coerce(RealValue(0), []any{1})
+	errHas(err, "as an integer")
+	_, err = rt.coerce(TimeValue(0), []any{1})
+	errHas(err, "as an integer")
+	_, err = rt.coerce(StringValue(""), "'$4G'")
+	errHas(err, "invalid escape")
+
+	// Path corners.
+	_, err = rt.Get("GVL.arr[-1]")
+	errHas(err, "out of range")
+	_, err = rt.Get("GVL[1]")
+	errHas(err, "expected a variable name")
+	_, err = rt.Get("PB.r.x")
+	errHas(err, "unbound reference")
+	pb := rt.Engine("PB").env
+	pb.Define("R", Value{Kind: ValReference, Ref: &RefPath{Env: pb, Var: "GONE", Steps: []RefStep{{Member: "X"}}}})
+	_, err = rt.Get("PB.r")
+	errHas(err, "dangling reference")
+	assert.Nil(t, rt.ToJSON(mustGetRaw(t, pb, "R")))
+
+	// JSON corners.
+	o := &orderedObject{}
+	o.add("bad", math.NaN())
+	_, err = json.Marshal(o)
+	assert.Error(t, err)
+	assert.Equal(t, `[]`, marshal(t, rt.ToJSON(Value{Kind: ValArray, ArrayLow: 3})))
+	assert.Empty(t, varNames([]*ast.VarBlock{nil}))
+	deep := Value{Kind: ValArray}
+	for i := 0; i < maxJSONDepth+2; i++ {
+		deep = Value{Kind: ValArray, Array: []Value{deep}}
+	}
+	assert.Contains(t, marshal(t, rt.ToJSON(deep)), "null")
+
+	// EXTENDS: base variables first.
+	src := `FUNCTION_BLOCK FB_Base
+VAR a : INT := 1; END_VAR
+END_FUNCTION_BLOCK
+FUNCTION_BLOCK FB_Derived EXTENDS FB_Base
+VAR b : INT := 2; END_VAR
+END_FUNCTION_BLOCK
+VAR_GLOBAL d : FB_Derived; u : Unknown_T; END_VAR
+`
+	rt2, err := NewRuntime([]*ast.SourceFile{parseRT(t, "G.st", src)})
+	require.NoError(t, err)
+	assert.Equal(t, `{"a":1,"b":2}`, marshal(t, rt2.ToJSON(mustGet(t, rt2, "G.d"))))
+
+	// Malformed declarations are skipped.
+	odd := &ast.SourceFile{Declarations: []ast.Declaration{&ast.TypeDecl{}, &ast.ProgramDecl{}, &ast.GVLDecl{}}}
+	_, err = NewRuntime([]*ast.SourceFile{nil, odd})
+	require.NoError(t, err)
+
+	// Without an interpreter an FB type name has no instance.
+	_, ok := typeCtx{}.fbInstance("TON", 0)
+	assert.False(t, ok)
+}
+
+func mustGetRaw(t *testing.T, env *Env, name string) Value {
+	t.Helper()
+	v, ok := env.GetLocal(name)
+	require.True(t, ok)
+	return v
+}
