@@ -230,6 +230,34 @@ END_PROGRAM
 		assert.Equal(t, int64(MaxCallDepth), gvlVar(t, eng, "G", "r").FBRef.GetMember("n").Int)
 		assert.Equal(t, 0, eng.interp.callDepth)
 	})
+
+	// Every way of calling an FB instance runs user code, so each one must
+	// be bounded: an FB calling its own GVL instance would otherwise abort
+	// the Go runtime with a fatal stack overflow.
+	for _, call := range []string{"s();", "G.s();", "s(x := 1);", "G.s(x := 1);"} {
+		t.Run("self-calling FB instance hits the call depth limit: "+call, func(t *testing.T) {
+			eng := gvlEngine(t, "G.st", `
+FUNCTION_BLOCK FB_Self
+VAR_INPUT x : DINT; END_VAR
+VAR n : DINT; END_VAR
+n := n + 1;
+`+call+`
+END_FUNCTION_BLOCK
+VAR_GLOBAL
+    s : FB_Self;
+END_VAR
+PROGRAM MAIN
+VAR ok : BOOL; END_VAR
+`+call+`
+END_PROGRAM
+`)
+			err := eng.Tick(time.Millisecond)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "maximum call depth 256 exceeded calling FB_Self")
+			assert.Equal(t, int64(MaxCallDepth), gvlVar(t, eng, "G", "s").FBRef.GetMember("n").Int)
+			assert.Equal(t, 0, eng.interp.callDepth, "depth unwinds after the error")
+		})
+	}
 }
 
 // TestZeroArgFBCall covers FB instance calls with no arguments, which parse

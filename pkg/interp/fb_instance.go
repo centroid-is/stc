@@ -193,6 +193,11 @@ func (inst *FBInstance) deltaFor(clock time.Duration, scanDt time.Duration) time
 // For user-defined FBs, it executes the body statements against the persistent
 // env. A runtime error in the body is returned to the caller -- swallowing it
 // would leave outputs stale and turn the bug into a silent wrong value.
+//
+// The body runs under EnterCall, so every way of calling a user FB (fb();,
+// fb(x := 1);, G.fb();, s.fb();, outer.inner(); and the scan engine) is
+// bounded by MaxCallDepth. An FB that calls its own instance through a GVL
+// then fails with a RuntimeError instead of overflowing the Go stack.
 func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) error {
 	if inst.FB != nil {
 		inst.FB.Execute(dt)
@@ -200,6 +205,10 @@ func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) error {
 	}
 	// User-defined FB: execute body statements
 	if interp != nil && inst.Decl != nil && inst.Env != nil {
+		if err := interp.EnterCall(inst.TypeName, ast.Pos{}); err != nil {
+			return err
+		}
+		defer interp.ExitCall()
 		err := interp.execStatements(inst.Env, inst.Decl.Body)
 		if err != nil {
 			// ErrReturn is normal FB termination

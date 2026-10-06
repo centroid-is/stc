@@ -27,6 +27,35 @@ END_TEST_CASE
 		}
 	})
 
+	t.Run("FB calling its own GVL instance fails only that case", func(t *testing.T) {
+		result := runGVLSuite(t, "self_test.st", `
+FUNCTION_BLOCK FB_Self
+VAR n : DINT; END_VAR
+n := n + 1;
+g();
+END_FUNCTION_BLOCK
+
+VAR_GLOBAL
+g : FB_Self;
+END_VAR
+
+TEST_CASE 'self call'
+g();
+END_TEST_CASE
+
+TEST_CASE 'still runs'
+ASSERT_EQ(1, 1);
+END_TEST_CASE
+`)
+		if result.Total != 2 || result.Passed != 1 {
+			t.Fatalf("want 1 of 2 passing, got %d passed of %d", result.Passed, result.Total)
+		}
+		got := result.Suites[0].Tests[0].Error
+		if !strings.Contains(got, "maximum call depth 256 exceeded calling FB_Self") {
+			t.Fatalf("unexpected error: %q", got)
+		}
+	})
+
 	t.Run("derived FB in a suite calls the base FB action", func(t *testing.T) {
 		result := runGVLSuite(t, "ext_test.st", `
 FUNCTION_BLOCK FB_Base

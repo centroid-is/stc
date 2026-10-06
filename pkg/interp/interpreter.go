@@ -51,17 +51,17 @@ type Interpreter struct {
 	// gvls holds the registered global variable lists; see RegisterGVL.
 	gvls gvlState
 
-	// callDepth counts nested ACTION, METHOD and user FUNCTION executions;
-	// see EnterCall.
+	// callDepth counts nested ACTION, METHOD, user FUNCTION and user FB
+	// executions; see EnterCall.
 	callDepth int
 }
 
-// MaxCallDepth bounds nested ACTION, METHOD and FUNCTION calls. A
+// MaxCallDepth bounds nested ACTION, METHOD, FUNCTION and FB calls. A
 // self-recursive ACTION would otherwise grow the Go stack until the process
 // dies; past this depth the call fails with a RuntimeError instead.
 const MaxCallDepth = 256
 
-// EnterCall records entry into a nested ACTION, METHOD or FUNCTION body and
+// EnterCall records entry into a nested ACTION, METHOD, FUNCTION or FB body and
 // fails with a RuntimeError once MaxCallDepth is exceeded. Every successful
 // EnterCall must be paired with ExitCall.
 func (interp *Interpreter) EnterCall(name string, pos ast.Pos) error {
