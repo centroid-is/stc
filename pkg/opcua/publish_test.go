@@ -157,10 +157,10 @@ func TestPublish(t *testing.T) {
 	hmi := "GVL_Test.fbMotor.HMI"
 
 	t.Run("browse", func(t *testing.T) {
-		names := browseNames(browseForward(t, c, ua.ObjectIDObjectsFolder))
+		names := browseNames(browseForward(t, c, ua.NewNodeIDString(4, "PLC1")))
 		joined := strings.Join(names, ",")
 		if !strings.Contains(joined, "GVL_Test") || !strings.Contains(joined, "Top") {
-			t.Errorf("Objects children = %v", names)
+			t.Errorf("PLC1 children = %v", names)
 		}
 		got := browseNames(browseForward(t, c, id(hmi)))
 		want := []string{"p_cmd_JogFwd", "p_stat_State", "p_stat_Frequency"}

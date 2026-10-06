@@ -12,8 +12,9 @@ import (
 	"github.com/centroid-is/stc/pkg/types"
 )
 
-// rootID is the node top-level NodeSpecs attach to (Organizes).
-func (s *Server) rootID() ua.NodeID { return ua.ObjectIDObjectsFolder }
+// rootID is the node top-level NodeSpecs attach to (Organizes): the
+// Objects/DeviceSet/PLC1 device object, as TF6100 lays it out.
+func (s *Server) rootID() ua.NodeID { return s.plc1ID() }
 
 // statusFor maps NodeSource and conversion errors to OPC UA status codes.
 func statusFor(err error) ua.StatusCode {
@@ -79,13 +80,16 @@ func validateSpace(sp *Space) error {
 	return nil
 }
 
-// Publish installs sp under the Objects folder: Objects, and Variables
-// whose reads and writes go through src.
+// Publish installs sp under Objects/DeviceSet/PLC1 (created on first use):
+// Objects, and Variables whose reads and writes go through src.
 func (s *Server) Publish(sp *Space, src NodeSource) error {
 	if sp == nil || src == nil {
 		return errors.New("opcua: Publish needs a Space and a NodeSource")
 	}
 	if err := validateSpace(sp); err != nil {
+		return err
+	}
+	if _, err := s.ensureDeviceSet(); err != nil {
 		return err
 	}
 	for _, spec := range sp.Nodes {

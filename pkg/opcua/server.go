@@ -85,6 +85,9 @@ type Server struct {
 	ns   uint16
 	reg  typeRegistry // custom enum and struct DataTypes (datatypes.go)
 
+	dsOnce sync.Once // Objects/DeviceSet/PLC1 (deviceset.go)
+	dsErr  error
+
 	mu      sync.Mutex
 	started bool
 	stopped bool
