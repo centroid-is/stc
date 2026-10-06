@@ -76,6 +76,13 @@ func nextOrdinal(prev int64) (int64, bool) {
 	return prev + 1, true
 }
 
+// IntLiteralValue evaluates an integer constant expression made of an
+// integer literal (any base, typed or not), an optional sign and
+// parentheses. ok is false for anything else and on int64 overflow.
+func IntLiteralValue(x Expr) (int64, bool) {
+	return enumLiteralValue(x)
+}
+
 // enumLiteralValue evaluates an enumeration value expression that is an
 // integer literal, optionally signed or parenthesised.
 func enumLiteralValue(x Expr) (int64, bool) {

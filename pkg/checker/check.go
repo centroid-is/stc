@@ -531,6 +531,8 @@ func (c *Checker) checkExpr(expr ast.Expr) types.Type {
 		return c.checkIndexExpr(e)
 	case *ast.DerefExpr:
 		return c.checkDerefExpr(e)
+	case *ast.BitAccessExpr:
+		return c.checkBitAccessExpr(e)
 	case *ast.ParenExpr:
 		return c.checkExpr(e.Inner)
 	case *ast.ErrorNode:
@@ -593,6 +595,8 @@ func (c *Checker) qualifiedOnlyGVLs(name string) []string {
 func (c *Checker) checkConstantTarget(target ast.Expr) {
 	var name string
 	constant := false
+	// Writing a bit writes the variable that holds it.
+	target = c.assignRoot(target)
 	switch t := target.(type) {
 	case *ast.Ident:
 		sym := c.currentScope.Lookup(t.Name)
@@ -822,6 +826,11 @@ func (c *Checker) checkMemberAccessExpr(e *ast.MemberAccessExpr) types.Type {
 	}
 	memberName := e.Member.Name
 
+	// v.cBit on an integer value with a CONSTANT index is bit access.
+	if typ, ok := c.checkConstBitIndex(e, objType); ok {
+		return typ
+	}
+
 	switch t := objType.(type) {
 	case *types.StructType:
 		for _, m := range t.Members {
@@ -944,12 +953,15 @@ func isBooleanOp(op string) bool {
 // (inst in inst.A1 or a.b.c) as used. Unknown roots are left alone: the
 // call is accepted without checking, so no diagnostic is added here.
 func (c *Checker) markRootUsed(e ast.Expr) {
-	for {
-		ma, ok := e.(*ast.MemberAccessExpr)
-		if !ok {
-			break
+	for walking := true; walking; {
+		switch x := e.(type) {
+		case *ast.MemberAccessExpr:
+			e = x.Object
+		case *ast.BitAccessExpr:
+			e = x.Target
+		default:
+			walking = false
 		}
-		e = ma.Object
 	}
 	id, ok := e.(*ast.Ident)
 	if !ok || c.currentScope == nil {

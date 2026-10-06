@@ -66,6 +66,12 @@ type Symbol struct {
 
 	// IsConstant marks a variable declared in a VAR_GLOBAL CONSTANT block.
 	IsConstant bool
+	// ConstInt is the value of a variable from a CONSTANT block (VAR
+	// CONSTANT or VAR_GLOBAL CONSTANT) whose initialiser is an integer
+	// literal; HasConstInt reports whether it is set. The checker uses it to
+	// range-check a constant bit index such as w.cBit.
+	ConstInt    int64
+	HasConstInt bool
 	// GVL holds access rules for a KindGVL symbol; nil for other kinds.
 	GVL *GVLInfo
 }

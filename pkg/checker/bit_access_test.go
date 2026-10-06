@@ -3,7 +3,9 @@ package checker
 import (
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -187,8 +189,8 @@ gw.0 := TRUE;`)
 		errs := runBits(t, "wc.3 := TRUE;")
 		got := requireCodes(t, errs, CodeAssignToConstant, 1)
 		assert.Contains(t, got[0].Message, "'wc'")
-		errs = runBits(t, "GVL.wc.3 := TRUE;\nGVL.wc.cBit := TRUE;\nwc.cBit.0 := TRUE;")
-		requireCodes(t, errs, CodeAssignToConstant, 2)
+		errs = runBits(t, "GVL.wc.3 := TRUE;\nGVL.wc.cBit := TRUE;\nwc.cBit := TRUE;")
+		requireCodes(t, errs, CodeAssignToConstant, 3)
 	})
 
 	t.Run("write to a GVL constant used as index is not a constant write", func(t *testing.T) {
@@ -202,9 +204,26 @@ gw.0 := TRUE;`)
 		assert.Empty(t, ds)
 	})
 
-	t.Run("bit access on a member callee root marks it used", func(t *testing.T) {
+	t.Run("bit access on an indexed target marks it used", func(t *testing.T) {
 		src := "PROGRAM P\nVAR\n\tarr : ARRAY[0..1] OF WORD;\n\tb : BOOL;\nEND_VAR\nb := arr[0].3;\nEND_PROGRAM\n"
 		ds, _ := runGVL(t, []gvlFile{{"main.st", src}})
 		assert.Empty(t, ds)
+	})
+
+	t.Run("member callee rooted in bit access marks the root used", func(t *testing.T) {
+		// w.3.M() cannot be written in source (3.M lexes as a REAL), so the
+		// callee walk is exercised on a built node.
+		files := parseGVLFiles(t, []gvlFile{{"main.st", "PROGRAM P\nVAR\n\tw : WORD;\nEND_VAR\nEND_PROGRAM\n"}})
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations(files)
+		c := NewChecker(table, diags)
+		c.currentScope = table.LookupPOU("P")
+		callee := &ast.MemberAccessExpr{
+			Object: &ast.BitAccessExpr{Target: &ast.Ident{Name: "w"}, Index: &ast.Literal{LitKind: ast.LitInt, Value: "3"}},
+			Member: &ast.Ident{Name: "M"},
+		}
+		c.markRootUsed(callee)
+		assert.True(t, c.currentScope.LookupLocal("w").Used)
 	})
 }

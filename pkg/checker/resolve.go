@@ -370,6 +370,7 @@ func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
 						IsLibrary:  isLibrary,
 						IsConstant: vb.IsConstant,
 					})
+					setConstInt(bare[len(bare)-1], vb, vd)
 				}
 			}
 		}
@@ -892,12 +893,22 @@ func (r *Resolver) resolveVarBlocksInScope(pouName string, blocks []*ast.VarBloc
 					ParamDir: vb.Section,
 					Type:     resolvedType,
 				}
+				setConstInt(sym, vb, vd)
 				if err := scope.Insert(sym); err != nil {
 					r.diags.Errorf(pos, CodeRedeclared, "%s", err.Error())
 				}
 			}
 		}
 	}
+}
+
+// setConstInt records the value of a CONSTANT variable whose initialiser is
+// an integer literal.
+func setConstInt(sym *symbols.Symbol, vb *ast.VarBlock, vd *ast.VarDecl) {
+	if !vb.IsConstant || vd.InitValue == nil {
+		return
+	}
+	sym.ConstInt, sym.HasConstInt = ast.IntLiteralValue(vd.InitValue)
 }
 
 // insertInlineEnumValues inserts the values of an inline enum into the POU
