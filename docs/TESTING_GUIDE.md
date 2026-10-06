@@ -155,7 +155,7 @@ stc test pkg/twincat/testdata/sln/tests --project "pkg/twincat/testdata/sln/Demo
 
 ```text
 ok
-2 tests, 2 passed, 0 failed
+2 tests, 2 passed, 0 failed, 0 errors
 ```
 
 See [TWINCAT_IMPORT.md](TWINCAT_IMPORT.md) for what is imported.

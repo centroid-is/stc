@@ -89,7 +89,7 @@ Run it:
 stc test .
 # --- PASS: Timer fires after preset (0.000s)
 # ok
-# 1 tests, 1 passed, 0 failed
+# 1 tests, 1 passed, 0 failed, 0 errors
 ```
 
 ## Quick start: run a TwinCAT project with simulated EtherCAT and OPC UA

@@ -121,7 +121,7 @@ stc test [dir] [flags]
     motor_control_test.st:45:5: Expected speed > 100.0 but got 0.0
 
 ok
-3 tests, 2 passed, 1 failed
+3 tests, 2 passed, 1 failed, 0 errors
 ```
 
 **Output (JUnit XML)**:

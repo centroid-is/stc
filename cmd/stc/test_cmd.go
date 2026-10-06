@@ -224,5 +224,5 @@ func printTextResults(result *stctesting.RunResult) {
 	} else {
 		fmt.Println("ok")
 	}
-	fmt.Printf("%d tests, %d passed, %d failed\n", result.Total, result.Passed, result.Failed)
+	fmt.Printf("%d tests, %d passed, %d failed, %d errors\n", result.Total, result.Passed, result.Failed, result.Errors)
 }

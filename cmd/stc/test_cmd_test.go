@@ -279,3 +279,25 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// A TEST_CASE that ends with a runtime error is counted in the text
+// summary (review 2 LO-06).
+func TestTestCmd_SummaryCountsErrors(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFixture(t, dir, "err_test.st", `TEST_CASE 'Divides by zero'
+VAR
+    z : INT;
+    q : INT;
+END_VAR
+    q := 1 / z;
+END_TEST_CASE
+`)
+	writeTestFixture(t, dir, "pass_test.st", passingFixture)
+	stdout, _, exitCode := runStc(t, "test", dir)
+	if exitCode != 1 {
+		t.Fatalf("expected exit 1, got %d: %s", exitCode, stdout)
+	}
+	if !strings.Contains(stdout, "2 tests, 1 passed, 0 failed, 1 errors") {
+		t.Errorf("summary does not count the errored test: %s", stdout)
+	}
+}
