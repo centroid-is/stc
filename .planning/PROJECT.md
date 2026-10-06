@@ -33,6 +33,7 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 - Shipped starter stubs for Beckhoff, Schneider, Allen Bradley — v1.1
 - Auto-defined STC_TEST/STC_SIM preprocessor symbols and TcPOU stub extractor — v1.1
 - TwinCAT declaration syntax: attribute pragmas in the AST, GVL files with qualified_only, wildcard AT in structs/FBs, empty call arguments, ACTIONs (DIAL-01/02/03/05/08) — v1.2 Phase 19
+- TwinCAT expression semantics: bit access, named call arguments, qualified/based enums with strict/to_string, REF=/THIS^/SUPER^, checker knows standard FBs and rejects undeclared types (DIAL-04/06/07/09/10, RUNT-08) — v1.2 Phase 20
 
 ## Current Milestone: v1.2 TwinCAT Import, EtherCAT Simulation & OPC UA
 
@@ -50,7 +51,7 @@ Write ST once, validate it instantly on your machine, and deploy to any supporte
 
 ## Current State
 
-**v1.2 in progress** — Phase 19 complete (2026-10-06): sildarvinnsla ST301 parse diagnostics 2711 → 917, SVNCoreComponents 1430 → 615; CI coverage gate green (interp 96.6%).
+**v1.2 in progress** — Phases 19-20 complete (2026-10-06): sildarvinnsla ST301 and SVNCoreComponents both parse with 0 diagnostics (from 2711 / 1430); `stc check` residuals are missing-library (Phase 21) and literal-typing (Phase 22) buckets; coverage total 96.0%.
 
 **v1.0 shipped** — 2026-03-28
 
@@ -139,4 +140,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-06 after Phase 19 completion*
+*Last updated: 2026-10-06 after Phase 20 completion*
