@@ -146,12 +146,14 @@ func (bs *boundSlot) cursor() *bitCursor {
 
 // decodeSlot returns cur updated from the slot's bits in the image.
 func (b *IOBinder) decodeSlot(cur Value, bs *boundSlot) Value {
-	return b.ioCodec.decode(cur, bs.spec, bs.cursor(), true)
+	codec := b.ioCodec
+	return codec.decode(cur, bs.spec, bs.cursor(), true)
 }
 
 // encodeSlot writes v into the slot's bits in the image.
 func (b *IOBinder) encodeSlot(v Value, bs *boundSlot) {
-	b.ioCodec.encode(v, bs.spec, bs.cursor(), true)
+	codec := b.ioCodec
+	codec.encode(v, bs.spec, bs.cursor(), true)
 }
 
 // preScan steps the network by dt and copies input slots into the env.

@@ -227,16 +227,16 @@ func ioWindow(t *iomap.IOTable, area iomap.Area, off, n int) []byte {
 }
 
 // ioDecodeAt decodes cur's declared type from the table at addr.
-func ioDecodeAt(c ioCodec, t *iomap.IOTable, addr iomap.IOAddress, cur Value, spec ast.TypeSpec) Value {
-	buf := ioWindow(t, addr.Area, addr.ByteOffset, ioByteLen(c, cur, spec, addr.BitOffset))
-	return c.decodeBytes(cur, spec, buf, addr.BitOffset)
+func ioDecodeAt(codec ioCodec, t *iomap.IOTable, addr iomap.IOAddress, cur Value, spec ast.TypeSpec) Value {
+	buf := ioWindow(t, addr.Area, addr.ByteOffset, ioByteLen(codec, cur, spec, addr.BitOffset))
+	return codec.decodeBytes(cur, spec, buf, addr.BitOffset)
 }
 
 // ioEncodeAt encodes v by declared type into the table at addr; bits
 // outside the value's own span are left untouched.
-func ioEncodeAt(c ioCodec, t *iomap.IOTable, addr iomap.IOAddress, v Value, spec ast.TypeSpec) {
-	buf := ioWindow(t, addr.Area, addr.ByteOffset, ioByteLen(c, v, spec, addr.BitOffset))
-	c.encodeBytes(v, spec, buf, addr.BitOffset)
+func ioEncodeAt(codec ioCodec, t *iomap.IOTable, addr iomap.IOAddress, v Value, spec ast.TypeSpec) {
+	buf := ioWindow(t, addr.Area, addr.ByteOffset, ioByteLen(codec, v, spec, addr.BitOffset))
+	codec.encodeBytes(v, spec, buf, addr.BitOffset)
 }
 
 // SetInput stages an input value to be copied into the program env on the
