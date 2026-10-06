@@ -1,16 +1,23 @@
 package ast
 
 // NamedType represents a simple type reference (e.g., BOOL, INT, FB_Motor).
+// Namespace is set for a library-qualified name such as
+// Tc2_EtherCAT.ST_EcSlaveState.
 type NamedType struct {
 	NodeBase
-	Name *Ident `json:"name"`
+	Namespace *Ident `json:"namespace,omitempty"`
+	Name      *Ident `json:"name"`
 }
 
 func (n *NamedType) Children() []Node {
-	if n.Name != nil {
-		return []Node{n.Name}
+	var nodes []Node
+	if n.Namespace != nil {
+		nodes = append(nodes, n.Namespace)
 	}
-	return nil
+	if n.Name != nil {
+		nodes = append(nodes, n.Name)
+	}
+	return nodes
 }
 func (n *NamedType) typeSpecNode() {}
 

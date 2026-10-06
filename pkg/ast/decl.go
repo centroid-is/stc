@@ -295,11 +295,13 @@ func (n *PropertySignature) Children() []Node {
 }
 func (n *PropertySignature) declNode() {}
 
-// TypeDecl represents a TYPE...END_TYPE declaration.
+// TypeDecl represents a TYPE...END_TYPE declaration. InitValue holds the
+// type's default value, as in TYPE E : (a, b) := b; END_TYPE.
 type TypeDecl struct {
 	NodeBase
 	Name       *Ident        `json:"name"`
 	Type       TypeSpec      `json:"type"`
+	InitValue  Expr          `json:"init_value,omitempty"`
 	Attributes []*Attribute  `json:"attributes,omitempty"`
 	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
@@ -312,6 +314,9 @@ func (n *TypeDecl) Children() []Node {
 	}
 	if n.Type != nil {
 		nodes = append(nodes, n.Type)
+	}
+	if n.InitValue != nil {
+		nodes = append(nodes, n.InitValue)
 	}
 	return nodes
 }

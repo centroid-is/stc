@@ -19,6 +19,26 @@ func (n *AssignStmt) Children() []Node {
 }
 func (n *AssignStmt) stmtNode() {}
 
+// RefAssignStmt represents a reference assignment r REF= x; that rebinds
+// the REFERENCE TO variable Target to the lvalue Value.
+type RefAssignStmt struct {
+	NodeBase
+	Target Expr `json:"target"`
+	Value  Expr `json:"value"`
+}
+
+func (n *RefAssignStmt) Children() []Node {
+	var nodes []Node
+	if n.Target != nil {
+		nodes = append(nodes, n.Target)
+	}
+	if n.Value != nil {
+		nodes = append(nodes, n.Value)
+	}
+	return nodes
+}
+func (n *RefAssignStmt) stmtNode() {}
+
 // CallStmt represents a function block call statement with named arguments.
 type CallStmt struct {
 	NodeBase
@@ -38,7 +58,8 @@ func (n *CallStmt) Children() []Node {
 }
 func (n *CallStmt) stmtNode() {}
 
-// CallArg represents a named argument in a function block call.
+// CallArg represents an argument in a call statement or in
+// CallExpr.NamedArgs. Name is nil for a positional argument.
 // IsOutput distinguishes := (input) from => (output) binding.
 type CallArg struct {
 	NodeBase

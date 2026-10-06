@@ -1,0 +1,162 @@
+package ast
+
+import (
+	"math"
+	"strconv"
+	"strings"
+)
+
+// EnumOrdinal is the numeric value assigned to one enumeration value.
+//
+// Known is false when the value could not be computed from the AST alone:
+// the explicit value is not an integer literal (for example a constant
+// name), the literal overflows int64, or the value is an implicit
+// successor of such an entry. Value then holds the positional guess
+// (previous + 1), and callers that can evaluate constants should do so.
+type EnumOrdinal struct {
+	Name  string
+	Value int64
+	Known bool
+}
+
+// EnumOrdinals numbers the values of an enumeration with the IEC 61131-3 /
+// Beckhoff previous+1 rule: the first implicit value is 0, an explicit
+// value sets the counter, and each following implicit value is the
+// previous value plus one. So (tun := 0, rdy := 2, nst) gives nst = 3.
+//
+// Explicit values may be integer literals with an optional base prefix
+// (2#, 8#, 16#) and underscores, typed integer literals (UINT#5,
+// BYTE#16#10), a leading unary minus or plus, and parentheses.
+//
+// When an explicit value is not computable, that entry and its implicit
+// successors report Known=false; numbering continues positionally, so in
+// (a := C_X, b) b gets the last known ordinal + 2. Nil values are skipped.
+//
+// This is the single numbering routine shared by the checker and the
+// interpreter. It never panics on malformed or overflowing input.
+func EnumOrdinals(e *EnumType) []EnumOrdinal {
+	if e == nil {
+		return nil
+	}
+	out := make([]EnumOrdinal, 0, len(e.Values))
+	var prev int64 = -1
+	prevKnown := true
+	for _, v := range e.Values {
+		if v == nil {
+			continue
+		}
+		ord := EnumOrdinal{}
+		if v.Name != nil {
+			ord.Name = v.Name.Name
+		}
+		if v.Value != nil {
+			val, ok := enumLiteralValue(v.Value)
+			if ok {
+				ord.Value, ord.Known = val, true
+			} else {
+				ord.Value, ord.Known = nextOrdinal(prev)
+				ord.Known = false
+			}
+		} else {
+			var ok bool
+			ord.Value, ok = nextOrdinal(prev)
+			ord.Known = ok && prevKnown
+		}
+		prev, prevKnown = ord.Value, ord.Known
+		out = append(out, ord)
+	}
+	return out
+}
+
+// nextOrdinal returns prev + 1, or (0, false) if that overflows int64.
+func nextOrdinal(prev int64) (int64, bool) {
+	if prev == math.MaxInt64 {
+		return 0, false
+	}
+	return prev + 1, true
+}
+
+// enumLiteralValue evaluates an enumeration value expression that is an
+// integer literal, optionally signed or parenthesised.
+func enumLiteralValue(x Expr) (int64, bool) {
+	switch v := x.(type) {
+	case *ParenExpr:
+		return enumLiteralValue(v.Inner)
+	case *UnaryExpr:
+		switch v.Op.Text {
+		case "-":
+			n, ok := enumLiteralValue(v.Operand)
+			if !ok {
+				return 0, false
+			}
+			return -n, true
+		case "+":
+			return enumLiteralValue(v.Operand)
+		}
+		return 0, false
+	case *Literal:
+		switch v.LitKind {
+		case LitInt:
+			return parseIECInt(v.Value)
+		case LitTyped:
+			text := v.Value
+			// Some producers leave the type prefix in Value (UINT#5).
+			if i := strings.IndexByte(text, '#'); i > 0 && !isDigits(text[:i]) {
+				text = text[i+1:]
+			}
+			return parseIECInt(text)
+		}
+	}
+	return 0, false
+}
+
+// parseIECInt parses an IEC integer literal: optional sign, optional
+// base prefix (2#, 8#, 16#), digits with underscores.
+func parseIECInt(text string) (int64, bool) {
+	text = strings.ReplaceAll(text, "_", "")
+	neg := false
+	if strings.HasPrefix(text, "-") || strings.HasPrefix(text, "+") {
+		neg = text[0] == '-'
+		text = text[1:]
+	}
+	base := 10
+	if i := strings.IndexByte(text, '#'); i >= 0 {
+		switch text[:i] {
+		case "2":
+			base = 2
+		case "8":
+			base = 8
+		case "16":
+			base = 16
+		default:
+			return 0, false
+		}
+		text = text[i+1:]
+	}
+	if text == "" {
+		return 0, false
+	}
+	u, err := strconv.ParseUint(text, base, 64)
+	if err != nil {
+		return 0, false
+	}
+	if neg {
+		if u > uint64(math.MaxInt64)+1 {
+			return 0, false
+		}
+		return -int64(u), true
+	}
+	if u > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(u), true
+}
+
+func isDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return s != ""
+}
