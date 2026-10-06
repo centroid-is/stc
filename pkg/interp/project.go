@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -261,4 +262,100 @@ func (p *Project) SetIOBinder(b *IOBinder) {
 	}
 	p.binder = b
 	p.allocIO() // wildcards claimed by the binder lose their auto slots
+}
+
+// WallClock is the real-time source of Run: Now is monotonic time since an
+// arbitrary origin and Sleep waits d or until ctx is done (returning
+// ctx.Err()). Tests substitute a fake to run free-running mode
+// deterministically.
+type WallClock interface {
+	Now() time.Duration
+	Sleep(ctx context.Context, d time.Duration) error
+}
+
+// NewWallClock returns the monotonic WallClock Run uses by default: Now is
+// time.Since a start instant (Go's monotonic reading, immune to wall-clock
+// steps) and Sleep is timer based.
+func NewWallClock() WallClock {
+	return monoClock{start: time.Now()}
+}
+
+type monoClock struct{ start time.Time }
+
+func (m monoClock) Now() time.Duration { return time.Since(m.start) }
+
+func (monoClock) Sleep(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+// RunOpts configures Run. Duration 0 runs until ctx is done; a nil Clock
+// uses NewWallClock; OnTick, when set, receives the virtual clock after
+// every Tick (from Run's goroutine).
+type RunOpts struct {
+	Duration time.Duration
+	Clock    WallClock
+	OnTick   func(sim time.Duration)
+}
+
+// Run is free-running mode: it calls Tick once per BaseTick of wall time.
+// Tick n is due at start + n*BaseTick; Run sleeps until then (never
+// busy-waits) and ticks. When a Tick ends after the next due time, every
+// task due within the missed base ticks counts one overrun and Run
+// realigns to the next due time after now instead of bursting catch-up
+// ticks, so the virtual clock falls behind wall time under overload. Run
+// returns nil when opts.Duration of wall time is covered, ctx.Err() when
+// ctx is done, and the first Tick error.
+func (p *Project) Run(ctx context.Context, opts RunOpts) error {
+	clk := opts.Clock
+	if clk == nil {
+		clk = NewWallClock()
+	}
+	start := clk.Now()
+	var n int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		due := time.Duration(n) * p.base
+		if opts.Duration > 0 && due >= opts.Duration {
+			return nil
+		}
+		if d := start + due - clk.Now(); d > 0 {
+			if err := clk.Sleep(ctx, d); err != nil {
+				return err
+			}
+		}
+		if err := p.Tick(); err != nil {
+			return err
+		}
+		if opts.OnTick != nil {
+			opts.OnTick(p.Clock())
+		}
+		n++
+		if late := clk.Now() - start; late > time.Duration(n)*p.base {
+			next := int64((late + p.base - 1) / p.base)
+			p.countOverruns(next - n)
+			n = next
+		}
+	}
+}
+
+// countOverruns adds one overrun to every task due within the next missed
+// base ticks of the virtual clock.
+func (p *Project) countOverruns(missed int64) {
+	p.rt.mu.Lock()
+	defer p.rt.mu.Unlock()
+	window := p.clock + time.Duration(missed)*p.base
+	for _, t := range p.tasks {
+		if t.nextDue < window {
+			t.overruns++
+		}
+	}
 }
