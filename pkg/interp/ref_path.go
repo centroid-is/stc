@@ -111,7 +111,7 @@ func writeRef(p *RefPath, val Value) error {
 		return danglingRef(p)
 	}
 	if len(p.Steps) == 0 {
-		p.Env.Set(p.Var, val)
+		p.Env.Set(p.Var, storeAs(root, val))
 		return nil
 	}
 	cur := root
@@ -121,9 +121,11 @@ func writeRef(p *RefPath, val Value) error {
 		}
 	}
 	last := p.Steps[len(p.Steps)-1]
-	if _, ok := stepInto(cur, last); !ok {
+	old, ok := stepInto(cur, last)
+	if !ok {
 		return danglingRef(p)
 	}
+	val = storeAs(old, val)
 	if last.IsIndex {
 		cur.Array[last.Index] = val
 	} else {

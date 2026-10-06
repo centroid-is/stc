@@ -233,7 +233,7 @@ func TestEvalBinary_UnsupportedTypes(t *testing.T) {
 
 func TestEvalBinaryInt_UnsupportedOp(t *testing.T) {
 	interp := New()
-	_, err := interp.evalBinaryInt(1, "NOPE", 2)
+	_, err := interp.evalBinaryInt(1, "NOPE", 2, types.KindInvalid)
 	if err == nil {
 		t.Fatal("expected error for unsupported int op")
 	}

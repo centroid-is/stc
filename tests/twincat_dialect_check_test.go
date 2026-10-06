@@ -12,23 +12,6 @@ import (
 	"github.com/centroid-is/stc/pkg/parser"
 )
 
-// phase22LiteralTyping lists the only error messages the TwinCAT dialect gate
-// tolerates. Untyped integer literals are typed DINT until Phase 22 literal
-// typing (RUNT-05), so `n := n + 1;` on an INT still reports this message.
-// Remove entries here as Phase 22 lands; do not add unrelated ones.
-var phase22LiteralTyping = []string{
-	"cannot assign DINT to INT",
-}
-
-func allowedPhase22(msg string) bool {
-	for _, m := range phase22LiteralTyping {
-		if msg == m {
-			return true
-		}
-	}
-	return false
-}
-
 // checkSource runs the stc check pipeline (parse, then analyzer.Analyze) on a
 // single file and returns parse and analysis diagnostics together.
 func checkSource(t *testing.T, name, src string) []diag.Diagnostic {
@@ -49,8 +32,8 @@ func errorsOf(ds []diag.Diagnostic) []diag.Diagnostic {
 }
 
 // TestTwinCATDialectCheck is the analyzer half of the Phase 20 gate: every
-// TwinCAT dialect ST suite and the Phase 19 hand-off fixture check clean
-// except for the Phase 22 literal-typing message.
+// TwinCAT dialect ST suite and the Phase 19 hand-off fixture check clean.
+// Phase 22 literal typing removed the last tolerated message.
 func TestTwinCATDialectCheck(t *testing.T) {
 	root := filepath.Dir(probesDir(t))
 	files, err := filepath.Glob(filepath.Join(root, "twincat_dialect", "*.st"))
@@ -70,9 +53,7 @@ func TestTwinCATDialectCheck(t *testing.T) {
 				t.Fatalf("read: %v", err)
 			}
 			for _, d := range errorsOf(checkSource(t, name, string(data))) {
-				if !allowedPhase22(d.Message) {
-					t.Errorf("%s", d.String())
-				}
+				t.Errorf("%s", d.String())
 			}
 		})
 	}

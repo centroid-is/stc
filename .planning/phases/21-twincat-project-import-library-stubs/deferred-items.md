@@ -26,6 +26,7 @@
   Owner: Phase 22 or 23 (method calls). Allowlisted as `deferred` in tests/twincat_import_test.go.
 - **External read of an FB's internal VAR.** Baader MAIN reads `GVL_Pipeline.rtFifo.nElemSize`, a plain `VAR` of FB_Fifo, and stc reports SEMA024 (3 errors). Decide whether TwinCAT accepts read access to internal FB variables and align the checker (Phase 22).
 - **LEN typed as STRING (pre-existing checker bug).** `n := LEN(s);` reports `cannot assign STRING to INT`. `types.BuiltinFunctions["LEN"]` returns INT, but generic candidate resolution in `checker.checkBuiltinCall` returns the argument type. One Baader error (F_ParseBraceNumbers). Owner: Phase 22 built-ins.
+- **Mixed signed/unsigned arithmetic widens to REAL (pre-existing checker bug).** `u + i` with `u : UINT` and `i : INT` types as REAL, because the lattice has no signed/unsigned common integer supertype. Baader FB_BaaderNoCamera indexes `a[(uIndex + i) MOD 61]` and gets `array index must be an integer type, got REAL` (2 errors). Before Phase 22 literal typing the literal made it LREAL and a phase22 rule hid it. Allowlisted as `deferred`. Owner: checker type promotion.
 - **Genuine sildarvinnsla drift at HEAD (report to user, not stc bugs).**
   - ST201 `SPB02` and ST301 `SPB03` declare `FB_TwoWayConveyor`, which SVNCoreComponents renamed to `FB_BatchConveyor` (SEMA037).
   - ST201 and ST301 MAIN write `ST_LineRecipe.stopDistanceFromEnd`; SVNCoreComponents FB_Conveyor uses `stopDistanceFromEnd` and `drivePastForDelivery`; neither member exists on ST_LineRecipe any more (SEMA024).

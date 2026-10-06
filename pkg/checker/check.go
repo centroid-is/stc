@@ -291,13 +291,13 @@ func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
 		return
 	}
 
+	// An untyped constant adopts the target type (range-checked).
+	if c.untypedStore(s.Value, targetType, CodeTypeMismatch) {
+		return
+	}
+
 	// Check type compatibility: value must widen to target
 	if !targetType.Equal(valueType) {
-		// Integer literals (default DINT) are compatible with any integer type
-		// Real literals (default LREAL) are compatible with any real type
-		if isLiteralExpr(s.Value) && isLiteralCompatible(valueType.Kind(), targetType.Kind()) {
-			return
-		}
 		if !types.CanWiden(valueType.Kind(), targetType.Kind()) {
 			pos := astPosToSource(s.Span().Start)
 			c.diags.Errorf(pos, CodeTypeMismatch,
@@ -406,10 +406,10 @@ func (c *Checker) checkCaseStmt(s *ast.CaseStmt) {
 		for _, label := range branch.Labels {
 			switch l := label.(type) {
 			case *ast.CaseLabelValue:
-				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Value))
+				c.caseLabelCompatible(l, exprType, l.Value, c.checkExpr(l.Value))
 			case *ast.CaseLabelRange:
-				c.caseLabelCompatible(l, exprType, c.checkExpr(l.Low))
-				c.caseLabelCompatible(l, exprType, c.checkExpr(l.High))
+				c.caseLabelCompatible(l, exprType, l.Low, c.checkExpr(l.Low))
+				c.caseLabelCompatible(l, exprType, l.High, c.checkExpr(l.High))
 			}
 		}
 		for _, stmt := range branch.Body {
@@ -573,11 +573,10 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 				continue
 			}
 			if argType != types.Invalid && paramType != nil {
+				if !arg.IsOutput && c.untypedStore(arg.Value, paramType, CodeWrongArgType) {
+					continue
+				}
 				if !paramType.Equal(argType) && !types.CanWiden(argType.Kind(), paramType.Kind()) {
-					// Allow literal compatibility (e.g., integer literal 100 passed as INT param)
-					if isLiteralExpr(arg.Value) && isLiteralCompatible(argType.Kind(), paramType.Kind()) {
-						continue
-					}
 					pos := astPosToSource(arg.Value.Span().Start)
 					c.diags.Errorf(pos, CodeWrongArgType,
 						"cannot pass %s as %s parameter %q (expected %s)",
@@ -758,6 +757,7 @@ func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
 	if done {
 		return result
 	}
+	left, right = adoptUntyped(e.Left, e.Right, left, right)
 	switch {
 	case isArithmeticOp(op):
 		common, ok := types.CommonType(left.Kind(), right.Kind())
@@ -780,6 +780,11 @@ func (c *Checker) checkBinaryExpr(e *ast.BinaryExpr) types.Type {
 		return types.TypeBOOL
 
 	case isBooleanOp(op):
+		if bitString(left.Kind()) && bitString(right.Kind()) {
+			// Bitwise AND/OR/XOR on ANY_BIT operands (BYTE..LWORD).
+			common, _ := types.CommonType(left.Kind(), right.Kind())
+			return &types.PrimitiveType{Kind_: common}
+		}
 		if left.Kind() != types.KindBOOL || right.Kind() != types.KindBOOL {
 			pos := astPosToSource(e.Op.Span.Start)
 			c.diags.Errorf(pos, CodeTypeMismatch,
@@ -1129,19 +1134,6 @@ func isLiteralExpr(e ast.Expr) bool {
 		ue := e.(*ast.UnaryExpr)
 		_, ok := ue.Operand.(*ast.Literal)
 		return ok
-	}
-	return false
-}
-
-// isLiteralCompatible checks if a literal type can be used where
-// a target type is expected. Integer literals are compatible with any
-// integer type, and real literals with any real type.
-func isLiteralCompatible(litKind, targetKind types.TypeKind) bool {
-	if types.IsAnyInt(litKind) && types.IsAnyInt(targetKind) {
-		return true
-	}
-	if types.IsAnyReal(litKind) && types.IsAnyReal(targetKind) {
-		return true
 	}
 	return false
 }

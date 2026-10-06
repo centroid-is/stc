@@ -50,6 +50,17 @@ func NewScanCycleEngine(program *ast.ProgramDecl) *ScanCycleEngine {
 	}
 }
 
+// NewScanCycleEngineWith creates a scan cycle engine for program that runs on
+// interp instead of a fresh interpreter, so several programs share its
+// TYPEs, FBs, FUNCTIONs and GVLs (see Runtime). Register GVLs on interp
+// before the engine initialises: the program env takes the GVL chain as its
+// parent when it is created.
+func NewScanCycleEngineWith(interp *Interpreter, program *ast.ProgramDecl) *ScanCycleEngine {
+	e := NewScanCycleEngine(program)
+	e.interp = interp
+	return e
+}
+
 // IOTable returns the engine's I/O process image table for external access.
 // External code can call SetBit/SetWord etc. to inject test inputs before Tick.
 func (e *ScanCycleEngine) IOTable() *iomap.IOTable {
@@ -66,6 +77,13 @@ func (e *ScanCycleEngine) IOTable() *iomap.IOTable {
 //  5. Copy AT-bound outputs to the I/O table, then linked outputs (IOBinder)
 //  6. Advance the virtual clock by dt
 func (e *ScanCycleEngine) Tick(dt time.Duration) error {
+	return e.tick(dt, true)
+}
+
+// tick runs one scan cycle. advance is false when the caller (Runtime.Tick)
+// has already advanced the shared interpreter clock for this cycle, so that
+// several programs on one interpreter do not advance it once each.
+func (e *ScanCycleEngine) tick(dt time.Duration, advance bool) error {
 	if !e.initialized {
 		e.initializeEnv()
 	}
@@ -88,7 +106,9 @@ func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 	}
 
 	// 2. Advance the interpreter's virtual clock by this scan's delta
-	e.interp.SetDt(dt)
+	if advance {
+		e.interp.SetDt(dt)
+	}
 
 	// 3. Execute program body
 	err := e.interp.execStatements(e.env, e.program.Body)
@@ -195,51 +215,18 @@ func (e *ScanCycleEngine) Initialize() {
 	}
 }
 
-// SetGlobals registers gvls on the engine's interpreter, in declaration
-// order, so the program can use GVL.x and, for GVLs without qualified_only,
-// bare x. Call it before the first Tick or Initialize: the program env picks
+// SetGlobals registers gvls on the engine's interpreter with RegisterGVLs,
+// in declaration order, so the program can use GVL.x and, for GVLs without
+// qualified_only, bare x. Call it before the first Tick or Initialize: the program env picks
 // up the GVL chain as its parent when it is created.
 func (e *ScanCycleEngine) SetGlobals(gvls []*ast.GVLDecl) {
-	for _, g := range gvls {
-		e.interp.RegisterGVL(g)
-	}
+	e.interp.RegisterGVLs(gvls)
 }
 
-// initVarDecl defines every name of vd in env. Stdlib FB types become fresh
-// stdlib instances, user FB types registered in FBDecls become live user FB
-// instances whose env has fbParent as parent, and anything else gets the zero value
-// of its type (resolving user TYPEs through TypeDecls) or its initialiser.
-// Each name gets its own value, so aggregates are never shared between names.
+// initVarDecl defines every name of vd in env through instantiateVar.
 // Shared by program and GVL environments.
 func (interp *Interpreter) initVarDecl(env, fbParent *Env, vd *ast.VarDecl) {
-	typeName := typeNameFromSpec(vd.Type)
-	upperType := strings.ToUpper(typeName)
-	factory, isStdlibFB := StdlibFBFactory[upperType]
-	var fbDecl *ast.FunctionBlockDecl
-	if !isStdlibFB && typeName != "" && interp.FBDecls != nil {
-		fbDecl = interp.FBDecls[upperType]
-	}
-
-	for _, n := range vd.Names {
-		var val Value
-		switch {
-		case isStdlibFB:
-			val = Value{Kind: ValFBInstance, FBRef: &FBInstance{TypeName: typeName, FB: factory()}}
-		case fbDecl != nil:
-			val = Value{Kind: ValFBInstance, FBRef: NewUserFBInstance(typeName, fbDecl, interp, fbParent)}
-		default:
-			val = zeroFromTypeSpecWith(vd.Type, interp.TypeResolverFunc(), 0)
-			if vd.InitValue != nil {
-				if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
-					val = iv
-				}
-			}
-			if val.IsAggregate() {
-				val = val.Clone()
-			}
-		}
-		env.Define(n.Name, val)
-	}
+	interp.instantiateVar(env, fbParent, vd, 0)
 }
 
 // initializeEnv creates and populates the program environment from VarBlocks.

@@ -56,10 +56,6 @@ var sildRules = []sildRule{
 	// plus WORD/UINT implicit conversion (amsaddr.port is WORD).
 	rule(bucketPhase22, "SEMA021", `cannot pass (?:DINT|LREAL|WORD) as input parameter "[^"]+" \(expected (?:`+intTypes+`|REAL)\)`, "", ""),
 	rule(bucketPhase22, "SEMA001", `cannot assign (?:DINT|LREAL|WORD) to (?:`+intTypes+`|REAL)`, "", ""),
-	rule(bucketPhase22, "SEMA001", `array index must be an integer type, got LREAL`, "", ""),
-	rule(bucketPhase22, "SEMA001", `FOR TO expression must be an integer type, got LREAL`, "", ""),
-	rule(bucketPhase22, "SEMA001", `boolean operator (?:AND|OR|XOR) requires BOOL operands, got `+intTypes+` and `+intTypes, "", ""),
-	rule(bucketPhase22, "SEMA003", `cannot compare `+intTypes+` and DINT`, "", ""),
 	// Phase 22: pointer comparison with 0 and pointer/STRING indexing
 	// (PVOID is POINTER TO BYTE for now, see deferred-items.md).
 	rule(bucketPhase22, "SEMA003", `cannot compare POINTER TO \w+ and DINT`, "", ""),
@@ -75,6 +71,7 @@ var sildRules = []sildRule{
 	rule(bucketDeferred, "SEMA024", `type FB_Fifo has no member "(?:Configure|Push|nElemSize)"`, "Baader", ""),
 	rule(bucketDeferred, "SEMA024", `type FB_SerialFramer has no member "SendBytes"`, "Baader", ""),
 	rule(bucketDeferred, "SEMA001", `cannot assign STRING to INT`, "Baader", "F_ParseBraceNumbers.TcPOU"),
+	rule(bucketDeferred, "SEMA001", `array index must be an integer type, got REAL`, "Baader", "FB_BaaderNoCamera.TcPOU"),
 
 	// Genuine drift at sildarvinnsla HEAD: FB_TwoWayConveyor was renamed to
 	// FB_BatchConveyor, ST_LineRecipe lost two members, ST_Batch is declared

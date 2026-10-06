@@ -13,6 +13,7 @@ import (
 	"github.com/centroid-is/stc/pkg/incremental"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/symtree"
 	"github.com/centroid-is/stc/pkg/twincat"
 	"github.com/centroid-is/stc/pkg/vendor"
 	"github.com/spf13/cobra"
@@ -34,6 +35,7 @@ checked with its library stubs; diagnostics point at TcPOU files and lines.`,
 
 	cmd.Flags().String("vendor", "", "Vendor target for compatibility checking (beckhoff, schneider, portable)")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+	cmd.Flags().Bool("symbols", false, "Print the symbol tree after diagnostics")
 	addGVLNameFlag(cmd)
 
 	return cmd
@@ -119,7 +121,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	allDiags = append(allDiags, incrResult.Diags...)
 	allDiags = append(allDiags, analysisResult.Diags...)
 
-	return reportDiags(cmd, format, allDiags,
+	return reportDiags(cmd, format, analysisResult, allDiags,
 		fmt.Sprintf("(%d/%d files re-parsed)", stats.StaleFiles, stats.TotalFiles))
 }
 
@@ -185,14 +187,15 @@ func runCheckProject(cmd *cobra.Command, args []string, format, vendorFlag strin
 
 	res := analyzer.AnalyzeProject(m, cfg, defines)
 	allDiags := append(append([]diag.Diagnostic{}, importDiags...), res.Diags...)
-	return reportDiags(cmd, format, allDiags,
+	return reportDiags(cmd, format, res, allDiags,
 		fmt.Sprintf("(%d source(s), %d library source(s) from %s)", len(m.Sources), len(m.LibrarySources), m.PlcName))
 }
 
 // reportDiags prints diagnostics as a JSON array (stdout) or text (stderr)
-// with an error/warning summary and a trailing note line, then exits 1 when
-// any error was reported.
-func reportDiags(cmd *cobra.Command, format string, allDiags []diag.Diagnostic, note string) error {
+// with an error/warning summary and a trailing note line, plus the symbol
+// tree of analysisResult under --symbols, then exits 1 when any error was
+// reported.
+func reportDiags(cmd *cobra.Command, format string, analysisResult analyzer.AnalysisResult, allDiags []diag.Diagnostic, note string) error {
 	if allDiags == nil {
 		allDiags = []diag.Diagnostic{}
 	}
@@ -208,10 +211,33 @@ func reportDiags(cmd *cobra.Command, format string, allDiags []diag.Diagnostic, 
 		}
 	}
 
+	// --symbols: build the static symbol tree (RUNT-01) for printing.
+	var tree *symtree.Tree
+	if withSymbols, _ := cmd.Flags().GetBool("symbols"); withSymbols {
+		var err error
+		if tree, err = symtree.Build(analysisResult); err != nil {
+			fmt.Fprintf(os.Stderr, "error: building symbol tree: %v\n", err)
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			os.Exit(1)
+		}
+	}
+
 	switch format {
 	case "json":
 		// JSON output to stdout
-		out, err := json.MarshalIndent(allDiags, "", "  ")
+		var payload any = allDiags
+		if tree != nil {
+			symJSON, err := tree.JSON()
+			if err != nil {
+				return fmt.Errorf("JSON marshal error: %w", err)
+			}
+			payload = struct {
+				Diagnostics []diag.Diagnostic `json:"diagnostics"`
+				Symbols     json.RawMessage   `json:"symbols"`
+			}{allDiags, symJSON}
+		}
+		out, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
 			return fmt.Errorf("JSON marshal error: %w", err)
 		}
@@ -225,6 +251,9 @@ func reportDiags(cmd *cobra.Command, format string, allDiags []diag.Diagnostic, 
 		// Print summary to stderr
 		fmt.Fprintf(os.Stderr, "%d error(s), %d warning(s)\n", errorCount, warningCount)
 		fmt.Fprintln(os.Stderr, note)
+		if tree != nil {
+			fmt.Fprint(os.Stdout, tree.Text())
+		}
 	}
 
 	// Exit code: 1 if errors, 0 if warnings-only or clean
