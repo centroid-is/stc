@@ -177,6 +177,10 @@ func (p *Parser) parseStructType() *ast.StructType {
 	var tailAttrs []*ast.Attribute
 	var tailPragmas []*ast.PragmaNode
 	for !p.atEnd() {
+		// A stray ";" (e.g. "a : REAL;;") is an empty member; skip it.
+		if p.match(lexer.Semicolon) {
+			continue
+		}
 		// Pragmas may precede an individual struct member.
 		attrs, pragmas := p.collectPragmas()
 		if p.at(lexer.KwEndStruct) || p.atEnd() {
@@ -270,15 +274,40 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 
 	endTok := p.expect(lexer.RParen)
 
+	// Optional base type after the closing parenthesis: ( ... ) UINT
+	var baseType ast.TypeSpec
+	if name, ok := enumBaseTypeKeywords[p.peek().Kind]; ok {
+		baseType = p.parsePrimitiveTypeOrSubrange(name)
+		endTok = p.tokens[p.pos-1]
+	}
+
 	return &ast.EnumType{
 		NodeBase: ast.NodeBase{
 			NodeKind: ast.KindEnumType,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
+		BaseType:      baseType,
 		Values:        values,
 		EndAttributes: tailAttrs,
 		EndPragmas:    tailPragmas,
 	}
+}
+
+// enumBaseTypeKeywords lists the integer and bit-string types an enum may
+// name as its base type (Beckhoff InfoSys "Enumerations").
+var enumBaseTypeKeywords = map[lexer.TokenKind]string{
+	lexer.KwSint:  "SINT",
+	lexer.KwInt:   "INT",
+	lexer.KwDint:  "DINT",
+	lexer.KwLint:  "LINT",
+	lexer.KwUsint: "USINT",
+	lexer.KwUint:  "UINT",
+	lexer.KwUdint: "UDINT",
+	lexer.KwUlint: "ULINT",
+	lexer.KwByte:  "BYTE",
+	lexer.KwWord:  "WORD",
+	lexer.KwDword: "DWORD",
+	lexer.KwLword: "LWORD",
 }
 
 // parseEnumValue parses Name [:= expr]
@@ -311,6 +340,14 @@ func (p *Parser) parseNamedTypeOrSubrange() ast.TypeSpec {
 			NodeSpan: ast.SpanFrom(astPos(tok.Pos), astPos(tok.EndPos)),
 		},
 		Name: ident,
+	}
+
+	// Namespace-qualified type name: Lib.Type (e.g. Tc2_EtherCAT.ST_EcSlaveState).
+	if p.match(lexer.Dot) {
+		name := p.parseIdent()
+		namedType.Namespace = ident
+		namedType.Name = name
+		namedType.NodeSpan = ast.Span{Start: ident.Span().Start, End: name.Span().End}
 	}
 
 	// Check for subrange: Ident(low..high)

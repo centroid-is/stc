@@ -25,6 +25,10 @@ func (p *Parser) parseDeclaration() ast.Declaration {
 		decl := p.parseDeclaration()
 		attachDeclPragmas(decl, attrs, pragmas)
 		return decl
+	case lexer.Semicolon:
+		// A stray ";" between declarations is an empty declaration.
+		p.advance()
+		return nil
 	case lexer.KwVarGlobal:
 		return p.parseGVLBlock(nil, nil)
 	case lexer.KwAction:
@@ -358,6 +362,12 @@ func (p *Parser) parseTypeDecls() ast.Declaration {
 	p.expect(lexer.Colon)
 
 	typeSpec := p.parseTypeSpec()
+
+	// Optional default value: TYPE E : (a, b) := b; END_TYPE
+	var initValue ast.Expr
+	if p.match(lexer.Assign) {
+		initValue = p.parseExpr(0)
+	}
 	p.match(lexer.Semicolon)
 
 	endTok := p.expect(lexer.KwEndType)
@@ -368,8 +378,9 @@ func (p *Parser) parseTypeDecls() ast.Declaration {
 			NodeKind: ast.KindTypeDecl,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Name: name,
-		Type: typeSpec,
+		Name:      name,
+		Type:      typeSpec,
+		InitValue: initValue,
 	}
 }
 

@@ -91,6 +91,10 @@ func (p *Parser) parseVarBlock() *ast.VarBlock {
 	var tailAttrs []*ast.Attribute
 	var tailPragmas []*ast.PragmaNode
 	for !p.atEnd() {
+		// A stray ";" (e.g. "rDropPoint : REAL;;") is an empty declaration.
+		if p.match(lexer.Semicolon) {
+			continue
+		}
 		// Pragmas may precede an individual variable declaration.
 		attrs, pragmas := p.collectPragmas()
 		if p.at(lexer.KwEndVar) || p.atEnd() {
