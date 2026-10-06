@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
-stopped_at: Completed 20-06-PLAN.md
-last_updated: "2026-10-06T03:15:09.233Z"
+stopped_at: Completed 20-09-PLAN.md
+last_updated: "2026-10-06T03:36:39.500Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 15
   total_plans: 57
-  completed_plans: 55
+  completed_plans: 56
   percent: 52
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 20 (TwinCAT Expression Semantics) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-10-06
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -116,6 +116,10 @@ Recent decisions affecting current work:
 - [Phase 20]: SUPER resolves relative to the declaring FB of the running code (Env.selfDecl); unqualified and THIS^ method calls are virtual
 - [Phase 20]: REF= and REF() build path references (RefPath) with indices evaluated at bind time; a path that stops resolving is a dangling-reference RuntimeError
 - [Phase 20]: Built-in functions reject named arguments at runtime instead of dropping them
+- [Phase 20]: 20-09: strict enums reject arithmetic, implicit integer conversion and cross-type comparison (SEMA036); <X>_TO_<Y> and TO_<Y> conversions take them explicitly; non-strict enums act as their base integer (ruling A4)
+- [Phase 20]: 20-09: THIS^.m and SUPER^.m resolve through the FB scope chain; SEMA038 texts mirror the interpreter's runtime errors
+- [Phase 20]: 20-09: initialisers type-check literal values only; non-literal values are walked for undeclared names (Phase 22 owns literal typing)
+- [Phase 20]: 20-09: types.ArrayDimension.Known marks literal bounds; too many initialisers is reported only with known bounds and literal repetition counts
 
 ### Pending Todos
 
@@ -129,8 +133,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T03:14:48.869Z
-Stopped at: Completed 20-06-PLAN.md
+Last session: 2026-10-06T03:36:35.322Z
+Stopped at: Completed 20-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
