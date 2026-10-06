@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,31 +24,7 @@ import (
 // Phase 23 gate: the four success criteria on in-repo fixtures (always on)
 // and the real ST301 project with its EtherCAT network (STC_SILD_DIR).
 
-var (
-	stcBinOnce sync.Once
-	stcBin     string
-	stcBinErr  error
-)
-
-// stcBinary builds cmd/stc once per test binary.
-func stcBinary(t *testing.T) string {
-	t.Helper()
-	stcBinOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "stc-gate-")
-		if err != nil {
-			stcBinErr = err
-			return
-		}
-		stcBin = filepath.Join(dir, "stc")
-		out, err := exec.Command("go", "build", "-o", stcBin, "../cmd/stc").CombinedOutput()
-		if err != nil {
-			stcBinErr = err
-			stcBin = string(out)
-		}
-	})
-	require.NoError(t, stcBinErr, stcBin)
-	return stcBin
-}
+// stcBinary (cmd/stc built once per test binary) lives in opcua_helpers_test.go.
 
 // gateStatus is the subset of the `stc sim` project JSON the gate checks.
 type gateStatus struct {
