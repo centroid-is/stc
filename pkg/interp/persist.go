@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -179,33 +181,58 @@ func (p *Project) SaveState(path string) error {
 		return fmt.Errorf("encoding state: %w", err)
 	}
 	data = append(data, '\n')
-	tmp := path + ".tmp"
-	if err := writeSynced(tmp, data); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("writing state file: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	if err := writeAtomic(path, data); err != nil {
 		return fmt.Errorf("writing state file: %w", err)
 	}
 	return nil
 }
 
-// writeSynced writes data to name and flushes it to stable storage.
-func writeSynced(name string, data []byte) error {
-	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+// writeAtomic replaces path with data: it writes and syncs a temp file
+// unique to this call in the same directory (so concurrent savers never
+// share one), renames it over path, then syncs the directory so the rename
+// survives a power loss. The temp file is removed on failure.
+func writeAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o644)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
+	return syncDir(dir)
+}
+
+// syncDir flushes a directory entry change (a rename) to stable storage.
+// Windows cannot open a directory for syncing; NTFS journals the rename.
+func syncDir(dir string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	d, err := os.Open(dir)
+	if err != nil {
 		return err
 	}
-	return f.Close()
+	err = d.Sync()
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // LoadState applies a state file written by SaveState. A missing file is a
