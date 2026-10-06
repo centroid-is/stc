@@ -185,9 +185,11 @@ func startOPCUA(r *projectRunner, cfg opcua.Config, out, errOut io.Writer, forma
 		return nil, nil, fmt.Errorf("opc ua server: %w", err)
 	}
 	if err := srv.Publish(space, src); err != nil {
+		_ = srv.Stop()
 		return nil, nil, fmt.Errorf("publishing address space: %w", err)
 	}
 	if err := srv.Start(); err != nil {
+		_ = srv.Stop()
 		return nil, nil, fmt.Errorf("starting opc ua server: %w", err)
 	}
 	r.BeforeTick = append(r.BeforeTick, func() {

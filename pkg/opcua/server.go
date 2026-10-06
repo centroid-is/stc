@@ -293,6 +293,8 @@ func (s *Server) Start() error {
 			}
 		}
 		if time.Now().After(deadline) {
+			// Do not leave ListenAndServe running behind a failed Start.
+			_ = s.srv.Close()
 			return fmt.Errorf("opcua: %s not accepting connections after %s", addr, startTimeout)
 		}
 		time.Sleep(pollInterval)

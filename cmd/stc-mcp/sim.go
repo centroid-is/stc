@@ -144,9 +144,11 @@ func (s *simSession) startOPCUA(cfg simConfig) error {
 		return fmt.Errorf("opc ua server: %w", err)
 	}
 	if err := srv.Publish(space, s.src); err != nil {
+		_ = srv.Stop()
 		return fmt.Errorf("publishing address space: %w", err)
 	}
 	if err := srv.Start(); err != nil {
+		_ = srv.Stop()
 		return fmt.Errorf("starting opc ua server: %w", err)
 	}
 	s.srv = srv
