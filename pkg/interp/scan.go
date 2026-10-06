@@ -220,7 +220,7 @@ func (interp *Interpreter) initVarDecl(env, fbParent *Env, vd *ast.VarDecl) {
 		case fbDecl != nil:
 			val = Value{Kind: ValFBInstance, FBRef: NewUserFBInstance(typeName, fbDecl, interp, fbParent)}
 		default:
-			val = zeroFromTypeSpecWith(vd.Type, interp.TypeResolverFunc(), 0)
+			val = interp.zeroOf(vd.Type, env)
 			if vd.InitValue != nil {
 				if iv, err := interp.evalExpr(env, vd.InitValue); err == nil {
 					val = storeAs(val, iv)

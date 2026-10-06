@@ -184,7 +184,7 @@ PROGRAM P
 VAR sb : ST_B; END_VAR
 END_PROGRAM`})
 		assert.Equal(t, int64(0), initVar(t, eng, "sb").Struct["A"].Int)
-		assert.Contains(t, initErrText(eng), "NOPE")
+		assert.Contains(t, initErrText(eng), "undefined variable: nope")
 	})
 	t.Run("member defaults without an interpreter", func(t *testing.T) {
 		res := parser.Parse("T.st", `TYPE ST_C : STRUCT a : INT := 7; END_STRUCT END_TYPE`)

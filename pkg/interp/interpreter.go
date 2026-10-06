@@ -51,6 +51,14 @@ type Interpreter struct {
 	// used as an array element or struct member resolves to the right shape
 	// instead of falling back to an INT zero.
 	TypeDecls map[string]ast.TypeSpec
+	// TypeInits maps upper-case TYPE names to the TYPE's own default
+	// (TYPE T_Speed : INT := 50; END_TYPE), applied wherever the type is
+	// instantiated.
+	TypeInits map[string]ast.Expr
+
+	// initErrs collects array bound and initialiser failures found while
+	// instantiating variables; see InitErrors.
+	initErrs []error
 
 	// FBDecls maps uppercase user-defined function block names to their
 	// declarations. FB instantiation consults this so that an FB-typed VAR

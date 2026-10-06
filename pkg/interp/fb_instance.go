@@ -414,6 +414,13 @@ func zeroFromTypeSpec(ts ast.TypeSpec) Value {
 }
 
 func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Value {
+	return zeroFromType(ts, typeCtx{resolve: resolve}, depth)
+}
+
+// zeroFromType builds the zero value of ts. Named user types resolve through
+// ctx.resolve; array bounds and member or TYPE defaults use ctx.interp and
+// ctx.env when set (see typeCtx).
+func zeroFromType(ts ast.TypeSpec, ctx typeCtx, depth int) Value {
 	if depth > maxTypeNestDepth {
 		return Zero(types.KindDINT)
 	}
@@ -430,27 +437,27 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 			// Not elementary: it may be a user-defined TYPE (struct, array,
 			// enum, subrange or alias). Resolve and recurse so that aggregates
 			// nested inside other aggregates are built correctly.
-			if resolve != nil {
-				if target, found := resolve(name); found {
-					v := zeroFromTypeSpecWith(target, resolve, depth+1)
+			if ctx.resolve != nil {
+				if target, found := ctx.resolve(name); found {
+					v := zeroFromType(target, ctx, depth+1)
 					if _, isEnum := target.(*ast.EnumType); isEnum {
 						v.Enum = name
 					}
-					return v
+					return ctx.typeDefault(name, target, v)
 				}
 			}
 		}
 		// Unknown type name; default to INT zero
 		return Zero(types.KindDINT)
 	case *ast.ArrayType:
-		return zeroArrayWith(t, resolve, depth)
+		return zeroArrayCtx(t, ctx, depth)
 	case *ast.StructType:
-		return zeroStructWith(t, resolve, depth)
+		return zeroStructCtx(t, ctx, depth)
 	case *ast.StringType:
 		return Value{Kind: ValString, Str: ""}
 	case *ast.SubrangeType:
 		// Use the base type's zero
-		return zeroFromTypeSpecWith(t.BaseType, resolve, depth+1)
+		return zeroFromType(t.BaseType, ctx, depth+1)
 	case *ast.PointerType:
 		// Null pointer
 		return Value{Kind: ValPointer}
@@ -464,27 +471,44 @@ func zeroFromTypeSpecWith(ts ast.TypeSpec, resolve TypeResolver, depth int) Valu
 	}
 }
 
+// maxArraySlots caps the slots allocated for one array dimension so a huge
+// declared bound cannot exhaust memory.
+const maxArraySlots = 10000
+
 // zeroArray creates a zero-filled array Value from an ArrayType AST node.
 // The interpreter uses direct indexing (arr[i] maps to slice index i),
 // so for ARRAY[1..10] we allocate high+1 elements to support 1-based indexing.
 func zeroArray(at *ast.ArrayType) Value {
-	return zeroArrayWith(at, nil, 0)
+	return zeroArrayCtx(at, typeCtx{}, 0)
 }
 
 func zeroArrayWith(at *ast.ArrayType, resolve TypeResolver, depth int) Value {
+	return zeroArrayCtx(at, typeCtx{resolve: resolve}, depth)
+}
+
+func zeroArrayCtx(at *ast.ArrayType, ctx typeCtx, depth int) Value {
 	if len(at.Ranges) == 0 {
 		return Value{Kind: ValArray, Array: []Value{}}
 	}
-	// Evaluate the first dimension range
-	_, high := evalSubrangeConst(at.Ranges[0])
+	// Only the first dimension is modelled.
+	low, high := ctx.bounds(at.Ranges[0])
+	if low < 0 {
+		ctx.fail(at.Ranges[0].Low, "negative array lower bound not supported: %s", exprText(at.Ranges[0].Low))
+		low = 0
+	}
+	if high < low {
+		ctx.fail(at.Ranges[0].High, "array upper bound %d is below lower bound %d", high, low)
+		high = low
+	}
 	size := high + 1 // allocate enough for direct indexing
-	if size <= 0 {
-		size = 1
+	if size > maxArraySlots {
+		ctx.fail(at.Ranges[0].High, "array size %d exceeds the %d element limit", size, maxArraySlots)
+		size = maxArraySlots
+		if low >= size {
+			low = 0
+		}
 	}
-	if size > 10000 {
-		size = 10000 // safety cap
-	}
-	elemZero := zeroFromTypeSpecWith(at.ElementType, resolve, depth+1)
+	elemZero := zeroFromType(at.ElementType, ctx, depth+1)
 	arr := make([]Value, size)
 	for i := range arr {
 		// Clone per element: an aggregate element is backed by a slice or map,
@@ -492,23 +516,37 @@ func zeroArrayWith(at *ast.ArrayType, resolve TypeResolver, depth int) Value {
 		// every slot.
 		arr[i] = elemZero.Clone()
 	}
-	return Value{Kind: ValArray, Array: arr}
+	return Value{Kind: ValArray, Array: arr, ArrayLow: int(low)}
 }
 
 // zeroStruct creates a zero-valued struct Value from a StructType AST node.
 // Keys are stored in UPPER case to match the interpreter's member access logic.
 func zeroStruct(st *ast.StructType) Value {
-	return zeroStructWith(st, nil, 0)
+	return zeroStructCtx(st, typeCtx{}, 0)
 }
 
 func zeroStructWith(st *ast.StructType, resolve TypeResolver, depth int) Value {
+	return zeroStructCtx(st, typeCtx{resolve: resolve}, depth)
+}
+
+// zeroStructCtx builds a struct value with every member at its declared
+// default (member initialiser) or zero, and records member names in declared
+// case and order in Fields.
+func zeroStructCtx(st *ast.StructType, ctx typeCtx, depth int) Value {
 	fields := make(map[string]Value, len(st.Members))
+	names := make([]string, 0, len(st.Members))
 	for _, m := range st.Members {
-		if m.Name != nil {
-			fields[strings.ToUpper(m.Name.Name)] = zeroFromTypeSpecWith(m.Type, resolve, depth+1)
+		if m.Name == nil {
+			continue
 		}
+		v := zeroFromType(m.Type, ctx, depth+1)
+		if m.InitValue != nil {
+			v = ctx.applyInit(m.Type, m.InitValue, v)
+		}
+		fields[strings.ToUpper(m.Name.Name)] = v
+		names = append(names, m.Name.Name)
 	}
-	return Value{Kind: ValStruct, Struct: fields}
+	return Value{Kind: ValStruct, Struct: fields, Fields: names}
 }
 
 // evalSubrangeConst extracts integer bounds from a SubrangeSpec.
