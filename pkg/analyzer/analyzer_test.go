@@ -259,3 +259,18 @@ END_PROGRAM
 	assert.Equal(t, 0, errors, "nil config should work without vendor checks")
 }
 
+
+func TestAnalyzeKeepsFiles(t *testing.T) {
+	user := parser.Parse("main.st", "PROGRAM Main\nVAR x : INT; END_VAR\nEND_PROGRAM\n").File
+	lib := parser.Parse("lib.st", "FUNCTION_BLOCK FB_Lib\nEND_FUNCTION_BLOCK\n").File
+
+	res := Analyze([]*ast.SourceFile{user}, nil, AnalyzeOpts{LibraryFiles: []*ast.SourceFile{lib}})
+	require.Len(t, res.Files, 1)
+	assert.Same(t, user, res.Files[0])
+	require.Len(t, res.LibraryFiles, 1)
+	assert.Same(t, lib, res.LibraryFiles[0])
+
+	res = Analyze([]*ast.SourceFile{user}, nil)
+	assert.Len(t, res.Files, 1)
+	assert.Nil(t, res.LibraryFiles)
+}
