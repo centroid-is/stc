@@ -109,7 +109,7 @@ func (l *Live) BeforeTick() {
 // AfterTick evaluates the pending expects against the Tick just run and
 // counts it.
 func (l *Live) AfterTick() {
-	if !l.inTick {
+	if !l.inTick || l.Done() {
 		return
 	}
 	l.inTick = false
@@ -143,6 +143,10 @@ func (l *Live) Finish(runErr error) *Report {
 	if l.results == nil { // validation failed
 		return rep
 	}
+	// A failed Tick skipped AfterTick: drop its half-open state so later
+	// hooks (stc-mcp keeps stepping after an error) stay no-ops.
+	l.inTick = false
+	defer func() { l.waits = nil }()
 	if l.k < l.n {
 		l.n = l.k
 		rep.Cycles = l.k

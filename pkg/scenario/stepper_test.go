@@ -99,3 +99,26 @@ func TestLivePrepareFailed(t *testing.T) {
 		t.Fatalf("report %+v log %v", rep, f.log)
 	}
 }
+
+// TestLiveFinishAfterTickError stops a run on a Tick error (BeforeTick
+// without AfterTick). Later hooks, as stc-mcp steps after an error, must not
+// evaluate the stale expects or count Ticks (review 2 LO-01).
+func TestLiveFinishAfterTickError(t *testing.T) {
+	sc := mustParse(t, liveSrc)
+	f := newFake()
+	l, err := NewExecutor(sc, f).Start(6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.BeforeTick() // step 1 registers its expect; the Tick then fails
+	rep := l.Finish(errors.New("tick failed"))
+	n, k := len(rep.Assertions), l.Cycle()
+	for i := 0; i < 3; i++ {
+		l.BeforeTick()
+		_ = f.Tick()
+		l.AfterTick()
+	}
+	if len(l.Assertions()) != n || l.Cycle() != k {
+		t.Fatalf("hooks ran after Finish: %d assertions (was %d), cycle %d (was %d)", len(l.Assertions()), n, l.Cycle(), k)
+	}
+}
