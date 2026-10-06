@@ -50,8 +50,8 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 - [x] **ECAT-06**: An EL6001 model exposes the 22-byte serial PDO with a pluggable byte-stream peer so the Baader `md`/`mt1` protocol can be scripted against `FB_BaaderSerial`
 - [x] **ECAT-07**: Every slave publishes `WcState`, `InfoData.State` and `InfoData.AdsAddr`; every master publishes `DevState`, `SlaveCount`, `Frm0State`, `Frm0WcState` and `InfoData.AmsNetId` with Beckhoff bit semantics, linkable through `TcLinkTo`
 - [x] **ECAT-08**: Tc2_EtherCAT FBs (`FB_EcGetSlaveState`, `FB_EcGetAllSlaveStates`, `FB_EcSetSlaveState`, `FB_EcGetMasterState`, `FB_EcGetAllSlaveCrcErrors`, `FB_EcGetSlaveCrcErrorEx`, `FB_EcCoESDoRead/Write`, `FB_EcPhysicalWriteCmd`) have behavioural mocks backed by the simulator with asynchronous busy/done timing, so `FB_EcDeviceDiag` and the ATV320 configurator run unmodified
-- [ ] **ECAT-09**: A scenario file (TOML) and ST test built-ins can set inputs by variable path or link path, set analog values, trip an EL9222 channel, remove a slave (not present / link error), raise a drive fault with an LFT code and ramp a value over time, all deterministic against the scan clock
-- [ ] **ECAT-10**: `stc sim --project <plcproj|tsproj> --io <Device*.xml> --scenario <toml> --cycles N` runs the imported project against the simulator and reports outputs and diagnostics in text and JSON
+- [x] **ECAT-09**: A scenario file (TOML) and ST test built-ins can set inputs by variable path or link path, set analog values, trip an EL9222 channel, remove a slave (not present / link error), raise a drive fault with an LFT code and ramp a value over time, all deterministic against the scan clock
+- [x] **ECAT-10**: `stc sim --project <plcproj|tsproj> --io <Device*.xml> --scenario <toml> --cycles N` runs the imported project against the simulator and reports outputs and diagnostics in text and JSON
 
 ### OPC UA server (OPCUA)
 
@@ -68,7 +68,7 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### Test and agent ergonomics (DEVX)
 
-- [ ] **DEVX-01**: ST test built-ins `SET(path, value)`, `GET(path)`, `SIM_SET_LINK(linkpath, value)`, `SIM_TRIP(slave, channel)`, `SIM_SLAVE_STATE(slave, state)` and `RUN_CYCLES(n)` are available in `*_test.st` when a project and I/O config are loaded
+- [x] **DEVX-01**: ST test built-ins `SET(path, value)`, `GET(path)`, `SIM_SET_LINK(linkpath, value)`, `SIM_TRIP(slave, channel)`, `SIM_SLAVE_STATE(slave, state)` and `RUN_CYCLES(n)` are available in `*_test.st` when a project and I/O config are loaded
 - [ ] **DEVX-02**: MCP tools `stc_sim_step`, `stc_sim_read`, `stc_sim_write` and `stc_opcua_browse` expose the running simulation to agents
 - [ ] **DEVX-03**: `docs/` gains a TwinCAT import, EtherCAT simulation and OPC UA guide, and the stale claims in `TESTING_GUIDE.md`, `ST_LANGUAGE_SUPPORT.md` and `stdlib/vendor/beckhoff/ethercat_io.md` are corrected
 
@@ -142,8 +142,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ECAT-06 | Phase 25 | Complete |
 | ECAT-07 | Phase 24 | Complete |
 | ECAT-08 | Phase 26 | Complete |
-| ECAT-09 | Phase 27 | Pending |
-| ECAT-10 | Phase 27 | Pending |
+| ECAT-09 | Phase 27 | Complete |
+| ECAT-10 | Phase 27 | Complete |
 | OPCUA-01 | Phase 28 | Complete |
 | OPCUA-02 | Phase 28 | Complete |
 | OPCUA-03 | Phase 28 | Complete |
@@ -154,7 +154,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPCUA-08 | Phase 29 | Pending |
 | OPCUA-09 | Phase 29 | Pending |
 | OPCUA-10 | Phase 29 | Pending |
-| DEVX-01 | Phase 27 | Pending |
+| DEVX-01 | Phase 27 | Complete |
 | DEVX-02 | Phase 29 | Pending |
 | DEVX-03 | Phase 29 | Pending |
 
