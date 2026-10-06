@@ -23,6 +23,19 @@ type StandardFB interface {
 // Plan 04 will register standard library FBs here.
 var StdlibFBFactory = map[string]func() StandardFB{}
 
+// stdFBFactory returns the Go factory for an upper-case FB type name: an
+// engine-local override (fbOverrides, the Tc2_EtherCAT mocks) first, then
+// StdlibFBFactory. A nil interpreter has no overrides.
+func (interp *Interpreter) stdFBFactory(upperType string) (func() StandardFB, bool) {
+	if interp != nil {
+		if f, ok := interp.fbOverrides[upperType]; ok {
+			return f, true
+		}
+	}
+	f, ok := StdlibFBFactory[upperType]
+	return f, ok
+}
+
 // FBInstance wraps either a StandardFB (for stdlib FBs) or an Env+Decl
 // pair (for user-defined FBs). It provides a unified interface for FB
 // call statements and member access.
@@ -105,10 +118,11 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 			typeName := typeNameFromSpec(vd.Type)
 			upperType := strings.ToUpper(typeName)
 			isStdlibFB := false
+			var stdFactory func() StandardFB
 			var nestedDecl *ast.FunctionBlockDecl
 			if typeName != "" && depth < maxFBNestDepth {
-				if _, ok := StdlibFBFactory[upperType]; ok {
-					isStdlibFB = true
+				if f, ok := interp.stdFBFactory(upperType); ok {
+					isStdlibFB, stdFactory = true, f
 				} else if interp != nil && interp.FBDecls != nil {
 					nestedDecl = interp.FBDecls[upperType]
 				}
@@ -118,7 +132,7 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 				var val Value
 				switch {
 				case isStdlibFB:
-					val = MakeFBInstanceValue(typeName, StdlibFBFactory[upperType]())
+					val = MakeFBInstanceValue(typeName, stdFactory())
 				case nestedDecl != nil:
 					nested := newUserFBInstanceDepth(typeName, nestedDecl, interp, env, depth+1)
 					val = Value{Kind: ValFBInstance, FBRef: nested}

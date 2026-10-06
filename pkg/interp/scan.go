@@ -34,6 +34,7 @@ type ScanCycleEngine struct {
 	ioTable    *iomap.IOTable // I/O process image table
 	ioBindings []IOBinding    // AT-addressed variable bindings
 	ioBinder   *IOBinder      // EtherCAT TcLinkTo bindings, nil when unused
+	ecat       *ecatServices  // Tc2_EtherCAT mock backend, nil when unused
 
 	initialized bool
 }
@@ -78,6 +79,9 @@ func (e *ScanCycleEngine) Tick(dt time.Duration) error {
 	}
 	if e.ioBinder != nil {
 		e.ioBinder.preScan(dt)
+	}
+	if e.ecat != nil {
+		e.ecat.preScan(dt, e.ioBinder)
 	}
 
 	// 1. Copy inputs into env
@@ -214,7 +218,7 @@ func (e *ScanCycleEngine) SetGlobals(gvls []*ast.GVLDecl) {
 func (interp *Interpreter) initVarDecl(env, fbParent *Env, vd *ast.VarDecl) {
 	typeName := typeNameFromSpec(vd.Type)
 	upperType := strings.ToUpper(typeName)
-	factory, isStdlibFB := StdlibFBFactory[upperType]
+	factory, isStdlibFB := interp.stdFBFactory(upperType)
 	var fbDecl *ast.FunctionBlockDecl
 	if !isStdlibFB && typeName != "" && interp.FBDecls != nil {
 		fbDecl = interp.FBDecls[upperType]
