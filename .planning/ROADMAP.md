@@ -420,7 +420,7 @@ Plans:
 - [x] 21-03-PLAN.md -- pkg/vendor/twincat model, tsproj/xti/plcproj/TcTTO readers, line-preserving TcPOU converter, synthetic fixtures
 - [x] 21-04-PLAN.md -- Ordered library resolver (sibling, library_paths, stubs, VEND020), Import + analyzer.AnalyzeProject, vendor extract on the shared converter
 - [x] 21-05-PLAN.md -- CLI: `stc vendor import [--out]`, `stc check <project>`, `stc test --project` (RunOpts.ProjectFiles), `stc sim <project>`, extract JSON
-- [ ] 21-06-PLAN.md -- STC_SILD_DIR oracle gate on ST301/ST101/ST201/Baader/SVNCore with owner buckets, docs, VALIDATION sign-off, coverage gate
+- [x] 21-06-PLAN.md -- STC_SILD_DIR oracle gate on ST301/ST101/ST201/Baader/SVNCore with owner buckets, docs, VALIDATION sign-off, coverage gate
 
 ### Phase 22: Symbol Tree & Value Semantics
 **Goal**: Every live variable in a running project is addressable by dotted path with correct IEC value semantics, giving tests, servers and agents one shared view of PLC state
@@ -538,7 +538,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 18. Auto-Defines & TcPOU Extractor | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 19. TwinCAT Declaration Syntax | v1.2 | 10/10 | Complete    | 2026-10-06 |
 | 20. TwinCAT Expression Semantics | v1.2 | 9/9 | Complete    | 2026-10-06 |
-| 21. TwinCAT Project Import & Library Stubs | v1.2 | 5/6 | In Progress|  |
+| 21. TwinCAT Project Import & Library Stubs | v1.2 | 6/6 | Complete   | 2026-10-06 |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 0/TBD | Not started | - |

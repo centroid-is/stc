@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: executing
-stopped_at: Completed 20-09-PLAN.md
-last_updated: "2026-10-06T07:10:51.389Z"
+status: verifying
+stopped_at: context exhaustion at 75% (2026-10-06)
+last_updated: "2026-10-06T07:17:34.327Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 63
-  completed_plans: 62
-  percent: 55
+  completed_plans: 63
+  percent: 59
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 Phase: 21 (TwinCAT Project Import & Library Stubs) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-06
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -122,6 +122,8 @@ Recent decisions affecting current work:
 - [Phase 20]: 20-09: types.ArrayDimension.Known marks literal bounds; too many initialisers is reported only with known bounds and literal repetition counts
 - [Phase 20]: Phase 20 oracle asserts 0 parse diagnostics (parser.Parse) and 0 P001 (analyzer.Analyze) for st301 and svncore; semantic errors are logged as templated buckets only
 - [Phase 20]: TwinCAT dialect check tolerates only 'cannot assign DINT to INT' (Phase 22 RUNT-05), held in one named allowlist
+- [Phase 21]: 21-06: oracle allowlists are data-driven owner buckets; pre-existing checker bugs (statement method calls with args, FB internal VAR read, LEN typing) deferred
+- [Phase 21]: 21-06: unresolved libraries fail the oracle via Model.Libraries since VEND020 is a warning
 
 ### Pending Todos
 
@@ -135,8 +137,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T07:10:51.384Z
-Stopped at: Completed 20-09-PLAN.md
+Last session: 2026-10-06T07:17:29.908Z
+Stopped at: context exhaustion at 75% (2026-10-06)
 Resume file: None
 
 ## Operator Next Steps
