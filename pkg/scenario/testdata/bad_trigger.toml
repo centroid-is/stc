@@ -1,0 +1,11 @@
+[[step]]
+cycle = 1
+set = { path = "a", value = 1 }
+
+[[step]]
+at = "10ms"
+cycle = 2
+set = { path = "b", value = 2 }
+
+[[step]]
+set = { path = "c", value = 3 }
