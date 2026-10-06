@@ -51,12 +51,20 @@ func (interp *Interpreter) RegisterGVL(decl *ast.GVLDecl) *Env {
 	// env the current chain as parent. Member access (GVL.x) only looks at
 	// the GVL's own scope, so the parent never leaks into qualified lookups.
 	env := NewEnv(interp.gvls.unqualified)
+	// FB instances declared in the GVL see the global chain. For a plain GVL
+	// that includes its own variables; a qualified_only GVL is left out so
+	// an FB body cannot read its variables bare (TwinCAT rejects that, and
+	// the checker reports SEMA033).
+	fbParent := env
+	if qualifiedOnly {
+		fbParent = interp.gvls.unqualified
+	}
 	for _, vb := range decl.Blocks {
 		if vb == nil {
 			continue
 		}
 		for _, vd := range vb.Declarations {
-			interp.initVarDecl(env, vd)
+			interp.initVarDecl(env, fbParent, vd)
 		}
 	}
 

@@ -199,11 +199,11 @@ func (e *ScanCycleEngine) SetGlobals(gvls []*ast.GVLDecl) {
 
 // initVarDecl defines every name of vd in env. Stdlib FB types become fresh
 // stdlib instances, user FB types registered in FBDecls become live user FB
-// instances whose env has env as parent, and anything else gets the zero value
+// instances whose env has fbParent as parent, and anything else gets the zero value
 // of its type (resolving user TYPEs through TypeDecls) or its initialiser.
 // Each name gets its own value, so aggregates are never shared between names.
 // Shared by program and GVL environments.
-func (interp *Interpreter) initVarDecl(env *Env, vd *ast.VarDecl) {
+func (interp *Interpreter) initVarDecl(env, fbParent *Env, vd *ast.VarDecl) {
 	typeName := typeNameFromSpec(vd.Type)
 	upperType := strings.ToUpper(typeName)
 	factory, isStdlibFB := StdlibFBFactory[upperType]
@@ -218,7 +218,7 @@ func (interp *Interpreter) initVarDecl(env *Env, vd *ast.VarDecl) {
 		case isStdlibFB:
 			val = Value{Kind: ValFBInstance, FBRef: &FBInstance{TypeName: typeName, FB: factory()}}
 		case fbDecl != nil:
-			val = Value{Kind: ValFBInstance, FBRef: NewUserFBInstance(typeName, fbDecl, interp, env)}
+			val = Value{Kind: ValFBInstance, FBRef: NewUserFBInstance(typeName, fbDecl, interp, fbParent)}
 		default:
 			val = zeroFromTypeSpecWith(vd.Type, interp.TypeResolverFunc(), 0)
 			if vd.InitValue != nil {
@@ -248,7 +248,7 @@ func (e *ScanCycleEngine) initializeEnv() {
 
 	for _, vb := range e.program.VarBlocks {
 		for _, vd := range vb.Declarations {
-			e.interp.initVarDecl(e.env, vd)
+			e.interp.initVarDecl(e.env, e.env, vd)
 
 			for _, n := range vd.Names {
 				upper := strings.ToUpper(n.Name)

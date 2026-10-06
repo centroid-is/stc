@@ -169,6 +169,80 @@ END_PROGRAM
 		assert.Equal(t, int64(4), y.Int)
 	})
 
+	t.Run("FB instance inside a qualified_only GVL cannot read it bare", func(t *testing.T) {
+		eng := gvlEngine(t, "Q.st", `
+FUNCTION_BLOCK FB_Peek
+VAR_OUTPUT seen : DINT; END_VAR
+seen := secret;
+END_FUNCTION_BLOCK
+{attribute 'qualified_only'}
+VAR_GLOBAL
+    secret : DINT := 42;
+    peek : FB_Peek;
+END_VAR
+PROGRAM P
+VAR b : BOOL; END_VAR
+Q.peek();
+END_PROGRAM
+`)
+		err := eng.Tick(time.Millisecond)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "undefined variable: secret")
+	})
+
+	t.Run("FB instance inside a qualified_only GVL reads it qualified", func(t *testing.T) {
+		eng := gvlEngine(t, "Q.st", `
+FUNCTION_BLOCK FB_Peek
+VAR_OUTPUT seen : DINT; END_VAR
+seen := Q.secret;
+END_FUNCTION_BLOCK
+{attribute 'qualified_only'}
+VAR_GLOBAL
+    secret : DINT := 42;
+    peek : FB_Peek;
+END_VAR
+PROGRAM P
+VAR b : BOOL; END_VAR
+Q.peek();
+END_PROGRAM
+`)
+		require.NoError(t, eng.Tick(time.Millisecond))
+		assert.Equal(t, int64(42), gvlVar(t, eng, "Q", "peek").FBRef.GetMember("seen").Int)
+	})
+
+	t.Run("FB instance inside a qualified_only GVL still sees plain GVLs", func(t *testing.T) {
+		in := New()
+		in.FBDecls = map[string]*ast.FunctionBlockDecl{"FB_PEEK": {
+			Name: ident("FB_Peek"),
+			VarBlocks: []*ast.VarBlock{{Section: ast.VarOutput, Declarations: []*ast.VarDecl{{
+				Names: []*ast.Ident{ident("seen")}, Type: &ast.NamedType{Name: ident("INT")},
+			}}}},
+		}}
+		plain := in.RegisterGVL(&ast.GVLDecl{Name: ident("G"), Blocks: []*ast.VarBlock{{
+			Section:      ast.VarGlobal,
+			Declarations: []*ast.VarDecl{{Names: []*ast.Ident{ident("shared")}, Type: &ast.NamedType{Name: ident("INT")}}},
+		}}})
+		q := in.RegisterGVL(&ast.GVLDecl{
+			Name:       ident("Q"),
+			Attributes: []*ast.Attribute{{Name: "qualified_only"}},
+			Blocks: []*ast.VarBlock{{
+				Section: ast.VarGlobal,
+				Declarations: []*ast.VarDecl{
+					{Names: []*ast.Ident{ident("secret")}, Type: &ast.NamedType{Name: ident("INT")}},
+					{Names: []*ast.Ident{ident("peek")}, Type: &ast.NamedType{Name: ident("FB_Peek")}},
+				},
+			}},
+		})
+		v, ok := q.GetLocal("peek")
+		require.True(t, ok)
+		fbEnv := v.FBRef.Env
+		_, sees := fbEnv.Get("secret")
+		assert.False(t, sees, "qualified_only variables must not resolve bare")
+		_, sees = fbEnv.Get("shared")
+		assert.True(t, sees, "plain GVL variables still resolve bare")
+		assert.Same(t, plain, in.GlobalParent())
+	})
+
 	t.Run("qualified_only on a VAR_GLOBAL block also counts", func(t *testing.T) {
 		gvl := &ast.GVLDecl{
 			Name: ident("Q"),
