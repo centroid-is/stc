@@ -47,3 +47,39 @@
 - `TestProjectRunRealClock` (wall-clock pacing, 150..210 ticks in 200 ms)
   failed once under a parallel `go test ./pkg/opcua/... ./pkg/interp/ ./cmd/...`
   run and passes in isolation. It is timing-sensitive under load.
+
+## From the second v1.2 code review (.planning/v1.2-CODE-REVIEW-2.md)
+
+- **R2-LO-02: `stc_sim_write` is not atomic and loses writes to explicit AT %I
+  variables.** `Write` calls `rt.Set` before `plant.Apply`, so a failed force
+  leaves the runtime value changed. An explicit `AT %IX…` variable takes the
+  `runtime_set` route and the next scan's AT sync overwrites it. Fix: route
+  every path through `plant.Check` and then `plant.Apply(ActSet)`, read the
+  value back only on success, and fix the stale `Step` comment.
+- **R2-LO-03: the AT %I guard matches only whole variables.** `Plant.set`
+  compares `ROOT.VAR` exactly, so `SET('MAIN.aIn[1]', …)` or
+  `GVL.stIn.bFlag` on an explicit `AT %IB` array or struct is accepted and
+  then overwritten by the AT sync. Fix: reject any path whose `ROOT.VAR`
+  prefix up to the first `.` or `[` after the variable name is in `atIn`.
+- **R2-LO-04a: SIZEOF of LTIME, LDATE, LTOD and LDT reports 4 bytes.**
+  `pkg/types` maps the long time types to the 32-bit kinds, so a value
+  cannot tell LTIME from TIME. Fix: add 64-bit time kinds (or carry the
+  declared type name) and return 8 for them.
+- **R2-LO-04b: SIZEOF of a STRING(n) reports 81 bytes.** String values do not
+  carry their declared length. Fix: carry it on the value or look it up
+  from the declaration in `evalSizeof`, so `MEMCPY(..., SIZEOF(str))`
+  copies the whole buffer.
+- **R2-LO-04c: real-to-integer conversions out of range.** `LREAL_TO_ULINT`
+  above 2^63 and NaN or Inf to any integer use Go's implementation-defined
+  `int64(float)`. Fix: convert through `uint64` for unsigned targets and
+  clamp or fail on out-of-range and non-finite values.
+- **R2-LO-09: serve start-up text and early SIGINT.** `printServeInfo` prints
+  "only 0.0.0.0:4840" for `0.0.0.0:4840` and `[::]:4840`; use
+  `opcua.Exposed` for the "all interfaces" text. `signal.NotifyContext` is
+  installed after scenario and OPC UA start-up, so a SIGINT during
+  certificate generation skips the final `--persist` save; install it at
+  the top of `runServe`.
+- **R2-HI-01 follow-up: no collision diagnostic.** The scenario built-ins now
+  resolve only in the TEST_CASE body, so a project FUNCTION named GET or
+  SET works in project code. In the TEST_CASE body the built-in still
+  wins, and the runner does not warn about the name clash.
