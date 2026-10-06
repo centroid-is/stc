@@ -1,21 +1,23 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/lexer"
 )
 
 // Operator precedence levels (from IEC 61131-3).
 const (
-	precNone   = 0
-	precOr     = 1
-	precXor    = 2
-	precAnd    = 3
-	precEq     = 4  // =, <>
-	precCmp    = 5  // <, >, <=, >=
-	precAdd    = 6  // +, -
-	precMul    = 7  // *, /, MOD
-	precPower  = 8  // **
+	precNone  = 0
+	precOr    = 1
+	precXor   = 2
+	precAnd   = 3
+	precEq    = 4 // =, <>
+	precCmp   = 5 // <, >, <=, >=
+	precAdd   = 6 // +, -
+	precMul   = 7 // *, /, MOD
+	precPower = 8 // **
 )
 
 // infixPrecedence returns the precedence for a binary operator token, or 0 if not an operator.
@@ -246,6 +248,20 @@ func (p *Parser) parsePrimaryExpr() ast.Expr {
 	case lexer.Ident:
 		return p.parseIdentExpr()
 
+	case lexer.KwThis:
+		p.advance()
+		return p.parsePostfix(&ast.ThisExpr{NodeBase: ast.NodeBase{
+			NodeKind: ast.KindThisExpr,
+			NodeSpan: ast.SpanFrom(astPos(tok.Pos), astPos(tok.EndPos)),
+		}})
+
+	case lexer.KwSuper:
+		p.advance()
+		return p.parsePostfix(&ast.SuperExpr{NodeBase: ast.NodeBase{
+			NodeKind: ast.KindSuperExpr,
+			NodeSpan: ast.SpanFrom(astPos(tok.Pos), astPos(tok.EndPos)),
+		}})
+
 	case lexer.LParen:
 		return p.parseParenExpr()
 
@@ -299,7 +315,34 @@ func (p *Parser) parsePostfix(expr ast.Expr) ast.Expr {
 	for {
 		switch p.peek().Kind {
 		case lexer.Dot:
-			p.advance()
+			dotTok := p.advance()
+			if p.at(lexer.IntLiteral) {
+				// Bit access: w.3, arr[0].7, ECT.X.q_wInputs.0
+				idxTok := p.advance()
+				expr = p.bitAccess(expr, dotTok, idxTok.Text, astPos(idxTok.Pos), astPos(idxTok.EndPos))
+				continue
+			}
+			if p.at(lexer.RealLiteral) {
+				// w.3.1 lexes as Dot RealLiteral("3.1"): split into two bit accesses
+				// so the second one reports "bit access on a bit".
+				if lo, hi, ok := splitBitPair(p.peek().Text); ok {
+					realTok := p.advance()
+					start := astPos(realTok.Pos)
+					mid := start
+					mid.Col += len(lo)
+					mid.Offset += len(lo)
+					expr = p.bitAccess(expr, dotTok, lo, start, mid)
+					second := mid
+					second.Col++
+					second.Offset++
+					secondDot := dotTok
+					secondDot.Pos = realTok.Pos
+					secondDot.Pos.Col += len(lo)
+					secondDot.Pos.Offset += len(lo)
+					expr = p.bitAccess(expr, secondDot, hi, second, astPos(realTok.EndPos))
+					continue
+				}
+			}
 			member := p.parseIdent()
 			expr = &ast.MemberAccessExpr{
 				NodeBase: ast.NodeBase{
@@ -391,6 +434,53 @@ func (p *Parser) parsePostfix(expr ast.Expr) ast.Expr {
 			return expr
 		}
 	}
+}
+
+// bitAccess builds a BitAccessExpr over target with a literal index. A bit
+// access whose target is already a bit access is reported as an error, but
+// the node is still built so recovery continues.
+func (p *Parser) bitAccess(target ast.Expr, dotTok lexer.Token, index string, start, end ast.Pos) ast.Expr {
+	if _, isBit := target.(*ast.BitAccessExpr); isBit {
+		p.errorAt(tokenPos(dotTok.Pos), "bit access on a bit")
+	}
+	idx := &ast.Literal{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindLiteral,
+			NodeSpan: ast.SpanFrom(start, end),
+		},
+		LitKind: ast.LitInt,
+		Value:   index,
+	}
+	return &ast.BitAccessExpr{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindBitAccessExpr,
+			NodeSpan: ast.SpanFrom(target.Span().Start, end),
+		},
+		Target: target,
+		Index:  idx,
+	}
+}
+
+// splitBitPair splits a real literal like "3.1" into its two digit runs.
+func splitBitPair(text string) (string, string, bool) {
+	dot := strings.IndexByte(text, '.')
+	if dot <= 0 || dot == len(text)-1 {
+		return "", "", false
+	}
+	lo, hi := text[:dot], text[dot+1:]
+	if !allDigits(lo) || !allDigits(hi) {
+		return "", "", false
+	}
+	return lo, hi, true
+}
+
+func allDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // isNamedArgCall checks whether the current LParen starts a named-argument

@@ -98,7 +98,7 @@ func (p *Parser) parseStatement() ast.Statement {
 				NodeSpan: spanFromTokens(startTok, startTok),
 			},
 		}
-	case lexer.Ident:
+	case lexer.Ident, lexer.KwThis, lexer.KwSuper:
 		return p.parseAssignOrCall()
 	default:
 		return p.recoverStatement()
