@@ -43,7 +43,8 @@ stop.
 --opcua host:port serves the OPC.UA.DA-marked symbols over OPC UA with the
 TwinCAT TF6100 address space (Objects/DeviceSet/PLC1, namespace 4, NodeIds
 ns=4;s=<GVL>.<path>). Reads come from one consistent scan image; writes are
-queued and applied between scans. A runtime error then stops the scan while
+queued and applied between scans; subscriptions sample the live scan at
+their sampling interval. A runtime error then stops the scan while
 the address space keeps serving the last values. The listener binds all
 interfaces. Without --opcua no server is started.
 
