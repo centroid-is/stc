@@ -374,3 +374,29 @@ func TestEL6001Registration(t *testing.T) {
 		}
 	}
 }
+
+func TestEL6001PartialLayouts(t *testing.T) {
+	// 8-bit Status with more data bytes than its 3-bit length can count:
+	// chunks are capped at 7 bytes.
+	var fields []ecat.Field
+	fields = append(fields, ecat.Field{Pdo: "Inputs", Entry: "Status", Dir: ecat.DirIn, Bit: 0, BitLen: 8})
+	for i := 0; i < 10; i++ {
+		fields = append(fields, ecat.Field{Pdo: "Inputs", Entry: "Data In " + strconv.Itoa(i), Dir: ecat.DirIn, Bit: 8 + 8*i, BitLen: 8})
+	}
+	// Split control with only Transmit request mapped: the rest read as 0.
+	fields = append(fields, ecat.Field{Pdo: "COM Outputs", Entry: "Ctrl__Transmit request", Dir: ecat.DirOut, Bit: 0, BitLen: 1})
+	d := &EL6001{}
+	d.Init(&ecat.Slave{Name: "partial"})
+	d.Bind(ecat.NewLayout(fields))
+	d.SetPeer(&recordPeer{reply: []byte("0123456789")})
+	out, in := make([]byte, 1), make([]byte, 11)
+	d.Step(0, out, in)
+	if in[0]>>4&7 != 7 || string(in[1:8]) != "0123456" || in[8] != 0 {
+		t.Fatalf("status %08b data %q", in[0], in[1:11])
+	}
+	out[0] = 1 // TR toggle with no Output length entry: acknowledged, nothing sent
+	d.Step(0, out, in)
+	if in[0]&1 != 1 {
+		t.Fatal("transmit toggle not acknowledged")
+	}
+}

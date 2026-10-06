@@ -32,6 +32,7 @@ const (
 	ProductEL2912 uint32 = 0x0b603052
 	ProductEP1918 uint32 = 0x077e4052 // EP1918-0002
 	ProductEL1904 uint32 = 0x07703052
+	ProductEL6001 uint32 = 0x17713052
 )
 
 type deviceID struct {
@@ -45,6 +46,7 @@ func digitalIO() ecat.Device     { return &DigitalIO{} }
 func analogIn4to20() ecat.Device { return &Analog{kind: analogCurrent} }
 func analogIn0to10() ecat.Device { return &Analog{kind: analogVoltage} }
 func el9222() ecat.Device        { return &EL9222{} }
+func el6001() ecat.Device        { return &EL6001{} }
 
 // knownIDs lists every exact (vendor, product) registration.
 var knownIDs = []deviceID{
@@ -66,6 +68,7 @@ var knownIDs = []deviceID{
 	{"EL2912", VendorBeckhoff, ProductEL2912, safetyDiag},
 	{"EP1918-0002", VendorBeckhoff, ProductEP1918, safetyDiag},
 	{"EL1904", VendorBeckhoff, ProductEL1904, safetyDiag},
+	{"EL6001", VendorBeckhoff, ProductEL6001, el6001},
 }
 
 type modelFallback struct {
@@ -86,6 +89,7 @@ var beckhoffFallbacks = []modelFallback{
 	{regexp.MustCompile(`^EL306\d$`), analogIn0to10},
 	{regexp.MustCompile(`^EL922\d`), el9222},
 	{regexp.MustCompile(`^PS20\d\d`), psu},
+	{regexp.MustCompile(`^EL600[12]$`), el6001},
 }
 
 // Register installs every device model into r.
