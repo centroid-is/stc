@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-06T01:45:21.943Z"
+last_updated: "2026-10-06T01:54:27.216Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 15
   total_plans: 57
-  completed_plans: 49
+  completed_plans: 50
   percent: 52
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 20 (TwinCAT Expression Semantics) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-10-06
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -95,6 +95,8 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-09: LSP resolves qualified_only GVL variables via the GVL struct type, same-file GVL first
 - [Phase 20]: 20-01: ast.EnumOrdinals is the single enum numbering routine; Known=false propagates to implicit successors of a non-literal value
 - [Phase 20]: 20-01: JSON kinds for Phase 20 nodes and CallArg are forced in nodeToMap (CallStmt/CallExpr args now report CallArg, not SourceFile)
+- [Phase 20]: 20-02: Parser.stmtHead keeps fb(name := ...) a CallStmt only at statement head; expression calls split args into Args (leading positional) and NamedArgs (rest, source order)
+- [Phase 20]: 20-02: w.3.1 lexes as Dot RealLiteral; parser splits it into nested BitAccessExprs and reports bit access on a bit
 
 ### Pending Todos
 
@@ -108,7 +110,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T01:45:16.550Z
+Last session: 2026-10-06T01:54:09.504Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
