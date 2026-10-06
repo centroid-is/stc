@@ -392,7 +392,7 @@ Plans:
 **Plans**: 9 plans
 
 Plans:
-- [ ] 20-01-PLAN.md -- AST contracts: bit access, named call args, REF=, THIS/SUPER, initialisers, namespace types, enum base/default; JSON kinds, fmt/emit/lint, shared enum numbering
+- [x] 20-01-PLAN.md -- AST contracts: bit access, named call args, REF=, THIS/SUPER, initialisers, namespace types, enum base/default; JSON kinds, fmt/emit/lint, shared enum numbering
 - [ ] 20-02-PLAN.md -- Parser expressions/statements: bit access, named args in expression calls, trailing comma, qualified CASE labels, REF=, THIS^/SUPER^
 - [ ] 20-03-PLAN.md -- Lexer and declaration parsing: typed based literals, enum base type and TYPE default, namespace-qualified types, struct/array initialisers, stray semicolons
 - [ ] 20-04-PLAN.md -- Checker resolver: pointer-stable two-pass registration, ten standard FBs with aliases, inherited EXTENDS scope, SEMA037 with fixture audit
@@ -529,7 +529,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 17. Behavioral Mocks | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 18. Auto-Defines & TcPOU Extractor | v1.1 | 1/1 | Complete | 2026-03-30 |
 | 19. TwinCAT Declaration Syntax | v1.2 | 10/10 | Complete    | 2026-10-06 |
-| 20. TwinCAT Expression Semantics | v1.2 | 0/TBD | Not started | - |
+| 20. TwinCAT Expression Semantics | v1.2 | 1/9 | In Progress|  |
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 0/TBD | Not started | - |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |

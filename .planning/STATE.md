@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: ready_to_plan
-stopped_at: Phase 19 complete (10/10) — ready to discuss Phase 20
-last_updated: 2026-10-06T00:14:17.262Z
+status: executing
+stopped_at: v1.2 roadmap created
+last_updated: "2026-10-06T01:45:21.943Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 15
-  total_plans: 48
-  completed_plans: 48
+  total_plans: 57
+  completed_plans: 49
   percent: 52
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 20 — twincat expression semantics
+**Current focus:** Phase 20 — TwinCAT Expression Semantics
 
 ## Current Position
 
-Phase: 20
-Plan: Not started
-Status: Ready to plan
+Phase: 20 (TwinCAT Expression Semantics) — EXECUTING
+Plan: 2 of 9
+Status: Ready to execute
 Last activity: 2026-10-06
 
-Progress: [██████████] 100%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
@@ -93,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 19]: 19-10: --gvl-name is applied after parsing (after ia.Parse in check), never in the incremental parse path; more than one input file is a usage error, a JSON {error} object under --format json
 - [Phase 19]: 19-09: gofmt is not CI-enforced; pre-existing non-gofmt files left untouched
 - [Phase 19]: 19-09: LSP resolves qualified_only GVL variables via the GVL struct type, same-file GVL first
+- [Phase 20]: 20-01: ast.EnumOrdinals is the single enum numbering routine; Known=false propagates to implicit successors of a non-literal value
+- [Phase 20]: 20-01: JSON kinds for Phase 20 nodes and CallArg are forced in nodeToMap (CallStmt/CallExpr args now report CallArg, not SourceFile)
 
 ### Pending Todos
 
@@ -106,7 +108,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T00:10:41.930Z
+Last session: 2026-10-06T01:45:16.550Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
