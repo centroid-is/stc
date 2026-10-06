@@ -984,6 +984,11 @@ func (c *Checker) checkMemberAccessExpr(e *ast.MemberAccessExpr) types.Type {
 				return io.Type
 			}
 		}
+		for _, p := range t.Properties {
+			if strings.EqualFold(p.Name, memberName) {
+				return p.Type
+			}
+		}
 		pos := astPosToSource(e.Member.Span().Start)
 		c.diags.Errorf(pos, CodeNoMember,
 			"type %s has no member %q", t, memberName)

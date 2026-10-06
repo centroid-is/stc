@@ -572,6 +572,12 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 	r.resolveMethods(d.Methods, pouScope)
 	r.resolveActions(d.Actions, pouScope)
 
+	for _, p := range d.Properties {
+		if p.Name != nil && p.Type != nil {
+			fbType.Properties = append(fbType.Properties, types.Parameter{Name: p.Name.Name, Type: r.resolveTypeSpec(p.Type)})
+		}
+	}
+
 	// Collect parameters from var blocks
 	for _, vb := range d.VarBlocks {
 		for _, vd := range vb.Declarations {
