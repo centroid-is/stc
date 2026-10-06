@@ -26,3 +26,18 @@ Out-of-scope discoveries logged during execution. Each line names the plan that 
 - **[20-09] `[N(0)]` with a constant count is a call in initialisers.** The parser reads `[C(0)]` as a call of `C` (20-03 item). Initialiser values are now walked by the checker, so this form reports SEMA022 "not callable". Neither oracle file uses it.
 - **[20-09] METHOD variable initialisers are not checked.** METHOD bodies and their VAR blocks are still skipped by the checker, so THIS^/SUPER^ and initialisers inside methods are unchecked.
 - **[20-09] Initialiser and assignment literal rules differ.** An integer literal initialises BYTE..LWORD and REAL/LREAL variables (`w : WORD := 16#FF;`, `r : REAL := 0;`), but the same literal in an assignment (`w := 5;`, `r := 0;`) still reports "cannot assign DINT to WORD/REAL". Phase 22 literal typing should unify both.
+
+## Recorded by the 20-08 phase gate
+
+Items deferred by research or CONTEXT, plus findings from the final oracle run. Counts are from `stc check` on each oracle file alone.
+
+- **[20-08, research Q5] Chained assignment.** `a := b := 0;` appears only in st201. It is still a parse error there. Phase 22 (stdlib parity) owns it.
+- **[20-08, research Q5] Missing conversion and shift functions.** svncore reports SEMA010 for `BYTE_TO_UDINT` (6), `SHL` (3), `WORD_TO_UINT` (2), `SYSTEMTIME_TO_DT` (2), `UINT_TO_WORD` (1) and `BOOL_TO_UINT` (1). `UDINT_TO_REAL` was added by 20-09. Phase 22 owns the rest.
+- **[20-08] `ADR` and `SIZEOF` are unknown to the checker.** svncore reports 10 and 5 SEMA010 for them, and `tests/twincat_probes/ptr.st` reports both. The probe still parses clean, so the fixture gate passes. Phase 22 owns built-in parity.
+- **[20-08, research Q6] METHOD bodies are not checked.** Method bodies and their VAR blocks are skipped by the checker. This hides THIS^/SUPER^, named-argument and initialiser checks inside methods. Phase 22/23 owns it.
+- **[20-08, research Pitfall 11] Member-callee calls are unchecked.** `checkCallExpr` returns Invalid for `inst.M(...)` and `THIS^.M(...)`, so their arguments are not bound or type-checked.
+- **[20-08] Untyped integer literals widen unsigned arithmetic to LREAL.** `u := u + 1;` on a UDINT reports "cannot assign LREAL to UDINT", and `arr[(240 + u - v) MOD 240]` with UINT operands reports "array index must be an integer type, got LREAL". svncore has 21 assignments and 11 indices of this shape. Literal typing is Phase 22 (RUNT-05).
+- **[20-08] Bitwise AND/OR on integer operands.** svncore reports 9 "boolean operator AND/OR requires BOOL operands" for UINT, BYTE and DINT operands. CODESYS accepts bitwise operators on any integer. Phase 22 strictness owns the vendor rule.
+- **[20-08] SEMA022 cascades from undeclared FB types.** An instance whose FB type is missing (SEMA037) is reported again as "not callable (type Invalid)" at each call. svncore has 6. The call check should stay silent on Invalid types.
+- **[20-08] Flattened oracle files merge their GVLs.** st301 holds 17 TwinCAT GVL files, most `qualified_only`, in one file whose derived GVL name is `st301`. Bare accesses to variables of differently named original GVLs then report SEMA033 (24). This is an input artifact. Multi-file project loading in Phase 21 removes it.
+- **[20-08] Double-quoted attribute strings.** `{attribute "qualified_only"}` appears once each in st101, st201 and st301, and stc honours it like the single-quoted form. Whether TwinCAT honours it was not verified.
