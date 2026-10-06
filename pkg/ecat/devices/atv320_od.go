@@ -165,8 +165,13 @@ func (d *ATV320) SDOWrite(index uint16, sub uint8, data []byte) uint32 {
 	return 0
 }
 
-// sdoAllowed reports whether the mailbox is available.
-func (d *ATV320) sdoAllowed() uint32 { return 0 }
+// sdoAllowed reports whether the mailbox is available: not in INIT.
+func (d *ATV320) sdoAllowed() uint32 {
+	if d.ecState == ecat.StateInit {
+		return ecat.AbortDeviceState
+	}
+	return 0
+}
 
 // stepEEPROM advances a pending EEPROM save.
 func (d *ATV320) stepEEPROM() {

@@ -56,6 +56,9 @@ const (
 type ATV320 struct {
 	// Tunables in drive units. ACC/DEC from the PDO override these when nonzero.
 	HSP, LSP, FRS, NCR, ACC, DEC uint16
+	// StateDelay is the number of Steps an EtherCAT state request takes
+	// (ecat.DefaultStateDelay unless changed; <= 0 applies at once).
+	StateDelay int
 
 	sm        CiA402
 	slots     map[string]ecat.EntrySlot
@@ -76,15 +79,25 @@ type ATV320 struct {
 	params     map[uint32]uint32
 	eepromLeft int
 	saveCount  int
+
+	ecState    uint16 // EtherCAT state; the slave boots in PreOp
+	reqState   uint16
+	reqPending bool
+	reqLeft    int
 }
 
-var _ ecat.CoEDevice = (*ATV320)(nil)
+var (
+	_ ecat.CoEDevice   = (*ATV320)(nil)
+	_ ecat.StateDevice = (*ATV320)(nil)
+)
 
 // NewATV320 returns a drive with default parameters.
 func NewATV320() *ATV320 {
 	d := &ATV320{HSP: defHSP, LSP: defLSP, FRS: defFRS, NCR: defNCR, ACC: defACC, DEC: defDEC,
 		slots: map[string]ecat.EntrySlot{}, hmis: HMISNst}
 	d.opMode = 2 // velocity mode
+	d.StateDelay = ecat.DefaultStateDelay
+	d.ecState = ecat.StatePreOp
 	d.params = make(map[uint32]uint32, len(atv320ParamDefaults))
 	for k, v := range atv320ParamDefaults {
 		d.params[k] = v
@@ -199,6 +212,11 @@ func (d *ATV320) ramp(dt time.Duration, target int32, acc, dec int64, fast bool)
 // Step runs one cycle: read outputs, advance CiA402 and the ramp, write inputs.
 func (d *ATV320) Step(dt time.Duration, out []byte, in []byte) {
 	d.stepEEPROM()
+	d.stepEcState()
+	if d.ecState != ecat.StateOP {
+		d.stepNoExchange(in)
+		return
+	}
 	d.cmd = uint16(d.get(out, "CMD"))
 	d.lfr = int16(d.get(out, "LFR"))
 	cmd, lfr := d.cmd, d.lfr
@@ -235,6 +253,18 @@ func (d *ATV320) Step(dt time.Duration, out []byte, in []byte) {
 		d.rfr, d.rem, d.mode = 0, 0, rampHold
 	}
 
+	d.status(tgt, mode)
+
+	d.set(in, "ETA", uint64(d.eta))
+	d.set(in, "RFR", uint64(uint16(int16(d.rfr))))
+	d.set(in, "LCR", uint64(d.lcr))
+	d.set(in, "DI", uint64(d.di))
+	d.set(in, "LFT", uint64(d.lft))
+	d.set(in, "HMIS", uint64(d.hmis))
+}
+
+// status derives LCR, HMIS and ETA from the CiA402 state and the ramp.
+func (d *ATV320) status(tgt int32, mode rampMode) {
 	st := d.sm.State()
 	d.lcr = 0
 	if st == StOperationEnabled {
@@ -260,13 +290,56 @@ func (d *ATV320) Step(dt time.Duration, out []byte, in []byte) {
 		d.hmis = HMISDec
 	}
 	d.eta = d.sm.ETA(st == StOperationEnabled && d.rfr == tgt)
+}
 
-	d.set(in, "ETA", uint64(d.eta))
-	d.set(in, "RFR", uint64(uint16(int16(d.rfr))))
-	d.set(in, "LCR", uint64(d.lcr))
-	d.set(in, "DI", uint64(d.di))
-	d.set(in, "LFT", uint64(d.lft))
-	d.set(in, "HMIS", uint64(d.hmis))
+// stepNoExchange runs a cycle below OP: CMD and LFR are ignored, the CiA402
+// machine holds (STO still disables), the motor is stopped and no process
+// data is exchanged, so every input entry reads 0.
+func (d *ATV320) stepNoExchange(in []byte) {
+	d.rfr, d.rem, d.mode = 0, 0, rampHold
+	if d.sto {
+		d.sm.Disable()
+	}
+	d.status(0, rampHold)
+	for _, e := range d.slots {
+		if e.Dir == ecat.DirIn {
+			e.Set(in, 0)
+		}
+	}
+}
+
+// EcState returns the slave's EtherCAT state.
+func (d *ATV320) EcState() uint16 { return d.ecState }
+
+// RequestState starts a transition to s; it completes after StateDelay Steps.
+func (d *ATV320) RequestState(s uint16) {
+	if d.StateDelay <= 0 {
+		d.reqPending = false
+		d.setEcState(s)
+		return
+	}
+	d.reqState, d.reqPending, d.reqLeft = s, true, d.StateDelay
+}
+
+func (d *ATV320) stepEcState() {
+	if !d.reqPending {
+		return
+	}
+	d.reqLeft--
+	if d.reqLeft <= 0 {
+		d.reqPending = false
+		d.setEcState(d.reqState)
+	}
+}
+
+// setEcState applies a state change. Leaving OP is a communication loss: an
+// enabled drive drops to Switch on disabled and the motor freewheels.
+func (d *ATV320) setEcState(s uint16) {
+	if d.ecState == ecat.StateOP && s != ecat.StateOP {
+		d.sm.Disable()
+		d.rfr, d.rem, d.mode = 0, 0, rampHold
+	}
+	d.ecState = s
 }
 
 // InjectFault raises a drive fault with code lft (lft_e). The motor

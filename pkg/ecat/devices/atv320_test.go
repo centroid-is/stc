@@ -20,11 +20,36 @@ type rig struct {
 	n    *ecat.Network
 	d    *ATV320
 	base string
+	m    string
+	idx  int
 }
 
-// newRig loads file, captures the ATV320 instance from a fresh registry and
-// addresses entries through the topology's link paths.
+// newRig loads file, captures the ATV320 instance from a fresh registry,
+// addresses entries through the topology's link paths and brings the drive
+// to OP.
 func newRig(t *testing.T, file string) *rig {
+	t.Helper()
+	r := newRigPreOp(t, file)
+	goOP(t, r.n, r.m, r.idx)
+	return r
+}
+
+// goOP requests OP for slave idx and steps the network until it is reached.
+func goOP(t *testing.T, n *ecat.Network, m string, idx int) {
+	t.Helper()
+	if err := n.RequestSlaveState(m, idx, ecat.StateOP); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < ecat.DefaultStateDelay; i++ {
+		n.Step(tick)
+	}
+	if s, _ := n.SlaveState(m, idx); s != ecat.StateOP {
+		t.Fatalf("slave state %#x after OP request", s)
+	}
+}
+
+// newRigPreOp is newRig without the OP request: the drive stays in PreOp.
+func newRigPreOp(t *testing.T, file string) *rig {
 	t.Helper()
 	topo, err := ecat.LoadProject(fixture(file))
 	if err != nil {
@@ -35,9 +60,9 @@ func newRig(t *testing.T, file string) *rig {
 	reg.Register(ATV320Vendor, ATV320Product, func() ecat.Device { r.d = NewATV320(); return r.d })
 	r.n = ecat.NewNetwork(topo, reg)
 	m := topo.Masters[0]
-	for _, s := range m.Slaves {
+	for i, s := range m.Slaves {
 		if s.Vendor == ATV320Vendor {
-			r.base = ecat.SlaveBasePath(m.Name, s)
+			r.base, r.m, r.idx = ecat.SlaveBasePath(m.Name, s), m.Name, i
 		}
 	}
 	if r.d == nil || r.base == "" {
@@ -112,7 +137,7 @@ func TestATV320Registered(t *testing.T) {
 		t.Fatal("DefaultRegistry does not build an ATV320")
 	}
 	n := ecat.NewNetwork(topo, nil)
-	n.Step(tick)
+	goOP(t, n, topo.Masters[0].Name, 0)
 	s, _ := topo.Slot(ecat.SlaveBasePath(topo.Masters[0].Name, topo.Masters[0].Slaves[0]) + "^Inputs^ETA")
 	if got := ecat.ReadBits(n.Images().Get(s.Master).In, s.Byte, s.Bit, s.BitLen); got != 0x0250 {
 		t.Errorf("ETA after power-up = %#x", got)
@@ -392,6 +417,8 @@ func TestATV320DemoFixture(t *testing.T) {
 func TestATV320NoLayout(t *testing.T) {
 	d := NewATV320()
 	d.Init(nil)
+	d.StateDelay = 0
+	d.RequestState(ecat.StateOP)
 	d.InjectFault(7)
 	for i := 0; i < 3; i++ {
 		d.Step(tick, nil, nil)
