@@ -470,7 +470,12 @@ Plans:
   2. Setting an EL3054 channel to 12 mA yields the scaled INT and a clean status word, and out-of-range values set the Underrange/Overrange bits
   3. Tripping an EL9222-5500 channel sets Tripped in its status, and the channel recovers only after the PLC pulses Reset
   4. A scripted byte-stream peer on an EL6001 answers `FB_BaaderSerial`'s `md`/`mt1` requests through the 22-byte serial PDO
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 25-01-PLAN.md -- Layout/Binder + model selection + ECAT010 in pkg/ecat; devices base, ids, couplers/passive, digital I/O
+- [ ] 25-02-PLAN.md -- EL3054/EL3064 analog, EL9222-5500 trip/reset, PS2001-2410 PSU, EL2912/EP1918/EL1904 field-voltage diag
+- [ ] 25-03-PLAN.md -- EL6001 22-byte serial model, SerialPeer/ScriptedPeer, Baader md/mt1 exchange through the PDO
+- [ ] 25-04-PLAN.md -- Env-gated real-export model coverage test, architecture docs, validation sign-off, coverage gate
 
 ### Phase 26: ATV320 Drive & EtherCAT Master Services
 **Goal**: The unmodified FB_ATV320 configures and runs a simulated drive, and FB_EcDeviceDiag fills its diagnostics from the simulator, because the drive model and the Tc2_EtherCAT ADS services behave like the real ones
