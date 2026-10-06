@@ -1,5 +1,3 @@
-// Package devices holds behavioural EtherCAT slave models that plug into
-// ecat.Network through ecat.DefaultRegistry.
 package devices
 
 import (
