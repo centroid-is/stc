@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 	"time"
 
@@ -245,108 +244,20 @@ func rampKey(a *Action) string {
 // Run executes the scenario for cycles Ticks (cycles <= 0 uses Length).
 // A Tick error stops the run and is returned with the partial report.
 func (e *Executor) Run(cycles int) (*Report, error) {
-	if !e.prepared {
-		e.Prepare()
+	l, err := e.Start(cycles)
+	if err != nil {
+		return l.rep, err
 	}
-	rep := &Report{Name: e.s.Name, Diagnostics: append([]diag.Diagnostic(nil), e.diags...)}
-	if hasErrors(e.diags) {
-		rep.SimTimeNs = int64(e.t.Clock())
-		return rep, ErrPrepareFailed
-	}
-	n := e.Length(cycles)
-	rep.Cycles = n
-	base := e.t.BaseTick()
-
-	results := make([]StepResult, len(e.s.Steps))
-	order := make([]int, len(e.s.Steps))
-	due := make([]int, len(e.s.Steps))
-	for i := range e.s.Steps {
-		st := &e.s.Steps[i]
-		order[i] = i
-		due[i] = dueTick(st, base)
-		results[i] = StepResult{Index: st.Index, Line: st.Line, Cycle: due[i], Action: Describe(st)}
-	}
-	sort.SliceStable(order, func(a, b int) bool { return due[order[a]] < due[order[b]] })
-
-	var ramps rampSet
-	var waits []*pending
-	next := 0
 	var runErr error
-
-	for k := 0; k < n; k++ {
-		for next < len(order) && due[order[next]] == k {
-			i := order[next]
-			next++
-			st := &e.s.Steps[i]
-			res := &results[i]
-			res.Fired = true
-			res.AtNs = int64(e.t.Clock())
-			if a := st.Action; a != nil {
-				switch a.Kind {
-				case ActRamp:
-					ramps.start(st, *a, e.t.Clock())
-				default:
-					ramps.override(a)
-					if err := e.t.Apply(*a); err != nil {
-						res.Error = err.Error()
-						rep.Diagnostics = append(rep.Diagnostics, e.diag(diag.Error, st, "SCN008", "step %d: %s failed: %v", st.Index, a.Kind, err))
-					}
-				}
-			}
-			if st.Expect != nil {
-				waits = append(waits, &pending{step: st, deadline: k + st.Expect.Within})
-			}
-		}
-
-		ramps.advance(e.t, func(r *ramp, err error) {
-			i := r.step.Index - 1
-			if results[i].Error == "" {
-				results[i].Error = err.Error()
-			}
-			rep.Diagnostics = append(rep.Diagnostics, e.diag(diag.Error, r.step, "SCN008", "step %d: ramp failed: %v", r.step.Index, err))
-		})
-
+	for !l.Done() {
+		l.BeforeTick()
 		if err := e.t.Tick(); err != nil {
-			runErr = fmt.Errorf("tick %d: %w", k, err)
-			n = k
-			rep.Cycles = k
+			runErr = fmt.Errorf("tick %d: %w", l.k, err)
 			break
 		}
-
-		keep := waits[:0]
-		for _, w := range waits {
-			x := w.step.Expect
-			act, err := e.t.Read(x.Path)
-			w.actual, w.readErr = act, err
-			if err == nil && Equal(x.Value, act, x.Tol) {
-				rep.Assertions = append(rep.Assertions, AssertionResult{Step: w.step.Index, Path: x.Path, Expected: x.Value, Actual: act, Cycle: k, Pass: true})
-				continue
-			}
-			if k >= w.deadline {
-				rep.Assertions = append(rep.Assertions, e.fail(rep, w, k, ""))
-				continue
-			}
-			keep = append(keep, w)
-		}
-		waits = keep
+		l.AfterTick()
 	}
-
-	if runErr == nil {
-		for _, w := range waits {
-			rep.Assertions = append(rep.Assertions, e.fail(rep, w, n, fmt.Sprintf("run ended at cycle %d", n)))
-		}
-		for i := range results {
-			if !results[i].Fired {
-				st := &e.s.Steps[i]
-				rep.Diagnostics = append(rep.Diagnostics, e.diag(diag.Warning, st, "SCN010", "step %d never fired: due at cycle %d, run ended at cycle %d", st.Index, due[i], n))
-			}
-		}
-	}
-	sort.SliceStable(rep.Assertions, func(a, b int) bool { return rep.Assertions[a].Step < rep.Assertions[b].Step })
-	rep.Steps = results
-	rep.SimTimeNs = int64(e.t.Clock())
-	rep.Passed = runErr == nil && rep.Failed() == 0 && !hasErrors(rep.Diagnostics)
-	return rep, runErr
+	return l.Finish(runErr), runErr
 }
 
 func (e *Executor) fail(rep *Report, w *pending, k int, msg string) AssertionResult {
