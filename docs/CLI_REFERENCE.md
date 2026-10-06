@@ -556,6 +556,65 @@ resolve, a flag is invalid, the listener cannot start, or (without
 `--opcua`) the scan fails. With `--opcua` a scan error is reported and the
 server keeps serving the last values until stopped.
 
+Since the default TwinCAT task is 1 ms and one ST301 scan takes about 8 ms
+in the interpreter, serve production projects with `--cycle 10ms`.
+Otherwise every scan overruns.
+
+### `stc opcua snapshot`
+
+Capture the browse snapshot of any OPC UA server, such as a real TwinCAT
+TF6100 or `stc serve`, in the golden schema of
+`tests/opcua_golden/st301_shape.json`. The command only browses and reads
+attributes. It never writes values or calls methods, and the snapshot
+holds no values. See [OPCUA.md](OPCUA.md#capture-a-tf6100-snapshot).
+
+```bash
+stc opcua snapshot opc.tcp://<plc>:4840 --out tests/opcua_golden/st301_real.json
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--out`, `-o` | stdout | Write the snapshot to this file |
+| `--root` | `ns=4;s=PLC1` | NodeId to browse from |
+| `--security` | `none` | `none` (SecurityPolicy None + Anonymous) or `basic256sha256` (SignAndEncrypt) |
+| `--cert`, `--key` | generated | Client key pair for `basic256sha256` |
+| `--pki-dir` | user cache dir | Where a generated client certificate lives |
+| `--timeout` | `10s` | Deadline for connecting and browsing |
+
+Exits 1 when the server cannot be reached or the browse fails.
+
+### `stc-mcp`
+
+The MCP server binary for LLM agents. It speaks MCP over stdio. With
+`--project` it also hosts one long-lived, stepped simulation that the sim
+tools drive. Each tool call is deterministic because the session never runs
+against the wall clock.
+
+```bash
+stc-mcp --project "pkg/twincat/testdata/sln/Demo/Demo solution.tsproj"
+stc-mcp --project cmd/stc-mcp/testdata/live --io "tests/ecat_fixtures/Demo Device 1.xml" --opcua 127.0.0.1:4840
+```
+
+| Flag | Description |
+|------|-------------|
+| `--project` | Project to simulate: `.tsproj`, `.plcproj`, a `.st` file or a directory of `.st` files |
+| `--io` | EtherCATConfig export attached to the TcLinkTo links; repeatable, globs allowed |
+| `--opcua` | Also serve the session over OPC UA on host:port; it shares the session runtime |
+| `--scenario` | Reserved; returns an error until Phase 27 lands |
+
+The project loads on the first sim tool call. Without `--project` the sim
+tools return an error result that names the missing flag.
+
+| Tool | Arguments | Result |
+|------|-----------|--------|
+| `stc_sim_step` | `cycles` (1 to 1 000 000) | Runs that many ticks after applying pending OPC UA writes; returns total cycles and sim time |
+| `stc_sim_read` | `paths` | Values as JSON; an unknown path gets its own error entry |
+| `stc_sim_write` | `path`, `value` | Sets a variable; a TcLinkTo-bound input is forced in the input image; CONSTANT and unknown paths are rejected |
+| `stc_opcua_browse` | `node`, `depth` (default 2, max 10), `endpoint` | Browses the session's address space, or a remote server read-only |
+
+The analysis tools (`stc_parse`, `stc_check`, `stc_test`, `stc_emit`,
+`stc_lint`, `stc_format`) work without `--project`.
+
 ## Exit Code Summary
 
 | Code | Meaning |
