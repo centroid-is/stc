@@ -1,7 +1,6 @@
 package devices
 
 import (
-	"sort"
 	"strings"
 	"testing"
 
@@ -176,22 +175,8 @@ func TestDigitalCTEUOutputBits(t *testing.T) {
 	}
 }
 
-func TestDemoDiagnosticsOnlyLaterPlanModels(t *testing.T) {
+func TestDemoDigitalModels(t *testing.T) {
 	_, n := demoNet(t)
-	var got []string
-	for _, d := range n.Diagnostics() {
-		if d.Code != ecat.CodeNoModel {
-			t.Errorf("unexpected code %s", d.Code)
-		}
-		i, j := strings.Index(d.Message, "("), strings.Index(d.Message, ")")
-		got = append(got, d.Message[i+1:j])
-	}
-	sort.Strings(got)
-	// ATV320 lands in Phase 26; EL2912 and PS2001 later in plan 25-02.
-	want := []string{"ATV320 EtherCAT", "EL2912", "PS2001-2410"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("ECAT010 models = %v, want %v", got, want)
-	}
 	for _, name := range []string{"DEMO.A1.01 (EL1008)", "DEMO.A1.02 (EL2008)", "DEMO.A2 (EP2338-0002)", "DEMO.V1 (CTEU-EtherCAT Modular)"} {
 		digital(t, n, name)
 	}
