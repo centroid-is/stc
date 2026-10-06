@@ -174,7 +174,9 @@ func (l *Lexer) scanLineComment(start Pos) Token {
 	// Consume the //
 	l.advance()
 	l.advance()
-	for !l.atEnd() && l.peek() != '\n' {
+	// Stop before the newline and before a CR that ends a CRLF line, so the
+	// comment text never carries a trailing '\r' (TwinCAT exports are CRLF).
+	for !l.atEnd() && l.peek() != '\n' && !(l.peek() == '\r' && l.peekAt(1) == '\n') {
 		l.advance()
 	}
 	return l.makeToken(LineComment, start)
