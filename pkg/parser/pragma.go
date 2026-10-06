@@ -87,7 +87,8 @@ func skipPragmaSpace(s string, i int) int {
 }
 
 // scanPragmaQuoted reads a ' or " quoted string starting at s[i] and returns
-// its unescaped content and the index just past the closing quote.
+// its content (doubled quotes collapsed, $ escapes kept raw) and the index
+// just past the closing quote.
 func scanPragmaQuoted(s string, i int) (string, int, bool) {
 	if i >= len(s) || (s[i] != '\'' && s[i] != '"') {
 		return "", i, false
@@ -95,6 +96,15 @@ func scanPragmaQuoted(s string, i int) (string, int, bool) {
 	q := s[i]
 	var b strings.Builder
 	for j := i + 1; j < len(s); j++ {
+		// An IEC escape ($', $$, $N, ...) is kept raw for the consumer
+		// (e.g. the OPC UA Description unescaping); its quote does not
+		// close the string.
+		if s[j] == '$' && j+1 < len(s) {
+			b.WriteByte('$')
+			b.WriteByte(s[j+1])
+			j++
+			continue
+		}
 		if s[j] != q {
 			b.WriteByte(s[j])
 			continue
