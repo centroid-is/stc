@@ -83,7 +83,7 @@ func (n *ReferenceType) typeSpecNode() {}
 type StringType struct {
 	NodeBase
 	IsWide bool `json:"is_wide,omitempty"`
-	Length Expr  `json:"length,omitempty"`
+	Length Expr `json:"length,omitempty"`
 }
 
 func (n *StringType) Children() []Node {
@@ -120,8 +120,12 @@ func (n *SubrangeType) typeSpecNode() {}
 // EnumType represents an enumeration type declaration.
 type EnumType struct {
 	NodeBase
-	BaseType TypeSpec      `json:"base_type,omitempty"`
-	Values   []*EnumValue  `json:"values"`
+	BaseType TypeSpec     `json:"base_type,omitempty"`
+	Values   []*EnumValue `json:"values"`
+	// EndAttributes and EndPragmas sit after the last value, just before
+	// the closing parenthesis.
+	EndAttributes []*Attribute  `json:"end_attributes,omitempty"`
+	EndPragmas    []*PragmaNode `json:"end_pragmas,omitempty"`
 }
 
 func (n *EnumType) Children() []Node {
@@ -132,19 +136,22 @@ func (n *EnumType) Children() []Node {
 	for _, v := range n.Values {
 		nodes = append(nodes, v)
 	}
-	return nodes
+	return appendAttrs(nodes, n.EndAttributes, n.EndPragmas)
 }
 func (n *EnumType) typeSpecNode() {}
 
 // EnumValue represents a single member of an enumeration with optional init value.
 type EnumValue struct {
 	NodeBase
-	Name  *Ident `json:"name"`
-	Value Expr   `json:"value,omitempty"`
+	Name       *Ident        `json:"name"`
+	Value      Expr          `json:"value,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *EnumValue) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -158,14 +165,18 @@ func (n *EnumValue) Children() []Node {
 type StructType struct {
 	NodeBase
 	Members []*StructMember `json:"members"`
+	// EndAttributes and EndPragmas sit after the last member, just before
+	// END_STRUCT.
+	EndAttributes []*Attribute  `json:"end_attributes,omitempty"`
+	EndPragmas    []*PragmaNode `json:"end_pragmas,omitempty"`
 }
 
 func (n *StructType) Children() []Node {
-	nodes := make([]Node, len(n.Members))
-	for i, m := range n.Members {
-		nodes[i] = m
+	nodes := make([]Node, 0, len(n.Members))
+	for _, m := range n.Members {
+		nodes = append(nodes, m)
 	}
-	return nodes
+	return appendAttrs(nodes, n.EndAttributes, n.EndPragmas)
 }
 func (n *StructType) typeSpecNode() {}
 
@@ -175,10 +186,15 @@ type StructMember struct {
 	Name      *Ident   `json:"name"`
 	Type      TypeSpec `json:"type"`
 	InitValue Expr     `json:"init_value,omitempty"`
+	// AtAddress holds a direct address such as %I* or %QX0.0 on a member.
+	AtAddress  *Ident        `json:"at_address,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *StructMember) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -187,6 +203,9 @@ func (n *StructMember) Children() []Node {
 	}
 	if n.InitValue != nil {
 		nodes = append(nodes, n.InitValue)
+	}
+	if n.AtAddress != nil {
+		nodes = append(nodes, n.AtAddress)
 	}
 	return nodes
 }

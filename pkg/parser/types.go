@@ -7,27 +7,27 @@ import (
 
 // primitiveTypeKeywords maps keyword token kinds to their type name text.
 var primitiveTypeKeywords = map[lexer.TokenKind]string{
-	lexer.KwBool:       "BOOL",
-	lexer.KwByte:       "BYTE",
-	lexer.KwWord:       "WORD",
-	lexer.KwDword:      "DWORD",
-	lexer.KwLword:      "LWORD",
-	lexer.KwSint:       "SINT",
-	lexer.KwInt:        "INT",
-	lexer.KwDint:       "DINT",
-	lexer.KwLint:       "LINT",
-	lexer.KwUsint:      "USINT",
-	lexer.KwUint:       "UINT",
-	lexer.KwUdint:      "UDINT",
-	lexer.KwUlint:      "ULINT",
-	lexer.KwReal:       "REAL",
-	lexer.KwLreal:      "LREAL",
-	lexer.KwTime:       "TIME",
-	lexer.KwDate:       "DATE",
-	lexer.KwTimeOfDay:  "TIME_OF_DAY",
-	lexer.KwTod:        "TOD",
+	lexer.KwBool:        "BOOL",
+	lexer.KwByte:        "BYTE",
+	lexer.KwWord:        "WORD",
+	lexer.KwDword:       "DWORD",
+	lexer.KwLword:       "LWORD",
+	lexer.KwSint:        "SINT",
+	lexer.KwInt:         "INT",
+	lexer.KwDint:        "DINT",
+	lexer.KwLint:        "LINT",
+	lexer.KwUsint:       "USINT",
+	lexer.KwUint:        "UINT",
+	lexer.KwUdint:       "UDINT",
+	lexer.KwUlint:       "ULINT",
+	lexer.KwReal:        "REAL",
+	lexer.KwLreal:       "LREAL",
+	lexer.KwTime:        "TIME",
+	lexer.KwDate:        "DATE",
+	lexer.KwTimeOfDay:   "TIME_OF_DAY",
+	lexer.KwTod:         "TOD",
 	lexer.KwDateAndTime: "DATE_AND_TIME",
-	lexer.KwDt:         "DT",
+	lexer.KwDt:          "DT",
 }
 
 // parseTypeSpec parses a type specifier.
@@ -174,17 +174,20 @@ func (p *Parser) parseStructType() *ast.StructType {
 	startTok := p.advance() // consume STRUCT
 
 	var members []*ast.StructMember
+	var tailAttrs []*ast.Attribute
+	var tailPragmas []*ast.PragmaNode
 	for !p.atEnd() {
 		// Pragmas may precede an individual struct member.
-		p.skipPragmas()
-		if p.at(lexer.KwEndStruct) {
+		attrs, pragmas := p.collectPragmas()
+		if p.at(lexer.KwEndStruct) || p.atEnd() {
+			// Trailing pragmas before END_STRUCT stay with the struct.
+			tailAttrs, tailPragmas = attrs, pragmas
 			break
 		}
 		savedPos := p.pos
 		member := p.parseStructMember()
-		if member != nil {
-			members = append(members, member)
-		}
+		member.Attributes, member.Pragmas = attrs, pragmas
+		members = append(members, member)
 		// Guard against infinite loops when parseStructMember makes no progress.
 		if p.pos == savedPos {
 			p.advance()
@@ -198,14 +201,27 @@ func (p *Parser) parseStructType() *ast.StructType {
 			NodeKind: ast.KindStructType,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Members: members,
+		Members:       members,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 
-// parseStructMember parses name : type [:= init] ;
+// parseStructMember parses name [AT addr] : type [:= init] ;
 func (p *Parser) parseStructMember() *ast.StructMember {
 	startTok := p.peek()
 	name := p.parseIdent()
+
+	// Optional AT address, e.g. I1 AT %I* : BOOL (TwinCAT terminal structs).
+	var atAddress *ast.Ident
+	if p.match(lexer.KwAt) {
+		if p.at(lexer.Ident) || p.at(lexer.DirectAddr) {
+			atAddress = makeIdent(p.advance())
+		} else {
+			p.error("expected address after AT, got %s", p.peek().Kind)
+		}
+	}
+
 	p.expect(lexer.Colon)
 	typeSpec := p.parseTypeSpec()
 
@@ -222,6 +238,7 @@ func (p *Parser) parseStructMember() *ast.StructMember {
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
 		Name:      name,
+		AtAddress: atAddress,
 		Type:      typeSpec,
 		InitValue: initValue,
 	}
@@ -232,10 +249,21 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 	startTok := p.advance() // consume (
 
 	var values []*ast.EnumValue
+	var tailAttrs []*ast.Attribute
+	var tailPragmas []*ast.PragmaNode
 	for !p.atEnd() && !p.at(lexer.RParen) {
+		// Pragmas may precede an enum value.
+		attrs, pragmas := p.collectPragmas()
+		if p.at(lexer.RParen) || p.atEnd() {
+			tailAttrs, tailPragmas = attrs, pragmas
+			break
+		}
 		ev := p.parseEnumValue()
+		ev.Attributes, ev.Pragmas = attrs, pragmas
 		values = append(values, ev)
 		if !p.match(lexer.Comma) {
+			// A pragma may also sit between the last value and ")".
+			tailAttrs, tailPragmas = p.collectPragmas()
 			break
 		}
 	}
@@ -247,7 +275,9 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 			NodeKind: ast.KindEnumType,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Values: values,
+		Values:        values,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 

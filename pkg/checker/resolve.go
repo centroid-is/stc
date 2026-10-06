@@ -1,6 +1,8 @@
 package checker
 
 import (
+	"strings"
+
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/source"
@@ -29,6 +31,17 @@ type ResolveOpts struct {
 type Resolver struct {
 	table *symbols.Table
 	diags *diag.Collector
+
+	// pendingGVLs holds GVL declarations seen during collection. They are
+	// resolved after every file's TYPE declarations are registered, so a GVL
+	// typed with a DUT from a later file gets the real struct type instead of
+	// resolveTypeSpec's placeholder FunctionBlockType.
+	pendingGVLs []pendingGVL
+}
+
+type pendingGVL struct {
+	decl      *ast.GVLDecl
+	isLibrary bool
 }
 
 // NewResolver creates a new Resolver that populates the given symbol table.
@@ -60,6 +73,12 @@ func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveO
 			r.collectFileDeclarations(mockFile, false) // false = not library
 		}
 	}
+
+	// Second pass: GVLs, now that every TYPE is in the global scope.
+	for _, pg := range r.pendingGVLs {
+		r.resolveGVL(pg.decl, pg.isLibrary)
+	}
+	r.pendingGVLs = nil
 }
 
 // collectFileDeclarations processes a single source file's declarations.
@@ -77,6 +96,113 @@ func (r *Resolver) collectFileDeclarations(file *ast.SourceFile, isLibrary bool)
 			r.resolveTypeDecl(d, isLibrary)
 		case *ast.InterfaceDecl:
 			r.resolveInterface(d, isLibrary)
+		case *ast.GVLDecl:
+			r.pendingGVLs = append(r.pendingGVLs, pendingGVL{decl: d, isLibrary: isLibrary})
+		}
+	}
+}
+
+// resolveGVL registers a GVL as a global symbol whose type is a struct of
+// its variables, so GVL.x resolves through ordinary member access. Variables
+// of a GVL without qualified_only are also inserted into the global scope so
+// bare x resolves. Variables of a qualified_only GVL are not: two such GVLs
+// may declare the same name, and the checker reports SEMA033 on bare access.
+func (r *Resolver) resolveGVL(d *ast.GVLDecl, isLibrary bool) {
+	if d.Name == nil {
+		return
+	}
+	name := d.Name.Name
+	pos := astPosToSource(d.Name.Span().Start)
+	global := r.table.GlobalScope()
+
+	// registerQualified is false when a file-derived GVL name clashes with a
+	// POU: a single main.st holding VAR_GLOBAL and PROGRAM Main is a normal
+	// layout, so the variables still register bare and only GVL.x is lost.
+	registerQualified := true
+	if existing := r.table.LookupGlobal(name); existing != nil {
+		switch {
+		case isLibrary && existing.IsLibrary:
+			return
+		case !isLibrary && existing.IsLibrary:
+			r.removeGVL(existing)
+		case d.NameDerived && existing.Kind != symbols.KindGVL:
+			r.diags.Warnf(pos, CodeRedeclared,
+				"GVL name %q (from the file name) clashes with %s %q declared at %s; qualified access is unavailable, use --gvl-name to rename the GVL",
+				name, existing.Kind, existing.Name, existing.Pos)
+			registerQualified = false
+		default:
+			r.diags.Errorf(pos, CodeRedeclared,
+				"redeclaration of %q (previously declared at %s)", name, existing.Pos)
+			return
+		}
+	}
+
+	info := &symbols.GVLInfo{
+		QualifiedOnly: ast.HasAttribute(d.Attributes, "qualified_only"),
+		Vars:          make(map[string]bool),
+		Constants:     make(map[string]bool),
+	}
+	for _, vb := range d.Blocks {
+		if ast.HasAttribute(vb.Attributes, "qualified_only") {
+			info.QualifiedOnly = true
+		}
+	}
+
+	st := &types.StructType{Name: name}
+	var bare []*symbols.Symbol
+	for _, vb := range d.Blocks {
+		for _, vd := range vb.Declarations {
+			typ := r.resolveTypeSpec(vd.Type)
+			for _, id := range vd.Names {
+				key := strings.ToUpper(id.Name)
+				st.Members = append(st.Members, types.StructMember{Name: id.Name, Type: typ})
+				info.Vars[key] = true
+				if vb.IsConstant {
+					info.Constants[key] = true
+				}
+				if !info.QualifiedOnly {
+					bare = append(bare, &symbols.Symbol{
+						Name:       id.Name,
+						Kind:       symbols.KindVariable,
+						Pos:        astPosToSource(id.Span().Start),
+						ParamDir:   ast.VarGlobal,
+						Type:       typ,
+						IsLibrary:  isLibrary,
+						IsConstant: vb.IsConstant,
+					})
+				}
+			}
+		}
+	}
+
+	if registerQualified {
+		_ = global.Insert(&symbols.Symbol{
+			Name:      name,
+			Kind:      symbols.KindGVL,
+			Pos:       pos,
+			Type:      st,
+			IsLibrary: isLibrary,
+			GVL:       info,
+		})
+	}
+	for _, sym := range bare {
+		if err := global.Insert(sym); err != nil {
+			r.diags.Errorf(sym.Pos, CodeRedeclared, "%s", err.Error())
+		}
+	}
+}
+
+// removeGVL deletes a library symbol that user code overrides. For a library
+// GVL its bare variables are deleted too, so the user GVL can redeclare them.
+func (r *Resolver) removeGVL(existing *symbols.Symbol) {
+	global := r.table.GlobalScope()
+	r.table.RemovePOU(existing.Name)
+	if existing.Kind != symbols.KindGVL || existing.GVL.QualifiedOnly {
+		return
+	}
+	for key := range existing.GVL.Vars {
+		if v := global.LookupLocal(key); v != nil && v.IsLibrary && v.ParamDir == ast.VarGlobal {
+			global.Delete(key)
 		}
 	}
 }
@@ -113,6 +239,65 @@ func (r *Resolver) resolveProgram(d *ast.ProgramDecl, isLibrary bool) {
 	}
 
 	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveActions(d.Actions, pouScope)
+}
+
+// resolveActions inserts each ACTION into its POU's scope as a VOID,
+// parameterless function so A1(); resolves through checkCallExpr. Actions
+// share the POU scope, so a clash with a variable or method is reported as
+// a redeclaration.
+func (r *Resolver) resolveActions(actions []*ast.ActionDecl, scope *symbols.Scope) {
+	for _, a := range actions {
+		r.insertCallable(scope, a.Name, symbols.KindAction,
+			&types.FunctionType{Name: a.Name.Name, ReturnType: types.TypeVOID})
+	}
+}
+
+// resolveMethods inserts each METHOD of a FUNCTION_BLOCK into the FB scope
+// as a function with the method's inputs as parameters, so the FB body and
+// its actions can call M(...) unqualified.
+func (r *Resolver) resolveMethods(methods []*ast.MethodDecl, scope *symbols.Scope) {
+	for _, m := range methods {
+		var ret types.Type = types.TypeVOID
+		if m.ReturnType != nil {
+			ret = r.resolveTypeSpec(m.ReturnType)
+		}
+		fn := &types.FunctionType{Name: m.Name.Name, ReturnType: ret}
+		fn.Params = r.callParams(m.VarBlocks)
+		r.insertCallable(scope, m.Name, symbols.KindMethod, fn)
+	}
+}
+
+// callParams lists the VAR_INPUT and VAR_IN_OUT parameters of a callable in
+// declaration order.
+func (r *Resolver) callParams(blocks []*ast.VarBlock) []types.Parameter {
+	var params []types.Parameter
+	for _, vb := range blocks {
+		var dir types.ParamDirection
+		switch vb.Section {
+		case ast.VarInput:
+			dir = types.DirInput
+		case ast.VarInOut:
+			dir = types.DirInOut
+		default:
+			continue
+		}
+		for _, vd := range vb.Declarations {
+			typ := r.resolveTypeSpec(vd.Type)
+			for _, n := range vd.Names {
+				params = append(params, types.Parameter{Name: n.Name, Type: typ, Direction: dir})
+			}
+		}
+	}
+	return params
+}
+
+func (r *Resolver) insertCallable(scope *symbols.Scope, name *ast.Ident, kind symbols.SymbolKind, fn *types.FunctionType) {
+	pos := astPosToSource(name.Span().Start)
+	sym := &symbols.Symbol{Name: name.Name, Kind: kind, Pos: pos, Type: fn}
+	if err := scope.Insert(sym); err != nil {
+		r.diags.Errorf(pos, CodeRedeclared, "%s", err.Error())
+	}
 }
 
 func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool) {
@@ -143,6 +328,8 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 	fbType := &types.FunctionBlockType{Name: name}
 
 	r.resolveVarBlocksInScope(d.VarBlocks, pouScope)
+	r.resolveMethods(d.Methods, pouScope)
+	r.resolveActions(d.Actions, pouScope)
 
 	// Collect parameters from var blocks
 	for _, vb := range d.VarBlocks {

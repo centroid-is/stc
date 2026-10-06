@@ -3,14 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: ready_to_plan
-last_updated: "2026-10-05T21:46:20.030Z"
-last_activity: 2026-10-05
+stopped_at: Phase 19 complete (10/10) — ready to discuss Phase 20
+last_updated: 2026-10-06T00:14:17.262Z
+last_activity: 2026-10-06
 progress:
-  total_phases: 11
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 29
+  completed_phases: 15
+  total_plans: 48
+  completed_plans: 48
+  percent: 52
 ---
 
 # Project State
@@ -20,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** v1.2 Phase 19 -- TwinCAT Declaration Syntax
+**Current focus:** Phase 20 — twincat expression semantics
 
 ## Current Position
 
-Phase: 19 of 29 (TwinCAT Declaration Syntax) -- first of 11 v1.2 phases (19-29)
-Plan: —
+Phase: 20
+Plan: Not started
 Status: Ready to plan
-Last activity: 2026-10-05 — v1.2 roadmap created (11 phases, 47/47 requirements mapped)
+Last activity: 2026-10-06
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 32 (v1.0) + 10 (v1.1) = 42
+- Total plans completed: 42 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 
@@ -78,6 +79,20 @@ Recent decisions affecting current work:
 - [v1.2 Roadmap]: Symbol tree with dotted-path Get/Set (Phase 22) is the shared backbone for EtherCAT binding, OPC UA, ST test built-ins and MCP tools; design it so an ADS server (v2) is a thin adapter
 - [v1.2 Roadmap]: EtherCAT simulated at process-image/PDO level only; ATV320 + Tc2_EtherCAT mocks isolated in Phase 26 as the highest-fidelity risk
 - [v1.2 Roadmap]: Phase 28 opens with an awcullen/opcua spike for struct DataTypeDefinition (fallback NodeSet2 import) before building the address space
+- [Phase 19]: 19-01: scripts/coverage-gate.sh is the per-plan coverage check (thresholds hard-coded from .testcoverage.yml) — Reproduces CI merged profile locally; go-test-coverage opt-in via STC_COVER_TOOL=1
+- [Phase 19]: 19-02: Attribute.String() quotes name and value with '' doubling; JSON value key present iff HasValue
+- [Phase 19]: 19-02: Attributes/Pragmas also on VarBlock; new NodeKinds appended after KindVarDecl (=40, pinned by test)
+- [Phase 19]: 19-03: trailing pragmas before END_VAR attach to the VarBlock, before END_STRUCT or ) to the last member/value; ownerless pragmas (EOF, empty struct/enum) are dropped
+- [Phase 19]: 19-03: printers emit owner attributes (with their own comments) before the owner's leading trivia; attributes are emitted for every vendor target
+- [Phase 19]: 19-05: GVL access rules (qualified_only, constants) live on the KindGVL symbol as GVLInfo so PurgeFile cannot leave stale entries
+- [Phase 19]: 19-05: GVLs resolve in a deferred pendingGVLs pass after all TYPEs are registered
+- [Phase 19]: 19-06: GVL member writes to undeclared names are RuntimeErrors; non qualified_only GVL envs chain as parents of program/test/FUNCTION envs via Interpreter.GlobalParent
+- [Phase 19]: ACTION bodies stop at END_ACTION, the next ACTION, the POU end or any top-level declaration keyword
+- [Phase 19]: FB methods are FunctionType symbols in the FB scope so actions and the FB body can call them unqualified
+- [Phase 19]: DIAL-08 stays pending until 19-08 adds runtime action execution
+- [Phase 19]: 19-10: --gvl-name is applied after parsing (after ia.Parse in check), never in the incremental parse path; more than one input file is a usage error, a JSON {error} object under --format json
+- [Phase 19]: 19-09: gofmt is not CI-enforced; pre-existing non-gofmt files left untouched
+- [Phase 19]: 19-09: LSP resolves qualified_only GVL variables via the GVL struct type, same-file GVL first
 
 ### Pending Todos
 
@@ -91,7 +106,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-05
+Last session: 2026-10-06T00:10:41.930Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 

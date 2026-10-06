@@ -25,6 +25,8 @@ const (
 	KindInterface                       // INTERFACE
 	KindMethod                          // METHOD
 	KindProperty                        // PROPERTY
+	KindGVL                             // Global variable list (VAR_GLOBAL file)
+	KindAction                          // ACTION of a PROGRAM or FUNCTION_BLOCK
 )
 
 var symbolKindNames = [...]string{
@@ -37,6 +39,8 @@ var symbolKindNames = [...]string{
 	KindInterface:     "Interface",
 	KindMethod:        "Method",
 	KindProperty:      "Property",
+	KindGVL:           "GVL",
+	KindAction:        "Action",
 }
 
 // String returns the human-readable name of the symbol kind.
@@ -51,14 +55,27 @@ func (k SymbolKind) String() string {
 // type, etc. The Name field preserves original casing for diagnostics,
 // while lookups are case-insensitive per IEC 61131-3.
 type Symbol struct {
-	Name     string         // Original casing of the identifier
-	Kind     SymbolKind     // What this symbol represents
-	Pos      source.Pos     // Declaration site position
-	Span     source.Span    // Full declaration span
+	Name      string         // Original casing of the identifier
+	Kind      SymbolKind     // What this symbol represents
+	Pos       source.Pos     // Declaration site position
+	Span      source.Span    // Full declaration span
 	Used      bool           // Whether this symbol has been referenced
 	IsLibrary bool           // Whether this symbol was loaded from a vendor library stub
 	ParamDir  ast.VarSection // Parameter direction (VAR_INPUT, VAR_OUTPUT, etc.)
-	Type     any            // Type info — will be type-asserted by checker
+	Type      any            // Type info — will be type-asserted by checker
+
+	// IsConstant marks a variable declared in a VAR_GLOBAL CONSTANT block.
+	IsConstant bool
+	// GVL holds access rules for a KindGVL symbol; nil for other kinds.
+	GVL *GVLInfo
+}
+
+// GVLInfo records the access rules of a global variable list. Keys are
+// upper-cased variable names.
+type GVLInfo struct {
+	QualifiedOnly bool            // {attribute 'qualified_only'}: only GVL.x is valid
+	Vars          map[string]bool // every variable declared in the GVL
+	Constants     map[string]bool // variables from VAR_GLOBAL CONSTANT blocks
 }
 
 // MarkUsed marks this symbol as having been referenced.

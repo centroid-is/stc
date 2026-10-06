@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,37 @@ type Interpreter struct {
 	// declarations. FB instantiation consults this so that an FB-typed VAR
 	// inside another FB is created as a live nested instance.
 	FBDecls map[string]*ast.FunctionBlockDecl
+
+	// gvls holds the registered global variable lists; see RegisterGVL.
+	gvls gvlState
+
+	// callDepth counts nested ACTION, METHOD, user FUNCTION and user FB
+	// executions; see EnterCall.
+	callDepth int
+}
+
+// MaxCallDepth bounds nested ACTION, METHOD, FUNCTION and FB calls. A
+// self-recursive ACTION would otherwise grow the Go stack until the process
+// dies; past this depth the call fails with a RuntimeError instead.
+const MaxCallDepth = 256
+
+// EnterCall records entry into a nested ACTION, METHOD, FUNCTION or FB body and
+// fails with a RuntimeError once MaxCallDepth is exceeded. Every successful
+// EnterCall must be paired with ExitCall.
+func (interp *Interpreter) EnterCall(name string, pos ast.Pos) error {
+	if interp.callDepth >= MaxCallDepth {
+		return &RuntimeError{
+			Msg: fmt.Sprintf("maximum call depth %d exceeded calling %s", MaxCallDepth, name),
+			Pos: pos,
+		}
+	}
+	interp.callDepth++
+	return nil
+}
+
+// ExitCall undoes one EnterCall.
+func (interp *Interpreter) ExitCall() {
+	interp.callDepth--
 }
 
 // TypeResolverFunc returns a TypeResolver backed by the interpreter's
@@ -943,18 +975,30 @@ func valuesInRange(v, low, high Value) bool {
 // It resolves the callee in the environment, sets inputs from named args,
 // executes the FB, and copies output args back to the env.
 func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
-	// Resolve callee
-	calleeIdent, ok := s.Callee.(*ast.Ident)
-	if !ok {
+	// Resolve callee: a plain instance name, or a member path such as
+	// GVL.timer or s.fb that evaluates to an FB instance.
+	var v Value
+	var calleeName string
+	switch c := s.Callee.(type) {
+	case *ast.Ident:
+		calleeName = c.Name
+		var found bool
+		v, found = env.Get(c.Name)
+		if !found {
+			return &RuntimeError{Msg: fmt.Sprintf("undefined: %s", c.Name)}
+		}
+	case *ast.MemberAccessExpr:
+		calleeName = c.Member.Name
+		var err error
+		v, err = interp.evalMemberAccess(env, c)
+		if err != nil {
+			return err
+		}
+	default:
 		return &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", s.Callee)}
 	}
-
-	v, found := env.Get(calleeIdent.Name)
-	if !found {
-		return &RuntimeError{Msg: fmt.Sprintf("undefined: %s", calleeIdent.Name)}
-	}
 	if v.Kind != ValFBInstance || v.FBRef == nil {
-		return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", calleeIdent.Name)}
+		return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", calleeName)}
 	}
 
 	fbInst := v.FBRef
@@ -966,6 +1010,10 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 			continue
 		}
 		if arg.Name == nil {
+			continue
+		}
+		if arg.Value == nil {
+			// Empty argument (name := ,): treated as omitted.
 			continue
 		}
 		argVal, err := interp.evalExpr(env, arg.Value)
@@ -1016,9 +1064,15 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 		}
 		outVal := fbInst.GetOutput(arg.Name.Name)
 		// The value expression should be an identifier to assign to
-		if targetIdent, ok := arg.Value.(*ast.Ident); ok {
-			if !env.Set(targetIdent.Name, outVal) {
-				env.Define(targetIdent.Name, outVal)
+		switch target := arg.Value.(type) {
+		case *ast.Ident:
+			if !env.Set(target.Name, outVal) {
+				env.Define(target.Name, outVal)
+			}
+		case *ast.MemberAccessExpr:
+			// q => GVL.flag or q => s.member
+			if err := interp.execAssignMember(env, target, outVal); err != nil {
+				return err
 			}
 		}
 	}
@@ -1028,6 +1082,9 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 
 // evalMemberAccess evaluates obj.member where obj may be an FB instance or struct.
 func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (Value, error) {
+	if g, gvl := interp.gvlRoot(env, e.Object); g != nil {
+		return evalGVLMember(g, gvl, e.Member)
+	}
 	obj, err := interp.evalExpr(env, e.Object)
 	if err != nil {
 		return Value{}, err
@@ -1042,7 +1099,7 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 		}
 		fbInst := obj.FBRef
 		// Check for property getter
-		if prop := findProperty(fbInst, memberName); prop != nil && prop.Getter != nil {
+		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Getter != nil {
 			return interp.execPropertyGetter(fbInst, prop)
 		}
 		return fbInst.GetMember(memberName), nil
@@ -1061,6 +1118,9 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 
 // execAssignMember handles assignment to a member: obj.member := val
 func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessExpr, val Value) error {
+	if g, gvl := interp.gvlRoot(env, target.Object); g != nil {
+		return assignGVLMember(g, gvl, target.Member, val)
+	}
 	obj, err := interp.evalExpr(env, target.Object)
 	if err != nil {
 		return err
@@ -1075,7 +1135,7 @@ func (interp *Interpreter) execAssignMember(env *Env, target *ast.MemberAccessEx
 		}
 		fbInst := obj.FBRef
 		// Check for property setter
-		if prop := findProperty(fbInst, memberName); prop != nil && prop.Setter != nil {
+		if prop := findProperty(fbInst, memberName, interp); prop != nil && prop.Setter != nil {
 			return interp.execPropertySetter(fbInst, prop, val)
 		}
 		fbInst.SetInput(memberName, val)
@@ -1151,6 +1211,17 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("unsupported call target: %T", e.Callee)}
 	}
 
+	// ACTION of the enclosing POU: A1(); runs against the owner's variables.
+	if act, owner := env.LookupAction(calleeName); act != nil {
+		if len(e.Args) > 0 {
+			return Value{}, &RuntimeError{
+				Msg: fmt.Sprintf("action %s takes no arguments", act.Name.Name),
+				Pos: e.Span().Start,
+			}
+		}
+		return Value{}, interp.execAction(owner, act, e.Span().Start)
+	}
+
 	// Handle ADR() specially: it needs the variable reference, not its value
 	if calleeName == "ADR" {
 		if len(e.Args) != 1 {
@@ -1220,18 +1291,109 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		return fn(args)
 	}
 
+	// Zero-argument FB instance call written as an expression statement:
+	// fb(); runs the instance with its current inputs.
+	if len(e.Args) == 0 {
+		if v, ok := env.Get(calleeName); ok && v.Kind == ValFBInstance && v.FBRef != nil {
+			return Value{}, interp.runFBInstance(v.FBRef)
+		}
+	}
+
 	return Value{}, &RuntimeError{Msg: fmt.Sprintf("undefined function: %s", calleeName)}
+}
+
+// execAction runs an ACTION body in owner, the environment of the POU or FB
+// instance that owns the action. RETURN ends only the action.
+func (interp *Interpreter) execAction(owner *Env, act *ast.ActionDecl, pos ast.Pos) error {
+	if err := interp.EnterCall(act.Name.Name, pos); err != nil {
+		return err
+	}
+	defer interp.ExitCall()
+	if err := interp.execStatements(owner, act.Body); err != nil {
+		if _, ok := err.(*ErrReturn); !ok {
+			return err
+		}
+	}
+	return nil
+}
+
+// runFBInstance executes an FB instance without setting any inputs, with the
+// time elapsed since the instance last ran.
+func (interp *Interpreter) runFBInstance(inst *FBInstance) error {
+	return inst.Execute(inst.deltaFor(interp.clock, interp.dt), interp)
+}
+
+// fbDeclChain returns inst's declaration followed by the FBs it EXTENDS,
+// derived-most first. The FBDecls registry supplies the chain; when it does
+// not know a base, the instance's recorded ParentDecl continues the walk (the
+// test runner and hand-built instances set only ParentDecl). Each level is
+// visited once, so a cycle or a long chain cannot loop.
+func fbDeclChain(inst *FBInstance, interp *Interpreter) []*ast.FunctionBlockDecl {
+	if inst.Decl == nil {
+		return nil
+	}
+	var out []*ast.FunctionBlockDecl
+	add := func(base *ast.FunctionBlockDecl) {
+		chain := fbExtendsChain(base, interp)
+		for i := len(chain) - 1; i >= 0; i-- {
+			if !slices.Contains(out, chain[i]) {
+				out = append(out, chain[i])
+			}
+		}
+	}
+	add(inst.Decl)
+	if inst.ParentDecl != nil && inst.Decl.Extends != nil && !slices.Contains(out, inst.ParentDecl) {
+		add(inst.ParentDecl)
+	}
+	return out
+}
+
+// findAction looks up an ACTION by name on an FB instance: the FB's own
+// actions, then the EXTENDS chain, then whatever was registered on the
+// instance env when it was created.
+func findAction(inst *FBInstance, name string, interp *Interpreter) *ast.ActionDecl {
+	for _, d := range fbDeclChain(inst, interp) {
+		for _, a := range d.Actions {
+			if a.Name != nil && strings.EqualFold(a.Name.Name, name) {
+				return a
+			}
+		}
+	}
+	if inst.Env != nil {
+		return inst.Env.localAction(name)
+	}
+	return nil
 }
 
 // evalMethodCall evaluates a method call on an object (e.g., fb.GetValue()).
 // It resolves the object, finds the method declaration, and executes it.
 func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAccessExpr, argExprs []ast.Expr) (Value, error) {
+	methodName := memberAccess.Member.Name
+	pos := memberAccess.Span().Start
+
+	// GVL.fb(); runs an FB instance that lives in a GVL.
+	if g, gvl := interp.gvlRoot(env, memberAccess.Object); g != nil {
+		v, err := evalGVLMember(g, gvl, memberAccess.Member)
+		if err != nil {
+			return Value{}, err
+		}
+		if len(argExprs) == 0 && v.Kind == ValFBInstance && v.FBRef != nil {
+			return Value{}, interp.runFBInstance(v.FBRef)
+		}
+		return Value{}, &RuntimeError{Msg: fmt.Sprintf("%s.%s is not callable", gvl.Name, methodName), Pos: pos}
+	}
+
 	obj, err := interp.evalExpr(env, memberAccess.Object)
 	if err != nil {
 		return Value{}, err
 	}
 
-	methodName := memberAccess.Member.Name
+	// s.fb(); runs an FB instance held in a struct member.
+	if obj.Kind == ValStruct && len(argExprs) == 0 {
+		if v, ok := obj.Struct[strings.ToUpper(methodName)]; ok && v.Kind == ValFBInstance && v.FBRef != nil {
+			return Value{}, interp.runFBInstance(v.FBRef)
+		}
+	}
 
 	if obj.Kind != ValFBInstance || obj.FBRef == nil {
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("cannot call method '%s' on %s", methodName, obj.Kind)}
@@ -1240,10 +1402,28 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 	fbInst := obj.FBRef
 
 	// Find the method in the FB declaration (including inherited methods)
-	method := findMethod(fbInst, methodName)
+	method := findMethod(fbInst, methodName, interp)
 	if method == nil {
+		// inst.A1(); runs the FB's ACTION in the instance env.
+		if act := findAction(fbInst, methodName, interp); act != nil {
+			if len(argExprs) > 0 {
+				return Value{}, &RuntimeError{Msg: fmt.Sprintf("action %s takes no arguments", act.Name.Name), Pos: pos}
+			}
+			return Value{}, interp.execAction(fbInst.Env, act, pos)
+		}
+		// outer.inner(); runs a nested FB instance.
+		if len(argExprs) == 0 && fbInst.Env != nil {
+			if v, ok := fbInst.Env.GetLocal(methodName); ok && v.Kind == ValFBInstance && v.FBRef != nil {
+				return Value{}, interp.runFBInstance(v.FBRef)
+			}
+		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("method '%s' not found on FB '%s'", methodName, fbInst.TypeName)}
 	}
+
+	if err := interp.EnterCall(method.Name.Name, pos); err != nil {
+		return Value{}, err
+	}
+	defer interp.ExitCall()
 
 	// Create method environment with access to FB instance variables
 	methodEnv := NewEnv(fbInst.Env)
@@ -1308,56 +1488,28 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 	return retVal, nil
 }
 
-// findMethod looks up a method by name in the FB declaration hierarchy.
-// It checks the FB's own methods first, then walks up the EXTENDS chain
-// if parent declarations are available.
-func findMethod(inst *FBInstance, name string) *ast.MethodDecl {
-	if inst.Decl == nil {
-		return nil
-	}
-	upperName := strings.ToUpper(name)
-
-	// Search in the FB's own methods
-	for _, m := range inst.Decl.Methods {
-		if m.Name != nil && strings.ToUpper(m.Name.Name) == upperName {
-			return m
+// findMethod looks up a method by name in the FB declaration hierarchy: the
+// FB's own methods first, then each FB up the EXTENDS chain.
+func findMethod(inst *FBInstance, name string, interp *Interpreter) *ast.MethodDecl {
+	for _, d := range fbDeclChain(inst, interp) {
+		for _, m := range d.Methods {
+			if m.Name != nil && strings.EqualFold(m.Name.Name, name) {
+				return m
+			}
 		}
 	}
-
-	// If the FB extends another, search parent's methods via ParentDecl
-	if inst.Decl.Extends != nil && inst.ParentDecl != nil {
-		parentInst := &FBInstance{
-			TypeName:   inst.Decl.Extends.Name,
-			Decl:       inst.ParentDecl,
-			Env:        inst.Env,
-			ParentDecl: inst.ParentDecl, // propagate further up the chain
-		}
-		return findMethod(parentInst, name)
-	}
-
 	return nil
 }
 
-// findProperty looks up a property by name in the FB declaration hierarchy.
-func findProperty(inst *FBInstance, name string) *ast.PropertyDecl {
-	if inst.Decl == nil {
-		return nil
-	}
-	upperName := strings.ToUpper(name)
-	for _, p := range inst.Decl.Properties {
-		if p.Name != nil && strings.ToUpper(p.Name.Name) == upperName {
-			return p
+// findProperty looks up a property by name in the FB declaration hierarchy:
+// the FB's own properties first, then each FB up the EXTENDS chain.
+func findProperty(inst *FBInstance, name string, interp *Interpreter) *ast.PropertyDecl {
+	for _, d := range fbDeclChain(inst, interp) {
+		for _, p := range d.Properties {
+			if p.Name != nil && strings.EqualFold(p.Name.Name, name) {
+				return p
+			}
 		}
-	}
-	// Walk EXTENDS chain
-	if inst.Decl.Extends != nil && inst.ParentDecl != nil {
-		parentInst := &FBInstance{
-			TypeName:   inst.Decl.Extends.Name,
-			Decl:       inst.ParentDecl,
-			Env:        inst.Env,
-			ParentDecl: inst.ParentDecl,
-		}
-		return findProperty(parentInst, name)
 	}
 	return nil
 }

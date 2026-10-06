@@ -25,7 +25,7 @@ func TestMarshalNode_AllStatementTypes(t *testing.T) {
 		{"ContinueStmt", &ContinueStmt{NodeBase: NodeBase{NodeKind: KindContinueStmt}}, "ContinueStmt"},
 		{"EmptyStmt", &EmptyStmt{NodeBase: NodeBase{NodeKind: KindEmptyStmt}}, "EmptyStmt"},
 		{"ErrorNode", &ErrorNode{NodeBase: NodeBase{NodeKind: KindErrorNode}, Message: "test error"}, "ErrorNode"},
-		{"PragmaNode", &PragmaNode{NodeBase: NodeBase{}, Text: "pragma text"}, "SourceFile"}, // NodeKind 0
+		{"PragmaNode", &PragmaNode{NodeBase: NodeBase{}, Text: "pragma text"}, "Pragma"}, // kind fixed regardless of NodeKind
 	}
 
 	for _, tt := range tests {

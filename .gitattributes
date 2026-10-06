@@ -1,0 +1,9 @@
+# Keep source and fixtures LF on every platform so byte-exact tests (fmt/emit
+# round-trips, probe fixtures) behave the same on Windows checkouts.
+* text=auto eol=lf
+*.st text eol=lf
+*.go text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.png binary
+*.gif binary

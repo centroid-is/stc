@@ -29,6 +29,7 @@ and vendor compatibility warnings. Exit code 1 if errors found, 0 otherwise.`,
 
 	cmd.Flags().String("vendor", "", "Vendor target for compatibility checking (beckhoff, schneider, portable)")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+	addGVLNameFlag(cmd)
 
 	return cmd
 }
@@ -38,6 +39,10 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	vendorFlag, _ := cmd.Flags().GetString("vendor")
 	defineFlags, _ := cmd.Flags().GetStringSlice("define")
 	defines := pipeline.ParseDefines(defineFlags)
+
+	if err := validateGVLName(cmd, args, format); err != nil {
+		return err
+	}
 
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "error: no input files specified")
@@ -89,6 +94,13 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	}
 	incrResult := ia.Parse(args)
 	stats := incrResult.Stats
+
+	// Rename after the incremental parse, never inside it: cached ASTs are
+	// shared across runs, so renaming here keeps cold runs and cache hits
+	// identical. validateGVLName guarantees a single file.
+	for _, f := range incrResult.Files {
+		applyGVLName(cmd, f)
+	}
 
 	// Run semantic analysis on all parsed files (with library stubs if available)
 	analysisResult := analyzer.Analyze(incrResult.Files, cfg, analyzer.AnalyzeOpts{LibraryFiles: libFiles})

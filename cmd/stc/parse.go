@@ -20,17 +20,22 @@ type parseOutput struct {
 }
 
 func newParseCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "parse [file...]",
 		Short: "Parse ST source files and output AST",
 		Long:  "Parse one or more IEC 61131-3 Structured Text source files and output the abstract syntax tree.",
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  runParse,
 	}
+	addGVLNameFlag(cmd)
+	return cmd
 }
 
 func runParse(cmd *cobra.Command, args []string) error {
 	format, _ := cmd.Flags().GetString("format")
+	if err := validateGVLName(cmd, args, format); err != nil {
+		return err
+	}
 	hasErrors := false
 
 	var outputs []parseOutput
@@ -44,6 +49,7 @@ func runParse(cmd *cobra.Command, args []string) error {
 		}
 
 		result := parser.Parse(filename, string(content))
+		applyGVLName(cmd, result.File)
 
 		// Check if any diagnostic is an error.
 		fileHasErrors := false

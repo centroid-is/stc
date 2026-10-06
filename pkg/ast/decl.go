@@ -45,13 +45,17 @@ func (n *SourceFile) declNode() {}
 // ProgramDecl represents a PROGRAM...END_PROGRAM declaration.
 type ProgramDecl struct {
 	NodeBase
-	Name      *Ident      `json:"name"`
-	VarBlocks []*VarBlock `json:"var_blocks,omitempty"`
-	Body      []Statement `json:"body,omitempty"`
+	Name       *Ident        `json:"name"`
+	VarBlocks  []*VarBlock   `json:"var_blocks,omitempty"`
+	Body       []Statement   `json:"body,omitempty"`
+	Actions    []*ActionDecl `json:"actions,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *ProgramDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -60,6 +64,9 @@ func (n *ProgramDecl) Children() []Node {
 	}
 	for _, s := range n.Body {
 		nodes = append(nodes, s)
+	}
+	for _, a := range n.Actions {
+		nodes = append(nodes, a)
 	}
 	return nodes
 }
@@ -75,10 +82,14 @@ type FunctionBlockDecl struct {
 	Body       []Statement     `json:"body,omitempty"`
 	Methods    []*MethodDecl   `json:"methods,omitempty"`
 	Properties []*PropertyDecl `json:"properties,omitempty"`
+	Actions    []*ActionDecl   `json:"actions,omitempty"`
+	Attributes []*Attribute    `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode   `json:"pragmas,omitempty"`
 }
 
 func (n *FunctionBlockDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -100,6 +111,9 @@ func (n *FunctionBlockDecl) Children() []Node {
 	for _, p := range n.Properties {
 		nodes = append(nodes, p)
 	}
+	for _, a := range n.Actions {
+		nodes = append(nodes, a)
+	}
 	return nodes
 }
 func (n *FunctionBlockDecl) declNode() {}
@@ -107,14 +121,17 @@ func (n *FunctionBlockDecl) declNode() {}
 // FunctionDecl represents a FUNCTION...END_FUNCTION declaration.
 type FunctionDecl struct {
 	NodeBase
-	Name       *Ident      `json:"name"`
-	ReturnType TypeSpec     `json:"return_type,omitempty"`
-	VarBlocks  []*VarBlock `json:"var_blocks,omitempty"`
-	Body       []Statement `json:"body,omitempty"`
+	Name       *Ident        `json:"name"`
+	ReturnType TypeSpec      `json:"return_type,omitempty"`
+	VarBlocks  []*VarBlock   `json:"var_blocks,omitempty"`
+	Body       []Statement   `json:"body,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *FunctionDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -138,10 +155,17 @@ type InterfaceDecl struct {
 	Extends    []*Ident             `json:"extends,omitempty"`
 	Methods    []*MethodSignature   `json:"methods,omitempty"`
 	Properties []*PropertySignature `json:"properties,omitempty"`
+	Attributes []*Attribute         `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode        `json:"pragmas,omitempty"`
+	// EndAttributes and EndPragmas sit after the last signature, just
+	// before END_INTERFACE.
+	EndAttributes []*Attribute  `json:"end_attributes,omitempty"`
+	EndPragmas    []*PragmaNode `json:"end_pragmas,omitempty"`
 }
 
 func (n *InterfaceDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -154,7 +178,7 @@ func (n *InterfaceDecl) Children() []Node {
 	for _, p := range n.Properties {
 		nodes = append(nodes, p)
 	}
-	return nodes
+	return appendAttrs(nodes, n.EndAttributes, n.EndPragmas)
 }
 func (n *InterfaceDecl) declNode() {}
 
@@ -169,10 +193,13 @@ type MethodDecl struct {
 	IsAbstract     bool           `json:"is_abstract,omitempty"`
 	IsFinal        bool           `json:"is_final,omitempty"`
 	IsOverride     bool           `json:"is_override,omitempty"`
+	Attributes     []*Attribute   `json:"attributes,omitempty"`
+	Pragmas        []*PragmaNode  `json:"pragmas,omitempty"`
 }
 
 func (n *MethodDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -197,10 +224,13 @@ type PropertyDecl struct {
 	Type           TypeSpec       `json:"type,omitempty"`
 	Getter         *MethodDecl    `json:"getter,omitempty"`
 	Setter         *MethodDecl    `json:"setter,omitempty"`
+	Attributes     []*Attribute   `json:"attributes,omitempty"`
+	Pragmas        []*PragmaNode  `json:"pragmas,omitempty"`
 }
 
 func (n *PropertyDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -220,13 +250,16 @@ func (n *PropertyDecl) declNode() {}
 // MethodSignature represents a method declaration inside an INTERFACE (no body).
 type MethodSignature struct {
 	NodeBase
-	Name       *Ident      `json:"name"`
-	ReturnType TypeSpec     `json:"return_type,omitempty"`
-	VarBlocks  []*VarBlock `json:"var_blocks,omitempty"`
+	Name       *Ident        `json:"name"`
+	ReturnType TypeSpec      `json:"return_type,omitempty"`
+	VarBlocks  []*VarBlock   `json:"var_blocks,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *MethodSignature) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -243,12 +276,15 @@ func (n *MethodSignature) declNode() {}
 // PropertySignature represents a property declaration inside an INTERFACE (no body).
 type PropertySignature struct {
 	NodeBase
-	Name *Ident   `json:"name"`
-	Type TypeSpec  `json:"type,omitempty"`
+	Name       *Ident        `json:"name"`
+	Type       TypeSpec      `json:"type,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *PropertySignature) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -262,12 +298,15 @@ func (n *PropertySignature) declNode() {}
 // TypeDecl represents a TYPE...END_TYPE declaration.
 type TypeDecl struct {
 	NodeBase
-	Name *Ident   `json:"name"`
-	Type TypeSpec  `json:"type"`
+	Name       *Ident        `json:"name"`
+	Type       TypeSpec      `json:"type"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *TypeDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}
@@ -281,12 +320,15 @@ func (n *TypeDecl) declNode() {}
 // ActionDecl represents an ACTION...END_ACTION block inside a POU.
 type ActionDecl struct {
 	NodeBase
-	Name *Ident      `json:"name"`
-	Body []Statement `json:"body,omitempty"`
+	Name       *Ident        `json:"name"`
+	Body       []Statement   `json:"body,omitempty"`
+	Attributes []*Attribute  `json:"attributes,omitempty"`
+	Pragmas    []*PragmaNode `json:"pragmas,omitempty"`
 }
 
 func (n *ActionDecl) Children() []Node {
 	var nodes []Node
+	nodes = appendAttrs(nodes, n.Attributes, n.Pragmas)
 	if n.Name != nil {
 		nodes = append(nodes, n.Name)
 	}

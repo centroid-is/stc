@@ -1,11 +1,14 @@
 package checker
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/iomap"
+	"github.com/centroid-is/stc/pkg/source"
 	"github.com/centroid-is/stc/pkg/symbols"
 	"github.com/centroid-is/stc/pkg/types"
 )
@@ -35,12 +38,20 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "PROGRAM")
 					c.checkPOUBody(d.Name.Name, d.Body)
+					c.checkActionBodies(d.Name.Name, d.Actions)
 				}
 			case *ast.FunctionBlockDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION_BLOCK")
 					c.checkPOUBody(d.Name.Name, d.Body)
+					c.checkActionBodies(d.Name.Name, d.Actions)
 				}
+			case *ast.TypeDecl:
+				if st, ok := d.Type.(*ast.StructType); ok {
+					c.checkStructATAddresses(st)
+				}
+			case *ast.GVLDecl:
+				c.checkATAddresses(d.Blocks, "GVL")
 			case *ast.FunctionDecl:
 				if d.Name != nil {
 					c.checkATAddresses(d.VarBlocks, "FUNCTION")
@@ -56,6 +67,29 @@ func (c *Checker) CheckBodies(files []*ast.SourceFile) {
 					c.currentFunctionName = ""
 				}
 			}
+		}
+	}
+}
+
+// checkStructATAddresses validates AT addresses on STRUCT members.
+// Wildcards are silent; explicit addresses warn because every instance of the
+// struct would share the same I/O location.
+func (c *Checker) checkStructATAddresses(st *ast.StructType) {
+	for _, m := range st.Members {
+		if m.AtAddress == nil {
+			continue
+		}
+		pos := astPosToSource(m.AtAddress.Span().Start)
+		addr, err := iomap.ParseAddress(m.AtAddress.Name)
+		if err != nil {
+			c.diags.Errorf(pos, CodeInvalidATAddress,
+				"invalid I/O address %q: %s", m.AtAddress.Name, err)
+			continue
+		}
+		if !addr.IsWildcard {
+			c.diags.Warnf(pos, CodeATNotAllowedHere,
+				"explicit AT address on STRUCT member %q: all instances share the same address; use %%I* / %%Q*",
+				m.Name.Name)
 		}
 	}
 }
@@ -87,8 +121,9 @@ func (c *Checker) checkATAddresses(varBlocks []*ast.VarBlock, pouType string) {
 				continue
 			}
 
-			// Check POU type restriction
-			if pouType != "PROGRAM" {
+			// Check POU type restriction. Wildcards (%I*, %Q*, %M*) are
+			// linked by the IDE per instance and are valid in FBs.
+			if pouType != "PROGRAM" && pouType != "GVL" && !addr.IsWildcard {
 				c.diags.Warnf(pos, CodeATNotAllowedHere,
 					"AT address declarations are only valid in PROGRAM blocks, not %s", pouType)
 			}
@@ -149,6 +184,14 @@ func (c *Checker) checkATAddresses(varBlocks []*ast.VarBlock, pouType string) {
 	}
 }
 
+// checkActionBodies checks each action body in the owning POU's scope, so
+// variables used only inside actions are marked used.
+func (c *Checker) checkActionBodies(pouName string, actions []*ast.ActionDecl) {
+	for _, a := range actions {
+		c.checkPOUBody(pouName, a.Body)
+	}
+}
+
 func (c *Checker) checkPOUBody(name string, body []ast.Statement) {
 	pouScope := c.table.LookupPOU(name)
 	if pouScope == nil {
@@ -194,6 +237,9 @@ func (c *Checker) checkStmt(stmt ast.Statement) {
 }
 
 func (c *Checker) checkAssignStmt(s *ast.AssignStmt) {
+	if s.Value != nil {
+		c.checkConstantTarget(s.Target)
+	}
 	targetType := c.checkExpr(s.Target)
 	valueType := c.checkExpr(s.Value)
 
@@ -359,6 +405,13 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 		return
 	}
 
+	if fnType, ok := calleeType.(*types.FunctionType); ok {
+		// A FUNCTION, METHOD or ACTION called as a statement with formal
+		// arguments: M(a := x);
+		c.checkFuncCallStmtArgs(fnType, s.Args)
+		return
+	}
+
 	fbType, ok := calleeType.(*types.FunctionBlockType)
 	if !ok {
 		pos := astPosToSource(s.Callee.Span().Start)
@@ -423,6 +476,31 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 	}
 }
 
+// checkFuncCallStmtArgs checks the formal arguments of a function-like call
+// statement. Input names must be parameters of fnType; output bindings (=>)
+// are not validated because a FunctionType does not list outputs. Every
+// argument value is checked so its variables count as used.
+func (c *Checker) checkFuncCallStmtArgs(fnType *types.FunctionType, args []*ast.CallArg) {
+	for _, arg := range args {
+		if arg.Name != nil && !arg.IsOutput && !hasParam(fnType.Params, arg.Name.Name) {
+			c.diags.Errorf(astPosToSource(arg.Name.Span().Start), CodeNoMember,
+				"%s has no input parameter %q", fnType.Name, arg.Name.Name)
+		}
+		if arg.Value != nil {
+			c.checkExpr(arg.Value)
+		}
+	}
+}
+
+func hasParam(params []types.Parameter, name string) bool {
+	for _, p := range params {
+		if strings.EqualFold(p.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // checkExpr type-checks an expression and returns its resolved type.
 func (c *Checker) checkExpr(expr ast.Expr) types.Type {
 	if expr == nil {
@@ -460,9 +538,7 @@ func (c *Checker) checkIdent(e *ast.Ident) types.Type {
 	}
 	sym := c.currentScope.Lookup(e.Name)
 	if sym == nil {
-		pos := astPosToSource(e.Span().Start)
-		c.diags.Errorf(pos, CodeUndeclared,
-			"undeclared identifier %q", e.Name)
+		c.reportUndeclared(astPosToSource(e.Span().Start), e.Name)
 		return types.Invalid
 	}
 	sym.MarkUsed()
@@ -473,6 +549,61 @@ func (c *Checker) checkIdent(e *ast.Ident) types.Type {
 		}
 	}
 	return types.Invalid
+}
+
+// reportUndeclared reports a name that resolves to nothing. When the name is
+// a variable of one or more qualified_only GVLs the error is SEMA033 and
+// points at the qualified form; otherwise it is the usual SEMA010.
+func (c *Checker) reportUndeclared(pos source.Pos, name string) {
+	gvls := c.qualifiedOnlyGVLs(name)
+	if len(gvls) == 0 {
+		c.diags.Errorf(pos, CodeUndeclared, "undeclared identifier %q", name)
+		return
+	}
+	msg := fmt.Sprintf("GVL '%s' is qualified_only; use %s.%s", gvls[0], gvls[0], name)
+	if len(gvls) > 1 {
+		msg += fmt.Sprintf(" (also declared in %s)", strings.Join(gvls[1:], ", "))
+	}
+	c.diags.Errorf(pos, CodeGVLQualifiedOnly, "%s", msg)
+}
+
+// qualifiedOnlyGVLs returns the sorted names of qualified_only GVLs that
+// declare a variable called name.
+func (c *Checker) qualifiedOnlyGVLs(name string) []string {
+	key := strings.ToUpper(name)
+	var out []string
+	for _, sym := range c.table.GlobalScope().Symbols() {
+		if sym.Kind == symbols.KindGVL && sym.GVL.QualifiedOnly && sym.GVL.Vars[key] {
+			out = append(out, sym.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// checkConstantTarget reports SEMA034 when an assignment writes a
+// VAR_GLOBAL CONSTANT member, either bare (x := ...) or qualified (G.x := ...).
+func (c *Checker) checkConstantTarget(target ast.Expr) {
+	var name string
+	constant := false
+	switch t := target.(type) {
+	case *ast.Ident:
+		sym := c.currentScope.Lookup(t.Name)
+		name = t.Name
+		constant = sym != nil && sym.IsConstant
+	case *ast.MemberAccessExpr:
+		obj, ok := t.Object.(*ast.Ident)
+		if !ok || t.Member == nil {
+			return
+		}
+		sym := c.currentScope.Lookup(obj.Name)
+		name = t.Member.Name
+		constant = sym != nil && sym.Kind == symbols.KindGVL && sym.GVL.Constants[strings.ToUpper(name)]
+	}
+	if constant {
+		c.diags.Errorf(astPosToSource(target.Span().Start), CodeAssignToConstant,
+			"cannot assign to constant '%s'", name)
+	}
 }
 
 func (c *Checker) checkLiteral(e *ast.Literal) types.Type {
@@ -583,6 +714,9 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 	// Resolve callee
 	calleeName := exprName(e.Callee)
 	if calleeName == "" {
+		// Member callees (inst.A1(), GVL.fb()) are accepted unchecked;
+		// the instance they are called on still counts as used.
+		c.markRootUsed(e.Callee)
 		return types.Invalid
 	}
 
@@ -596,9 +730,7 @@ func (c *Checker) checkCallExpr(e *ast.CallExpr) types.Type {
 	if c.currentScope != nil {
 		sym := c.currentScope.Lookup(calleeName)
 		if sym == nil {
-			pos := astPosToSource(e.Callee.Span().Start)
-			c.diags.Errorf(pos, CodeUndeclared,
-				"undeclared identifier %q", calleeName)
+			c.reportUndeclared(astPosToSource(e.Callee.Span().Start), calleeName)
 			return types.Invalid
 		}
 		sym.MarkUsed()
@@ -799,6 +931,26 @@ func isBooleanOp(op string) bool {
 		return true
 	}
 	return false
+}
+
+// markRootUsed marks the variable at the root of a member-access chain
+// (inst in inst.A1 or a.b.c) as used. Unknown roots are left alone: the
+// call is accepted without checking, so no diagnostic is added here.
+func (c *Checker) markRootUsed(e ast.Expr) {
+	for {
+		ma, ok := e.(*ast.MemberAccessExpr)
+		if !ok {
+			break
+		}
+		e = ma.Object
+	}
+	id, ok := e.(*ast.Ident)
+	if !ok || c.currentScope == nil {
+		return
+	}
+	if sym := c.currentScope.Lookup(id.Name); sym != nil {
+		sym.MarkUsed()
+	}
 }
 
 func exprName(e ast.Expr) string {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/types"
+	"github.com/stretchr/testify/assert"
 )
 
 // ---------------------------------------------------------------------------
@@ -395,7 +396,7 @@ func TestEvalMethodCall_MethodNotFound(t *testing.T) {
 
 func TestFindMethod_NilDecl(t *testing.T) {
 	inst := &FBInstance{TypeName: "T", Decl: nil}
-	if m := findMethod(inst, "Foo"); m != nil {
+	if m := findMethod(inst, "Foo", nil); m != nil {
 		t.Fatal("expected nil for nil decl")
 	}
 }
@@ -417,7 +418,7 @@ func TestFindMethod_InheritsFromParent(t *testing.T) {
 		ParentDecl: parentDecl,
 		Env:        NewEnv(nil),
 	}
-	m := findMethod(inst, "BaseMethod")
+	m := findMethod(inst, "BaseMethod", nil)
 	if m == nil {
 		t.Fatal("expected to find inherited method")
 	}
@@ -438,11 +439,11 @@ func TestFindProperty(t *testing.T) {
 	}
 	inst := &FBInstance{TypeName: "MyFB", Decl: decl, Env: NewEnv(nil)}
 
-	p := findProperty(inst, "Count")
+	p := findProperty(inst, "Count", nil)
 	if p == nil {
 		t.Fatal("expected to find Count property")
 	}
-	p = findProperty(inst, "NonExist")
+	p = findProperty(inst, "NonExist", nil)
 	if p != nil {
 		t.Fatal("expected nil for non-existent property")
 	}
@@ -450,7 +451,7 @@ func TestFindProperty(t *testing.T) {
 
 func TestFindProperty_NilDecl(t *testing.T) {
 	inst := &FBInstance{TypeName: "T", Decl: nil}
-	if p := findProperty(inst, "Foo"); p != nil {
+	if p := findProperty(inst, "Foo", nil); p != nil {
 		t.Fatal("expected nil for nil decl")
 	}
 }
@@ -472,7 +473,7 @@ func TestFindProperty_InheritsFromParent(t *testing.T) {
 		ParentDecl: parentDecl,
 		Env:        NewEnv(nil),
 	}
-	p := findProperty(inst, "BaseProp")
+	p := findProperty(inst, "BaseProp", nil)
 	if p == nil {
 		t.Fatal("expected to find inherited property")
 	}
@@ -1486,4 +1487,40 @@ func TestNewUserFBInstance_InitValue(t *testing.T) {
 	if len(inst.outputNames) != 1 || inst.outputNames[0] != "Y" {
 		t.Fatalf("unexpected outputNames: %v", inst.outputNames)
 	}
+}
+
+func TestFBDeclChain(t *testing.T) {
+	a := &ast.FunctionBlockDecl{Name: ident("A"), Methods: []*ast.MethodDecl{{Name: ident("M")}}}
+	b := &ast.FunctionBlockDecl{Name: ident("B"), Extends: ident("A")}
+	c := &ast.FunctionBlockDecl{Name: ident("C"), Extends: ident("B")}
+
+	t.Run("registry chain three levels deep", func(t *testing.T) {
+		in := New()
+		in.FBDecls = map[string]*ast.FunctionBlockDecl{"A": a, "B": b, "C": c}
+		inst := &FBInstance{Decl: c, ParentDecl: b}
+		assert.Equal(t, []*ast.FunctionBlockDecl{c, b, a}, fbDeclChain(inst, in))
+		assert.Same(t, a.Methods[0], findMethod(inst, "m", in))
+	})
+
+	t.Run("ParentDecl continues where the registry stops", func(t *testing.T) {
+		in := New()
+		in.FBDecls = map[string]*ast.FunctionBlockDecl{"A": a}
+		inst := &FBInstance{Decl: c, ParentDecl: b}
+		assert.Equal(t, []*ast.FunctionBlockDecl{c, b, a}, fbDeclChain(inst, in))
+	})
+
+	t.Run("a cycle through ParentDecl visits each FB once", func(t *testing.T) {
+		x := &ast.FunctionBlockDecl{Name: ident("X"), Extends: ident("Y")}
+		y := &ast.FunctionBlockDecl{Name: ident("Y"), Extends: ident("X")}
+		in := New()
+		in.FBDecls = map[string]*ast.FunctionBlockDecl{"X": x}
+		inst := &FBInstance{Decl: x, ParentDecl: y}
+		assert.Equal(t, []*ast.FunctionBlockDecl{x, y}, fbDeclChain(inst, in))
+		assert.Nil(t, findMethod(inst, "M", in))
+	})
+
+	t.Run("nil declaration", func(t *testing.T) {
+		assert.Nil(t, fbDeclChain(&FBInstance{}, nil))
+		assert.Nil(t, findAction(&FBInstance{}, "A", nil))
+	})
 }

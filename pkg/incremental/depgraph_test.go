@@ -2,6 +2,8 @@ package incremental
 
 import (
 	"testing"
+
+	"github.com/centroid-is/stc/pkg/parser"
 )
 
 func TestDepGraphAddFileAndDependents(t *testing.T) {
@@ -107,5 +109,23 @@ func TestDepGraphAllDirtySorted(t *testing.T) {
 		if dirty[i] < dirty[i-1] {
 			t.Fatalf("AllDirty result not sorted: %v", dirty)
 		}
+	}
+}
+
+func TestDepGraphGVL(t *testing.T) {
+	gvl := parser.Parse("ECT.st", "VAR_GLOBAL\n\tX : ST_EL1008;\n\tn : INT;\nEND_VAR\n").File
+	types := parser.Parse("types.st", "TYPE ST_EL1008 :\nSTRUCT\n\tI1 : BOOL;\nEND_STRUCT\nEND_TYPE\n").File
+	g := NewDepGraph()
+	g.ScanFile(gvl, "ECT.st")
+	g.ScanFile(types, "types.st")
+	g.AddFile("main.st", []string{"P"}, []string{"ECT"})
+
+	deps := g.Dependents("ECT.st")
+	if len(deps) != 1 || deps[0] != "main.st" {
+		t.Fatalf("Dependents(ECT.st) = %v, want [main.st] (GVL name must be declared)", deps)
+	}
+	deps = g.Dependents("types.st")
+	if len(deps) != 1 || deps[0] != "ECT.st" {
+		t.Fatalf("Dependents(types.st) = %v, want [ECT.st] (GVL must reference its DUT)", deps)
 	}
 }

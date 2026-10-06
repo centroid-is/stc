@@ -12,12 +12,12 @@ import (
 // then this function maps comment tokens to their nearest AST nodes.
 //
 // Algorithm:
-// 1. Collect all AST nodes (depth-first), sorted by span start offset.
-// 2. Build a map from non-trivia token start offset to the innermost AST node.
-// 3. Walk allTokens, grouping comments between non-trivia tokens.
-// 4. Same-line comments after a non-trivia token become TrailingTrivia of
-//    the previous token's node. Remaining comments become LeadingTrivia of
-//    the next token's node.
+//  1. Collect all AST nodes (depth-first), sorted by span start offset.
+//  2. Build a map from non-trivia token start offset to the innermost AST node.
+//  3. Walk allTokens, grouping comments between non-trivia tokens.
+//  4. Same-line comments after a non-trivia token become TrailingTrivia of
+//     the previous token's node. Remaining comments become LeadingTrivia of
+//     the next token's node.
 func attachTrivia(file *ast.SourceFile, allTokens []lexer.Token) {
 	if file == nil || len(allTokens) == 0 {
 		return
@@ -183,6 +183,12 @@ func nodeBaseOf(n ast.Node) *ast.NodeBase {
 	case *ast.ContinueStmt:
 		return &x.NodeBase
 	case *ast.ErrorNode:
+		return &x.NodeBase
+	case *ast.Attribute:
+		return &x.NodeBase
+	case *ast.PragmaNode:
+		return &x.NodeBase
+	case *ast.GVLDecl:
 		return &x.NodeBase
 	default:
 		return nil

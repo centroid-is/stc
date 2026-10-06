@@ -14,9 +14,13 @@ func (p *Parser) parseStatements(stop ...lexer.TokenKind) []ast.Statement {
 
 	var stmts []ast.Statement
 	for !p.atEnd() {
-		// Pragmas may appear between statements and before a METHOD or
-		// PROPERTY that follows the body of a POU.
+		// Pragmas between statements carry no meaning and are skipped,
+		// unless the caller stops at them to attach them to a following
+		// METHOD or PROPERTY.
 		if p.at(lexer.Pragma) {
+			if stopSet[lexer.Pragma] {
+				break
+			}
 			p.advance()
 			continue
 		}
@@ -410,7 +414,12 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 		nameTok := p.advance()
 		if p.at(lexer.Assign) {
 			p.advance()
-			value := p.parseExpr(0)
+			// Empty argument (TwinCAT auto-complete): name := followed by , or ).
+			// Value stays a nil interface so later passes can skip it.
+			var value ast.Expr
+			if !p.at(lexer.Comma) && !p.at(lexer.RParen) {
+				value = p.parseExpr(0)
+			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
@@ -421,7 +430,10 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 		}
 		if p.at(lexer.Arrow) {
 			p.advance()
-			value := p.parseExpr(0)
+			var value ast.Expr
+			if !p.at(lexer.Comma) && !p.at(lexer.RParen) {
+				value = p.parseExpr(0)
+			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),

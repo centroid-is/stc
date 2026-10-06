@@ -93,6 +93,87 @@ func (f *formatter) emitTrailingTrivia(n *ast.NodeBase) {
 	}
 }
 
+// --- attributes and pragmas ---
+
+// emitAttrs prints an owner's attributes and pragmas in source order, one per
+// line at the current indent, each with its own comments. Attributes use the
+// canonical ast.Attribute.String form so emit and format agree.
+func (f *formatter) emitAttrs(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	i, j := 0, 0
+	for i < len(attrs) || j < len(pragmas) {
+		if j == len(pragmas) || (i < len(attrs) && attrs[i].NodeSpan.Start.Offset <= pragmas[j].NodeSpan.Start.Offset) {
+			f.emitAttrLine(&attrs[i].NodeBase, attrs[i].String())
+			i++
+		} else {
+			f.emitAttrLine(&pragmas[j].NodeBase, pragmas[j].Text)
+			j++
+		}
+	}
+}
+
+func (f *formatter) emitAttrLine(nb *ast.NodeBase, text string) {
+	for _, t := range nb.LeadingTrivia {
+		if t.Kind == ast.TriviaLineComment || t.Kind == ast.TriviaBlockComment {
+			f.emitIndent()
+			f.write(t.Text)
+			f.newline()
+		}
+	}
+	f.emitIndent()
+	f.write(text)
+	for _, t := range nb.TrailingTrivia {
+		if t.Kind == ast.TriviaLineComment || t.Kind == ast.TriviaBlockComment {
+			f.write(" ")
+			f.write(t.Text)
+		}
+	}
+	f.newline()
+}
+
+// emitInlineAttrs prints attributes and pragmas on the current line, each
+// followed by a space, for owners printed inline (enum values in a type spec).
+func (f *formatter) emitInlineAttrs(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	for _, a := range attrs {
+		f.write(a.String() + " ")
+	}
+	for _, p := range pragmas {
+		f.write(p.Text + " ")
+	}
+}
+
+// emitInlineEndAttrs prints the attributes and pragmas that close an inline
+// enum, in source order, each preceded by a space, just before ")".
+func (f *formatter) emitInlineEndAttrs(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	i, j := 0, 0
+	for i < len(attrs) || j < len(pragmas) {
+		if j == len(pragmas) || (i < len(attrs) && attrs[i].NodeSpan.Start.Offset <= pragmas[j].NodeSpan.Start.Offset) {
+			f.write(" " + attrs[i].String())
+			i++
+		} else {
+			f.write(" " + pragmas[j].Text)
+			j++
+		}
+	}
+}
+
+// emitStructMember prints one struct member, preceded by its attributes.
+func (f *formatter) emitStructMember(m *ast.StructMember) {
+	f.emitAttrs(m.Attributes, m.Pragmas)
+	f.emitIndent()
+	f.write(m.Name.Name)
+	if m.AtAddress != nil {
+		f.writef(" %s %s", f.kw("AT"), m.AtAddress.Name)
+	}
+	f.write(" : ")
+	f.emitTypeSpec(m.Type)
+	if m.InitValue != nil {
+		f.write(" := ")
+		f.emitExpr(m.InitValue)
+	}
+	f.write(";")
+	f.newline()
+}
+
 // --- source file ---
 
 func (f *formatter) emitSourceFile(file *ast.SourceFile) {
@@ -126,12 +207,27 @@ func (f *formatter) emitDecl(decl ast.Declaration) {
 		f.emitActionDecl(d)
 	case *ast.TestCaseDecl:
 		f.emitTestCaseDecl(d)
+	case *ast.GVLDecl:
+		f.emitGVLDecl(d)
 	case *ast.ErrorNode:
 		// skip error nodes
 	}
 }
 
+// emitGVLDecl prints a GVL as its VAR_GLOBAL blocks: the GVL's own
+// attributes and comments first, then each block with its attributes. All
+// blocks print at the position of the first one.
+func (f *formatter) emitGVLDecl(d *ast.GVLDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
+	f.emitLeadingTrivia(&d.NodeBase)
+	for _, vb := range d.Blocks {
+		f.emitVarBlock(vb)
+	}
+	f.emitTrailingTrivia(&d.NodeBase)
+}
+
 func (f *formatter) emitProgramDecl(d *ast.ProgramDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.writef("%s %s", f.kw("PROGRAM"), d.Name.Name)
 	f.newline()
@@ -146,9 +242,11 @@ func (f *formatter) emitProgramDecl(d *ast.ProgramDecl) {
 	f.write(f.kw("END_PROGRAM"))
 	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
+	f.emitPOUActions(d.Actions)
 }
 
 func (f *formatter) emitFunctionBlockDecl(d *ast.FunctionBlockDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.writef("%s %s", f.kw("FUNCTION_BLOCK"), d.Name.Name)
 	if d.Extends != nil {
@@ -187,9 +285,11 @@ func (f *formatter) emitFunctionBlockDecl(d *ast.FunctionBlockDecl) {
 	f.write(f.kw("END_FUNCTION_BLOCK"))
 	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
+	f.emitPOUActions(d.Actions)
 }
 
 func (f *formatter) emitFunctionDecl(d *ast.FunctionDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.writef("%s %s", f.kw("FUNCTION"), d.Name.Name)
 	if d.ReturnType != nil {
@@ -211,6 +311,7 @@ func (f *formatter) emitFunctionDecl(d *ast.FunctionDecl) {
 }
 
 func (f *formatter) emitInterfaceDecl(d *ast.InterfaceDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.writef("%s %s", f.kw("INTERFACE"), d.Name.Name)
 	if len(d.Extends) > 0 {
@@ -229,12 +330,14 @@ func (f *formatter) emitInterfaceDecl(d *ast.InterfaceDecl) {
 	for _, p := range d.Properties {
 		f.emitPropertySignature(p)
 	}
+	f.emitAttrs(d.EndAttributes, d.EndPragmas)
 	f.write(f.kw("END_INTERFACE"))
 	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
 }
 
 func (f *formatter) emitMethodDecl(d *ast.MethodDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.write(f.kw("METHOD"))
 	if d.AccessModifier != ast.AccessNone {
@@ -269,6 +372,7 @@ func (f *formatter) emitMethodDecl(d *ast.MethodDecl) {
 }
 
 func (f *formatter) emitPropertyDecl(d *ast.PropertyDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.write(f.kw("PROPERTY"))
 	if d.AccessModifier != ast.AccessNone {
@@ -292,36 +396,40 @@ func (f *formatter) emitPropertyDecl(d *ast.PropertyDecl) {
 }
 
 func (f *formatter) emitMethodSignature(d *ast.MethodSignature) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
-	f.indent++
-	f.emitIndent()
 	f.writef("%s %s", f.kw("METHOD"), d.Name.Name)
 	if d.ReturnType != nil {
 		f.write(" : ")
 		f.emitTypeSpec(d.ReturnType)
 	}
-	f.write(";")
 	f.newline()
-	f.indent--
+	for _, vb := range d.VarBlocks {
+		f.emitVarBlock(vb)
+	}
+	f.write(f.kw("END_METHOD"))
+	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
 }
 
+// emitPropertySignature prints PROPERTY name : type and END_PROPERTY, the
+// form parsePropertySignature accepts.
 func (f *formatter) emitPropertySignature(d *ast.PropertySignature) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
-	f.indent++
-	f.emitIndent()
 	f.writef("%s %s", f.kw("PROPERTY"), d.Name.Name)
 	if d.Type != nil {
 		f.write(" : ")
 		f.emitTypeSpec(d.Type)
 	}
-	f.write(";")
 	f.newline()
-	f.indent--
+	f.write(f.kw("END_PROPERTY"))
+	f.newline()
 	f.emitTrailingTrivia(&d.NodeBase)
 }
 
 func (f *formatter) emitTypeDecl(d *ast.TypeDecl) {
+	f.emitAttrs(d.Attributes, d.Pragmas)
 	f.emitLeadingTrivia(&d.NodeBase)
 	f.writef("%s %s :", f.kw("TYPE"), d.Name.Name)
 	f.newline()
@@ -338,17 +446,9 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 		f.newline()
 		f.indent++
 		for _, m := range t.Members {
-			f.emitIndent()
-			f.write(m.Name.Name)
-			f.write(" : ")
-			f.emitTypeSpec(m.Type)
-			if m.InitValue != nil {
-				f.write(" := ")
-				f.emitExpr(m.InitValue)
-			}
-			f.write(";")
-			f.newline()
+			f.emitStructMember(m)
 		}
+		f.emitAttrs(t.EndAttributes, t.EndPragmas)
 		f.indent--
 		f.write(f.kw("END_STRUCT"))
 		f.newline()
@@ -357,6 +457,7 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 		f.newline()
 		f.indent++
 		for i, v := range t.Values {
+			f.emitAttrs(v.Attributes, v.Pragmas)
 			f.emitIndent()
 			f.write(v.Name.Name)
 			if v.Value != nil {
@@ -368,6 +469,7 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 			}
 			f.newline()
 		}
+		f.emitAttrs(t.EndAttributes, t.EndPragmas)
 		f.indent--
 		f.write(");")
 		f.newline()
@@ -378,11 +480,24 @@ func (f *formatter) emitTypeBody(ts ast.TypeSpec) {
 	}
 }
 
+// emitPOUActions prints a POU's actions after its END keyword, each
+// preceded by a blank line, in the CODESYS text export form.
+func (f *formatter) emitPOUActions(actions []*ast.ActionDecl) {
+	for _, a := range actions {
+		f.newline()
+		f.emitActionDecl(a)
+	}
+}
+
+// emitActionDecl prints ACTION name, the action's attributes above it and
+// its other pragmas (such as {warning disable C0139}) as the first body lines.
 func (f *formatter) emitActionDecl(d *ast.ActionDecl) {
+	f.emitAttrs(d.Attributes, nil)
 	f.emitLeadingTrivia(&d.NodeBase)
-	f.writef("%s %s:", f.kw("ACTION"), d.Name.Name)
+	f.writef("%s %s", f.kw("ACTION"), d.Name.Name)
 	f.newline()
 	f.indent++
+	f.emitAttrs(nil, d.Pragmas)
 	for _, s := range d.Body {
 		f.emitIndentedStmt(s)
 	}
@@ -412,6 +527,7 @@ func (f *formatter) emitTestCaseDecl(d *ast.TestCaseDecl) {
 // --- var blocks ---
 
 func (f *formatter) emitVarBlock(vb *ast.VarBlock) {
+	f.emitAttrs(vb.Attributes, vb.Pragmas)
 	f.emitLeadingTrivia(&vb.NodeBase)
 	f.write(f.kw(vb.Section.String()))
 	if vb.IsConstant {
@@ -428,6 +544,7 @@ func (f *formatter) emitVarBlock(vb *ast.VarBlock) {
 	for _, vd := range vb.Declarations {
 		f.emitVarDecl(vd)
 	}
+	f.emitAttrs(vb.EndAttributes, vb.EndPragmas)
 	f.indent--
 	f.write(f.kw("END_VAR"))
 	f.newline()
@@ -435,6 +552,7 @@ func (f *formatter) emitVarBlock(vb *ast.VarBlock) {
 }
 
 func (f *formatter) emitVarDecl(vd *ast.VarDecl) {
+	f.emitAttrs(vd.Attributes, vd.Pragmas)
 	f.emitLeadingTrivia(&vd.NodeBase)
 	f.emitIndent()
 	for i, name := range vd.Names {
@@ -508,29 +626,23 @@ func (f *formatter) emitTypeSpec(ts ast.TypeSpec) {
 			if i > 0 {
 				f.write(", ")
 			}
+			f.emitInlineAttrs(v.Attributes, v.Pragmas)
 			f.write(v.Name.Name)
 			if v.Value != nil {
 				f.write(" := ")
 				f.emitExpr(v.Value)
 			}
 		}
+		f.emitInlineEndAttrs(t.EndAttributes, t.EndPragmas)
 		f.write(")")
 	case *ast.StructType:
 		f.write(f.kw("STRUCT"))
 		f.newline()
 		f.indent++
 		for _, m := range t.Members {
-			f.emitIndent()
-			f.write(m.Name.Name)
-			f.write(" : ")
-			f.emitTypeSpec(m.Type)
-			if m.InitValue != nil {
-				f.write(" := ")
-				f.emitExpr(m.InitValue)
-			}
-			f.write(";")
-			f.newline()
+			f.emitStructMember(m)
 		}
+		f.emitAttrs(t.EndAttributes, t.EndPragmas)
 		f.indent--
 		f.emitIndent()
 		f.write(f.kw("END_STRUCT"))
@@ -601,8 +713,10 @@ func (f *formatter) emitStmt(s ast.Statement) {
 
 func (f *formatter) emitAssignStmt(s *ast.AssignStmt) {
 	f.emitExpr(s.Target)
-	f.write(" := ")
+	// A nil Value is an expression statement such as the zero-argument
+	// call A1(); (a bad right-hand side parses as an ErrorNode instead).
 	if s.Value != nil {
+		f.write(" := ")
 		f.emitExpr(s.Value)
 	}
 	f.write(";")
@@ -618,11 +732,16 @@ func (f *formatter) emitCallStmt(s *ast.CallStmt) {
 		}
 		if arg.Name != nil {
 			f.write(arg.Name.Name)
+			op := " :="
 			if arg.IsOutput {
-				f.write(" => ")
-			} else {
-				f.write(" := ")
+				op = " =>"
 			}
+			f.write(op)
+			if arg.Value == nil {
+				// Empty argument: print "name :=" with no trailing space.
+				continue
+			}
+			f.write(" ")
 		}
 		f.emitExpr(arg.Value)
 	}

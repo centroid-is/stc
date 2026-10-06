@@ -183,6 +183,11 @@ func (g *DepGraph) ScanFile(file *ast.SourceFile, filename string) {
 			if d.Name != nil {
 				declares = append(declares, d.Name.Name)
 			}
+		case *ast.GVLDecl:
+			if d.Name != nil {
+				declares = append(declares, d.Name.Name)
+			}
+			references = append(references, extractVarReferences(d.Blocks)...)
 		}
 	}
 

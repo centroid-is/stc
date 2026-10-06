@@ -9,14 +9,14 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### TwinCAT dialect parity (DIAL)
 
-- [ ] **DIAL-01**: `{attribute 'name' := 'value'}` pragmas (single- or double-quoted, `''` escapes, blank lines before the declaration) are retained in the AST on VarDecl, StructMember, EnumValue, TypeDecl and POU nodes, appear in `stc parse --format json`, and round-trip through `stc fmt` and `stc emit`
-- [ ] **DIAL-02**: A file whose top level is `VAR_GLOBAL [PERSISTENT] [RETAIN] [CONSTANT] ... END_VAR` parses as a GVL declaration named from the file (or `--gvl-name`); `qualified_only` enforces `GVL.x` access in the checker
-- [ ] **DIAL-03**: `AT %I*` / `AT %Q*` is accepted on STRUCT members and on FB `VAR`/`VAR_INPUT`/`VAR_OUTPUT` without warnings (explicit `%IX..` addresses in FBs keep SEMA031)
+- [x] **DIAL-01**: `{attribute 'name' := 'value'}` pragmas (single- or double-quoted, `''` escapes, blank lines before the declaration) are retained in the AST on VarDecl, StructMember, EnumValue, TypeDecl and POU nodes, appear in `stc parse --format json`, and round-trip through `stc fmt` and `stc emit`
+- [x] **DIAL-02**: A file whose top level is `VAR_GLOBAL [PERSISTENT] [RETAIN] [CONSTANT] ... END_VAR` parses as a GVL declaration named from the file (or `--gvl-name`); `qualified_only` enforces `GVL.x` access in the checker
+- [x] **DIAL-03**: `AT %I*` / `AT %Q*` is accepted on STRUCT members and on FB `VAR`/`VAR_INPUT`/`VAR_OUTPUT` without warnings (explicit `%IX..` addresses in FBs keep SEMA031)
 - [ ] **DIAL-04**: Bit access `x.N` on BYTE/WORD/DWORD/LWORD variables, struct members and array elements works for read and write with bounds checked by the checker
-- [ ] **DIAL-05**: Empty formal arguments in FB calls (`PT := ,` and `Q => ,`) parse and are ignored at runtime
+- [x] **DIAL-05**: Empty formal arguments in FB calls (`PT := ,` and `Q => ,`) parse and are ignored at runtime
 - [ ] **DIAL-06**: Named arguments in FUNCTION calls used as expressions (`n := F(a := 1, b := 2)`) parse, type-check and execute
 - [ ] **DIAL-07**: Qualified enum values (`E.v`) work in expressions, CASE labels, CASE label lists, initialisers and comparisons; enum declarations with a base type (`(a := 0, b := 1) UINT`) and the `strict`/`to_string` attributes are accepted
-- [ ] **DIAL-08**: `ACTION name ... END_ACTION` blocks (CODESYS text form after the POU and TcPOU `<Action>` XML) parse and are callable as `name()` inside their POU
+- [x] **DIAL-08**: `ACTION name ... END_ACTION` blocks (CODESYS text form after the POU and TcPOU `<Action>` XML) parse and are callable as `name()` inside their POU
 - [ ] **DIAL-09**: `REF=`, `THIS^` and `SUPER^` parse, type-check and execute
 - [ ] **DIAL-10**: `stc check` on the flattened ST301 + SVNCoreComponents sources (`.planning/research/v1.2` probes) reports zero parse errors
 
@@ -110,14 +110,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DIAL-01 | Phase 19 | Pending |
-| DIAL-02 | Phase 19 | Pending |
-| DIAL-03 | Phase 19 | Pending |
+| DIAL-01 | Phase 19 | Complete |
+| DIAL-02 | Phase 19 | Complete |
+| DIAL-03 | Phase 19 | Complete |
 | DIAL-04 | Phase 20 | Pending |
-| DIAL-05 | Phase 19 | Pending |
+| DIAL-05 | Phase 19 | Complete |
 | DIAL-06 | Phase 20 | Pending |
 | DIAL-07 | Phase 20 | Pending |
-| DIAL-08 | Phase 19 | Pending |
+| DIAL-08 | Phase 19 | Complete |
 | DIAL-09 | Phase 20 | Pending |
 | DIAL-10 | Phase 20 | Pending |
 | IMPT-01 | Phase 21 | Pending |

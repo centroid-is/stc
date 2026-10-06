@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -12,12 +13,23 @@ import (
 func (p *Parser) parseDeclaration() ast.Declaration {
 	switch p.peek().Kind {
 	case lexer.Pragma:
-		// Skip pragmas between declarations (attach as trivia in future)
-		p.advance()
-		if !p.atEnd() {
-			return p.parseDeclaration()
+		// Pragmas between declarations belong to the declaration that
+		// follows. Pragmas at end of file have no owner and are dropped.
+		attrs, pragmas := p.collectPragmas()
+		if p.atEnd() {
+			return nil
 		}
-		return nil
+		if p.at(lexer.KwVarGlobal) {
+			return p.parseGVLBlock(attrs, pragmas)
+		}
+		decl := p.parseDeclaration()
+		attachDeclPragmas(decl, attrs, pragmas)
+		return decl
+	case lexer.KwVarGlobal:
+		return p.parseGVLBlock(nil, nil)
+	case lexer.KwAction:
+		// After-POU form; parseSourceFile attaches it to the preceding POU.
+		return p.parseAction(nil, nil)
 	case lexer.KwProgram:
 		return p.parseProgram()
 	case lexer.KwFunctionBlock:
@@ -35,6 +47,66 @@ func (p *Parser) parseDeclaration() ast.Declaration {
 	}
 }
 
+// attachDeclPragmas prepends attrs and pragmas to a top-level declaration
+// that can carry them. Other declarations (error nodes, test cases) drop them;
+// the error path has already reported a diagnostic.
+func attachDeclPragmas(decl ast.Declaration, attrs []*ast.Attribute, pragmas []*ast.PragmaNode) {
+	switch d := decl.(type) {
+	case *ast.ProgramDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.FunctionBlockDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.FunctionDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.InterfaceDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.TypeDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	case *ast.ActionDecl:
+		d.Attributes = append(attrs, d.Attributes...)
+		d.Pragmas = append(pragmas, d.Pragmas...)
+	}
+}
+
+// parseGVLBlock parses one top-level VAR_GLOBAL block. All such blocks in a
+// file aggregate into a single GVLDecl named after the file basename. The
+// first block creates the GVLDecl and its pragmas belong to the GVL; later
+// blocks keep their own pragmas, are appended to the existing GVLDecl, and
+// return nil so parseSourceFile does not add the GVL twice.
+func (p *Parser) parseGVLBlock(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) ast.Declaration {
+	vb := p.parseVarBlock()
+	if p.gvl != nil {
+		vb.Attributes = append(attrs, vb.Attributes...)
+		vb.Pragmas = append(pragmas, vb.Pragmas...)
+		p.gvl.Blocks = append(p.gvl.Blocks, vb)
+		p.gvl.NodeSpan.End = vb.Span().End
+		return nil
+	}
+	base := filepath.Base(p.filename)
+	name := ast.SanitizeGVLName(strings.TrimSuffix(base, filepath.Ext(base)))
+	start := vb.Span().Start
+	p.gvl = &ast.GVLDecl{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindGVLDecl,
+			NodeSpan: vb.Span(),
+		},
+		Name: &ast.Ident{
+			NodeBase: ast.NodeBase{NodeKind: ast.KindIdent, NodeSpan: ast.SpanFrom(start, start)},
+			Name:     name,
+		},
+		Blocks:      []*ast.VarBlock{vb},
+		Attributes:  attrs,
+		Pragmas:     pragmas,
+		NameDerived: true,
+	}
+	return p.gvl
+}
+
 // parseProgram parses PROGRAM name ... END_PROGRAM
 func (p *Parser) parseProgram() *ast.ProgramDecl {
 	startTok := p.advance() // consume PROGRAM
@@ -42,7 +114,30 @@ func (p *Parser) parseProgram() *ast.ProgramDecl {
 	p.match(lexer.Semicolon) // optional trailing semicolon
 
 	varBlocks := p.parseVarBlocks()
-	body := p.parseStatements(lexer.KwEndProgram)
+
+	// Body statements and ACTIONs written inside the PROGRAM.
+	var body []ast.Statement
+	var actions []*ast.ActionDecl
+	for !p.atEnd() && !p.at(lexer.KwEndProgram) {
+		savedPos := p.pos
+		switch p.peek().Kind {
+		case lexer.Pragma:
+			// Pragmas before an ACTION belong to it; pragmas between body
+			// statements are dropped (statement level).
+			attrs, pragmas := p.collectPragmas()
+			if p.at(lexer.KwAction) {
+				actions = append(actions, p.parseAction(attrs, pragmas))
+			}
+		case lexer.KwAction:
+			actions = append(actions, p.parseAction(nil, nil))
+		default:
+			body = append(body, p.parseStatements(lexer.Pragma, lexer.KwEndProgram, lexer.KwAction)...)
+		}
+		// Guard against infinite loops.
+		if p.pos == savedPos {
+			p.advance()
+		}
+	}
 
 	endTok := p.expect(lexer.KwEndProgram)
 	p.match(lexer.Semicolon)
@@ -55,6 +150,52 @@ func (p *Parser) parseProgram() *ast.ProgramDecl {
 		Name:      name,
 		VarBlocks: varBlocks,
 		Body:      body,
+		Actions:   actions,
+	}
+}
+
+// actionBodyStops ends an ACTION body. Besides END_ACTION it stops at the
+// end of the owning POU, at the next ACTION, at a METHOD or PROPERTY of the
+// owning FB and at any token that starts a top-level declaration, so a
+// missing END_ACTION cannot swallow the rest of the FB or file.
+var actionBodyStops = []lexer.TokenKind{
+	lexer.KwEndAction, lexer.KwAction, lexer.KwEndProgram, lexer.KwEndFunctionBlock,
+	lexer.KwMethod, lexer.KwProperty,
+	lexer.KwProgram, lexer.KwFunctionBlock, lexer.KwFunction, lexer.KwType,
+	lexer.KwInterface, lexer.KwVarGlobal, lexer.KwTestCase,
+}
+
+// parseAction parses ACTION name [:|;] ... END_ACTION [;]. Pragmas right
+// after the header (such as {warning disable C0139}) belong to the action;
+// they are appended after any pragmas collected before the ACTION keyword.
+func (p *Parser) parseAction(attrs []*ast.Attribute, pragmas []*ast.PragmaNode) *ast.ActionDecl {
+	startTok := p.advance() // consume ACTION
+	name := p.parseIdent()
+	p.match(lexer.Colon)
+	p.match(lexer.Semicolon)
+
+	innerAttrs, innerPragmas := p.collectPragmas()
+	attrs = append(attrs, innerAttrs...)
+	pragmas = append(pragmas, innerPragmas...)
+
+	body := p.parseStatements(actionBodyStops...)
+
+	endTok := p.expect(lexer.KwEndAction)
+	if endTok.Kind != lexer.KwEndAction {
+		// Missing END_ACTION: end the span at the last consumed token.
+		endTok = p.tokens[p.pos-1]
+	}
+	p.match(lexer.Semicolon)
+
+	return &ast.ActionDecl{
+		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindActionDecl,
+			NodeSpan: spanFromTokens(startTok, endTok),
+		},
+		Name:       name,
+		Body:       body,
+		Attributes: attrs,
+		Pragmas:    pragmas,
 	}
 }
 
@@ -91,10 +232,26 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 	var body []ast.Statement
 	var methods []*ast.MethodDecl
 	var properties []*ast.PropertyDecl
+	var actions []*ast.ActionDecl
 
 	for !p.atEnd() && !p.at(lexer.KwEndFunctionBlock) {
 		savedPos := p.pos
 		switch p.peek().Kind {
+		case lexer.Pragma:
+			// Pragmas before a METHOD or PROPERTY belong to it; pragmas
+			// between body statements are dropped (statement level).
+			attrs, pragmas := p.collectPragmas()
+			if p.isMethodStart() {
+				m := p.parseMethod()
+				m.Attributes, m.Pragmas = attrs, pragmas
+				methods = append(methods, m)
+			} else if p.at(lexer.KwProperty) {
+				prop := p.parseProperty()
+				prop.Attributes, prop.Pragmas = attrs, pragmas
+				properties = append(properties, prop)
+			} else if p.at(lexer.KwAction) {
+				actions = append(actions, p.parseAction(attrs, pragmas))
+			}
 		case lexer.KwMethod, lexer.KwPublic, lexer.KwPrivate, lexer.KwProtected, lexer.KwInternal,
 			lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride:
 			// Could be a method with access modifier
@@ -105,9 +262,11 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 			}
 		case lexer.KwProperty:
 			properties = append(properties, p.parseProperty())
+		case lexer.KwAction:
+			actions = append(actions, p.parseAction(nil, nil))
 		default:
 			stmts := p.parseStatements(
-				lexer.KwEndFunctionBlock, lexer.KwMethod, lexer.KwProperty,
+				lexer.Pragma, lexer.KwEndFunctionBlock, lexer.KwMethod, lexer.KwProperty, lexer.KwAction,
 				lexer.KwPublic, lexer.KwPrivate, lexer.KwProtected, lexer.KwInternal,
 				lexer.KwAbstract, lexer.KwFinal, lexer.KwOverride,
 			)
@@ -134,6 +293,7 @@ func (p *Parser) parseFunctionBlock() *ast.FunctionBlockDecl {
 		Body:       body,
 		Methods:    methods,
 		Properties: properties,
+		Actions:    actions,
 	}
 }
 
@@ -231,16 +391,24 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 	// Parse method and property signatures
 	var methods []*ast.MethodSignature
 	var properties []*ast.PropertySignature
+	var tailAttrs []*ast.Attribute
+	var tailPragmas []*ast.PragmaNode
 
 	for !p.atEnd() && !p.at(lexer.KwEndInterface) {
+		// Pragmas may precede a method or property signature; those before
+		// END_INTERFACE stay with the interface.
+		attrs, pragmas := p.collectPragmas()
 		switch p.peek().Kind {
-		case lexer.Pragma:
-			// Pragmas may precede a method or property signature.
-			p.advance()
 		case lexer.KwMethod:
-			methods = append(methods, p.parseMethodSignature())
+			sig := p.parseMethodSignature()
+			sig.Attributes, sig.Pragmas = attrs, pragmas
+			methods = append(methods, sig)
 		case lexer.KwProperty:
-			properties = append(properties, p.parsePropertySignature())
+			sig := p.parsePropertySignature()
+			sig.Attributes, sig.Pragmas = attrs, pragmas
+			properties = append(properties, sig)
+		case lexer.KwEndInterface, lexer.EOF:
+			tailAttrs, tailPragmas = attrs, pragmas
 		default:
 			// Skip unexpected tokens
 			p.error("unexpected %s in interface", p.peek().Kind.String())
@@ -256,10 +424,12 @@ func (p *Parser) parseInterface() *ast.InterfaceDecl {
 			NodeKind: ast.KindInterfaceDecl,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Name:       name,
-		Extends:    extends,
-		Methods:    methods,
-		Properties: properties,
+		Name:          name,
+		Extends:       extends,
+		Methods:       methods,
+		Properties:    properties,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 

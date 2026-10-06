@@ -17,14 +17,23 @@ func (p *Parser) isVarStart() bool {
 }
 
 // parseVarBlocks parses zero or more VAR sections.
+// Pragmas directly before a VAR keyword are attached to that block. Pragmas
+// not followed by a VAR section are left in place for the caller (method or
+// property attributes, statement pragmas).
 func (p *Parser) parseVarBlocks() []*ast.VarBlock {
 	var blocks []*ast.VarBlock
-	p.skipPragmas()
-	for p.isVarStart() {
-		blocks = append(blocks, p.parseVarBlock())
-		p.skipPragmas()
+	for {
+		saved := p.pos
+		attrs, pragmas := p.collectPragmas()
+		if !p.isVarStart() {
+			p.pos = saved
+			return blocks
+		}
+		vb := p.parseVarBlock()
+		vb.Attributes = append(attrs, vb.Attributes...)
+		vb.Pragmas = append(pragmas, vb.Pragmas...)
+		blocks = append(blocks, vb)
 	}
-	return blocks
 }
 
 // parseVarBlock parses a single VAR section: VAR_xxx [CONSTANT|RETAIN|PERSISTENT] ... END_VAR
@@ -79,17 +88,20 @@ func (p *Parser) parseVarBlock() *ast.VarBlock {
 
 	// Parse variable declarations until END_VAR
 	var decls []*ast.VarDecl
+	var tailAttrs []*ast.Attribute
+	var tailPragmas []*ast.PragmaNode
 	for !p.atEnd() {
 		// Pragmas may precede an individual variable declaration.
-		p.skipPragmas()
-		if p.at(lexer.KwEndVar) {
+		attrs, pragmas := p.collectPragmas()
+		if p.at(lexer.KwEndVar) || p.atEnd() {
+			// Trailing pragmas before END_VAR stay with the block.
+			tailAttrs, tailPragmas = attrs, pragmas
 			break
 		}
 		savedPos := p.pos
 		decl := p.parseVarDecl()
-		if decl != nil {
-			decls = append(decls, decl)
-		}
+		decl.Attributes, decl.Pragmas = attrs, pragmas
+		decls = append(decls, decl)
 		// Guard against infinite loops: if parseVarDecl made no forward
 		// progress (e.g. when facing a token it cannot handle at all),
 		// skip the offending token so the loop eventually terminates.
@@ -106,11 +118,13 @@ func (p *Parser) parseVarBlock() *ast.VarBlock {
 			NodeKind: ast.KindVarBlock,
 			NodeSpan: spanFromTokens(startTok, endTok),
 		},
-		Section:      section,
-		IsConstant:   isConstant,
-		IsRetain:     isRetain,
-		IsPersistent: isPersistent,
-		Declarations: decls,
+		Section:       section,
+		IsConstant:    isConstant,
+		IsRetain:      isRetain,
+		IsPersistent:  isPersistent,
+		Declarations:  decls,
+		EndAttributes: tailAttrs,
+		EndPragmas:    tailPragmas,
 	}
 }
 

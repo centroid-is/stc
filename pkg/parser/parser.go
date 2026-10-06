@@ -59,6 +59,7 @@ type Parser struct {
 	filename  string
 	source    string
 	diags     *diag.Collector
+	gvl       *ast.GVLDecl // the file's GVL once a top-level VAR_GLOBAL is seen
 }
 
 // peek returns the current token without consuming it.
@@ -99,16 +100,6 @@ func (p *Parser) match(kinds ...lexer.TokenKind) bool {
 		}
 	}
 	return false
-}
-
-// skipPragmas consumes any {attribute '...'} pragmas at the current position.
-// Pragmas may precede any declaration (POU, type, struct member, variable);
-// they carry no semantics for the compiler today, so they are skipped the same
-// way parseDeclaration skips them between top-level declarations.
-func (p *Parser) skipPragmas() {
-	for p.at(lexer.Pragma) {
-		p.advance()
-	}
 }
 
 // at returns true if the current token is of the given kind.
@@ -185,9 +176,17 @@ func (p *Parser) parseSourceFile() *ast.SourceFile {
 
 	for !p.atEnd() {
 		decl := p.parseDeclaration()
-		if decl != nil {
-			decls = append(decls, decl)
+		if decl == nil {
+			continue
 		}
+		if act, ok := decl.(*ast.ActionDecl); ok && attachAction(decls, act) {
+			continue
+		} else if ok {
+			start := act.Span().Start
+			p.errorAt(source.Pos{File: start.File, Line: start.Line, Col: start.Col, Offset: start.Offset},
+				"ACTION without a preceding PROGRAM or FUNCTION_BLOCK")
+		}
+		decls = append(decls, decl)
 	}
 
 	endTok := p.peek()
@@ -198,4 +197,22 @@ func (p *Parser) parseSourceFile() *ast.SourceFile {
 		},
 		Declarations: decls,
 	}
+}
+
+// attachAction appends an after-POU ACTION to the immediately preceding
+// declaration when it is a PROGRAM or FUNCTION_BLOCK. It reports false when
+// there is no such POU, so the caller keeps the action as an orphan.
+func attachAction(decls []ast.Declaration, act *ast.ActionDecl) bool {
+	if len(decls) == 0 {
+		return false
+	}
+	switch owner := decls[len(decls)-1].(type) {
+	case *ast.ProgramDecl:
+		owner.Actions = append(owner.Actions, act)
+		return true
+	case *ast.FunctionBlockDecl:
+		owner.Actions = append(owner.Actions, act)
+		return true
+	}
+	return false
 }

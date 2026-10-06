@@ -1,0 +1,7 @@
+TYPE ST_EL1008 :
+STRUCT
+	{attribute 'OPC.UA.DA.Access' := '1'}
+	I1 AT %I* : BOOL;
+	I2 : BOOL;
+END_STRUCT
+END_TYPE

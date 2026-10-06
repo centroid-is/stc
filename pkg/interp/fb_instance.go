@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -33,8 +34,8 @@ type FBInstance struct {
 	// delta shared by every FB in the scan -- calling the same TON twice in
 	// one scan must not advance it twice, because no time passed between the
 	// two calls on a real PLC.
-	lastRun    time.Duration
-	hasRun     bool
+	lastRun time.Duration
+	hasRun  bool
 
 	// For stdlib FBs (non-nil when wrapping a StandardFB implementation)
 	FB StandardFB
@@ -71,9 +72,26 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 		Env:      env,
 	}
 
+	// EXTENDS chain known to the FBDecls registry, base-most first, so the
+	// instance env also holds every inherited variable and ACTION, and a
+	// derived FB's declaration of the same name wins.
+	chain := fbExtendsChain(decl, interp)
+	if len(chain) > 1 {
+		inst.ParentDecl = chain[len(chain)-2]
+	}
+	for _, d := range chain {
+		for _, a := range d.Actions {
+			env.DefineAction(a)
+		}
+	}
+
 	// Walk VarBlocks, initialize variables, and track input/output names
 	resolve := interp.TypeResolverFunc()
-	for _, vb := range decl.VarBlocks {
+	var varBlocks []*ast.VarBlock
+	for _, d := range chain {
+		varBlocks = append(varBlocks, d.VarBlocks...)
+	}
+	for _, vb := range varBlocks {
 		for _, vd := range vb.Declarations {
 			// FB-typed member: instantiate rather than zero-fill. One shared
 			// value must never be defined for several names, so instantiate
@@ -125,6 +143,23 @@ func newUserFBInstanceDepth(name string, decl *ast.FunctionBlockDecl, interp *In
 	return inst
 }
 
+// fbExtendsChain returns decl and the FBs it EXTENDS that the interpreter's
+// FBDecls registry knows, base-most first and decl last. A cycle or a chain
+// deeper than maxFBNestDepth stops the walk.
+func fbExtendsChain(decl *ast.FunctionBlockDecl, interp *Interpreter) []*ast.FunctionBlockDecl {
+	chain := []*ast.FunctionBlockDecl{decl}
+	cur := decl
+	for len(chain) < maxFBNestDepth && cur.Extends != nil && interp != nil && interp.FBDecls != nil {
+		base := interp.FBDecls[strings.ToUpper(cur.Extends.Name)]
+		if base == nil || slices.Contains(chain, base) {
+			break
+		}
+		chain = append([]*ast.FunctionBlockDecl{base}, chain...)
+		cur = base
+	}
+	return chain
+}
+
 // deltaFor reports how much virtual time has passed since this instance last
 // executed. The first call gets the scan's delta, since there is no previous
 // run to measure from; later calls in the same scan get zero, which is what a
@@ -158,6 +193,11 @@ func (inst *FBInstance) deltaFor(clock time.Duration, scanDt time.Duration) time
 // For user-defined FBs, it executes the body statements against the persistent
 // env. A runtime error in the body is returned to the caller -- swallowing it
 // would leave outputs stale and turn the bug into a silent wrong value.
+//
+// The body runs under EnterCall, so every way of calling a user FB (fb();,
+// fb(x := 1);, G.fb();, s.fb();, outer.inner(); and the scan engine) is
+// bounded by MaxCallDepth. An FB that calls its own instance through a GVL
+// then fails with a RuntimeError instead of overflowing the Go stack.
 func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) error {
 	if inst.FB != nil {
 		inst.FB.Execute(dt)
@@ -165,6 +205,10 @@ func (inst *FBInstance) Execute(dt time.Duration, interp *Interpreter) error {
 	}
 	// User-defined FB: execute body statements
 	if interp != nil && inst.Decl != nil && inst.Env != nil {
+		if err := interp.EnterCall(inst.TypeName, ast.Pos{}); err != nil {
+			return err
+		}
+		defer interp.ExitCall()
 		err := interp.execStatements(inst.Env, inst.Decl.Body)
 		if err != nil {
 			// ErrReturn is normal FB termination

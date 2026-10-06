@@ -1,0 +1,11 @@
+PROGRAM MAIN
+VAR
+	x : BOOL;
+	t : TON;
+END_VAR
+t(IN := x, PT := T#1s);
+A1();
+END_PROGRAM
+ACTION A1
+	x := NOT x;
+END_ACTION

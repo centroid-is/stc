@@ -25,7 +25,9 @@ func CheckUsage(files []*ast.SourceFile, table *symbols.Table, diags *diag.Colle
 
 // isInterfaceVar returns true if the variable section is an interface point
 // (VAR_INPUT, VAR_OUTPUT, VAR_IN_OUT, VAR_GLOBAL) and should not trigger
-// unused variable warnings.
+// unused variable warnings. This covers GVL members: bare members of a
+// non-qualified_only GVL are VAR_GLOBAL symbols, and qualified_only members
+// exist only as struct members of the KindGVL symbol, never as scope symbols.
 func isInterfaceVar(section ast.VarSection) bool {
 	switch section {
 	case ast.VarInput, ast.VarOutput, ast.VarInOut, ast.VarGlobal, ast.VarExternal:
@@ -37,6 +39,11 @@ func isInterfaceVar(section ast.VarSection) bool {
 // checkUnusedVars recursively walks the scope tree checking for unused variables.
 func checkUnusedVars(scope *symbols.Scope, diags *diag.Collector) {
 	for _, sym := range scope.Symbols() {
+		// GVLs and their variables are global interface points: another
+		// POU or the I/O image may use them, so never warn.
+		if sym.Kind == symbols.KindGVL || sym.ParamDir == ast.VarGlobal {
+			continue
+		}
 		if sym.Kind == symbols.KindVariable && !sym.Used && !isInterfaceVar(sym.ParamDir) {
 			diags.Warnf(sym.Pos, CodeUnusedVar,
 				"variable '%s' is declared but never used", sym.Name)
@@ -52,12 +59,18 @@ func checkUnreachableDecl(decl ast.Declaration, diags *diag.Collector) {
 	switch d := decl.(type) {
 	case *ast.ProgramDecl:
 		checkUnreachableStmts(d.Body, diags)
+		for _, a := range d.Actions {
+			checkUnreachableStmts(a.Body, diags)
+		}
 	case *ast.FunctionDecl:
 		checkUnreachableStmts(d.Body, diags)
 	case *ast.FunctionBlockDecl:
 		checkUnreachableStmts(d.Body, diags)
 		for _, m := range d.Methods {
 			checkUnreachableStmts(m.Body, diags)
+		}
+		for _, a := range d.Actions {
+			checkUnreachableStmts(a.Body, diags)
 		}
 	case *ast.MethodDecl:
 		checkUnreachableStmts(d.Body, diags)
