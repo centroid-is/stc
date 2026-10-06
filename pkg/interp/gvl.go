@@ -133,6 +133,6 @@ func assignGVLMember(g *Env, gvl *ast.Ident, member *ast.Ident, val Value) error
 	if !ok {
 		return gvlMemberError(gvl, member)
 	}
-	g.Define(member.Name, adoptEnumTag(cur, val))
+	g.Define(member.Name, storeAs(cur, val))
 	return nil
 }

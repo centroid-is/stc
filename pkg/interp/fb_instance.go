@@ -262,7 +262,7 @@ func (inst *FBInstance) SetInput(name string, v Value) {
 	}
 	if inst.Env != nil {
 		if cur, ok := inst.Env.Get(name); ok {
-			v = adoptEnumTag(cur, v)
+			v = storeAs(cur, v)
 		}
 		if !inst.Env.Set(name, v) {
 			inst.Env.Define(name, v)
