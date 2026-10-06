@@ -28,6 +28,10 @@ jobs:
       - name: Test
         run: go test ./... -count=1 -timeout 5m
 
+      # ./... skips directories named vendor, so the stub tests need their own step
+      - name: Test vendor stubs
+        run: go test ./stdlib/vendor/... -count=1 -timeout 5m
+
       - name: Vet
         run: go vet ./...
 
