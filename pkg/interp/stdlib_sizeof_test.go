@@ -48,3 +48,25 @@ func TestSizeOfErrors(t *testing.T) {
 	assert.Error(t, semRunErr(t, "PROGRAM Main\nVAR n : UDINT; END_VAR\nn := SIZEOF(1, 2);\nEND_PROGRAM\n"))
 	assert.Error(t, semRunErr(t, "PROGRAM Main\nVAR n : UDINT; END_VAR\nn := SIZEOF(nope);\nEND_PROGRAM\n"))
 }
+
+// ULINT and LWORD values at or above 2^63 convert to positive reals
+// (review 2 LO-04).
+func TestUnsigned64ToReal(t *testing.T) {
+	eng := semRun(t, `
+PROGRAM Main
+VAR
+	u : ULINT := 16#FFFFFFFFFFFFFFFF;
+	w : LWORD := 16#8000000000000000;
+	a : LREAL; b : REAL; c : LREAL; d : LREAL;
+END_VAR
+a := ULINT_TO_LREAL(u);
+b := LWORD_TO_REAL(w);
+c := TO_LREAL(u);
+d := u;
+END_PROGRAM
+`)
+	assert.Equal(t, 18446744073709551615.0, progVar(t, eng, "a").Real)
+	assert.InDelta(t, 9223372036854775808.0, progVar(t, eng, "b").Real, 1e6)
+	assert.Equal(t, 18446744073709551615.0, progVar(t, eng, "c").Real)
+	assert.Equal(t, 18446744073709551615.0, progVar(t, eng, "d").Real)
+}

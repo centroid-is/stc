@@ -1039,6 +1039,11 @@ func (interp *Interpreter) execRepeat(env *Env, s *ast.RepeatStmt) error {
 func toFloat(v Value) float64 {
 	switch v.Kind {
 	case ValInt:
+		if v.IECType == types.KindULINT || v.IECType == types.KindLWORD {
+			// 64-bit unsigned values are stored as their two's-complement
+			// int64; at or above 2^63 that is negative.
+			return float64(uint64(v.Int))
+		}
 		return float64(v.Int)
 	case ValReal:
 		return v.Real

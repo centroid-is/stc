@@ -32,7 +32,7 @@ func storeAs(dst, v Value) Value {
 		if k == types.KindInvalid {
 			k = types.KindLREAL
 		}
-		v = Value{Kind: ValReal, Real: float64(v.Int), IECType: k}
+		v = Value{Kind: ValReal, Real: toFloat(v), IECType: k}
 	case dst.Kind == ValReal && v.Kind == ValReal:
 		if dst.IECType != types.KindInvalid {
 			v.IECType = dst.IECType
