@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/symbols"
+	"github.com/centroid-is/stc/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -214,4 +216,14 @@ func TestRefAutoDeref(t *testing.T) {
 	errs = refErrors(t, vars, "ri := rs;")
 	require.Len(t, errs, 1)
 	assert.Equal(t, CodeTypeMismatch, errs[0].Code)
+}
+
+// TestSelfMemberNonFBType covers review LO-07: selfMember returns Invalid
+// instead of panicking when THIS^ is typed as something other than an FB.
+func TestSelfMemberNonFBType(t *testing.T) {
+	c := NewChecker(symbols.NewTable(), diag.NewCollector())
+	obj := &ast.DerefExpr{Operand: &ast.ThisExpr{}}
+	typ, ok := c.selfMember(obj, types.TypeINT, &ast.Ident{Name: "x"})
+	assert.True(t, ok)
+	assert.Equal(t, types.Invalid, typ)
 }

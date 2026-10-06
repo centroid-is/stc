@@ -115,7 +115,12 @@ func (c *Checker) selfMember(obj ast.Expr, objType types.Type, member *ast.Ident
 	default:
 		return nil, false
 	}
-	fb := objType.(*types.FunctionBlockType)
+	// fbPointer types THIS^ and SUPER^ as an FB or Invalid; anything else
+	// is a checker bug, reported as Invalid rather than a panic.
+	fb, ok := objType.(*types.FunctionBlockType)
+	if !ok {
+		return types.Invalid, true
+	}
 	scope := c.table.LookupPOU(fb.Name)
 	sym := lookupInPOUChain(scope, member.Name)
 	if sym == nil {
