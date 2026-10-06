@@ -95,6 +95,7 @@ type Step struct {
 
 // Scenario is a parsed scenario file.
 type Scenario struct {
+	File              string // path given to Load or Parse, for diagnostics
 	Name, Description string
 	Cycles            int
 	Steps             []Step
@@ -167,7 +168,7 @@ func Parse(data []byte, file string) (*Scenario, []diag.Diagnostic) {
 	if raw.Scenario.Cycles < 0 || raw.Scenario.Cycles > math.MaxInt32 {
 		p.errf(0, "SCN005", "scenario.cycles %d out of range", raw.Scenario.Cycles)
 	}
-	sc := &Scenario{Name: raw.Scenario.Name, Description: raw.Scenario.Description, Cycles: int(raw.Scenario.Cycles)}
+	sc := &Scenario{File: file, Name: raw.Scenario.Name, Description: raw.Scenario.Description, Cycles: int(raw.Scenario.Cycles)}
 	for i, m := range raw.Step {
 		line := 0
 		if i < len(lines) {

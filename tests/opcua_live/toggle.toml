@@ -1,0 +1,9 @@
+# Live scenario for `stc serve --scenario`: the sensor input goes TRUE at
+# cycle 100 (1 s at the 10 ms test cycle), and its HMI status follows.
+[scenario]
+name = "toggle"
+
+[[step]]
+cycle = 100
+set = { path = "GVL_Live.sensor.xIn", value = true }
+expect = { path = "GVL_Live.sensor.HMI.p_stat_xRaw", value = true, within = 2 }

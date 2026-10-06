@@ -66,7 +66,7 @@ func (e *Executor) diag(sev diag.Severity, st *Step, code, format string, args .
 	}
 	return diag.Diagnostic{
 		Severity: sev,
-		Pos:      source.Pos{Line: line, Col: 1},
+		Pos:      source.Pos{File: e.s.File, Line: line, Col: 1},
 		Code:     code,
 		Message:  fmt.Sprintf(format, args...),
 	}

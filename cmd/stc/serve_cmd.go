@@ -63,6 +63,7 @@ OPC UA start-up object when --opcua is given.`,
 	cmd.Flags().String("security", "none", "OPC UA security mode: none (SecurityPolicy None + Anonymous) or basic256sha256 (secure only)")
 	cmd.Flags().String("cert", "", "OPC UA server certificate (DER or PEM); generated when empty")
 	cmd.Flags().String("key", "", "OPC UA server private key; required with --cert")
+	cmd.Flags().String("scenario", "", "Fire a scenario TOML file's steps as Ticks elapse; failed expects are reported as warnings when serve stops")
 	cmd.Flags().String("pki-dir", "", "Directory for generated OPC UA certificates (default: user cache dir)")
 	addProjectRunFlags(cmd)
 	return cmd
@@ -118,6 +119,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	var cycles int
 	r.BeforeTick = append(r.BeforeTick, func() { cycles++ })
+	var sc *serveScenario
+	if path, _ := cmd.Flags().GetString("scenario"); path != "" {
+		if sc, err = loadServeScenario(r, path, errOut); err != nil {
+			return err
+		}
+	}
 
 	var srv *opcua.Server
 	if cfg.Endpoint != "" {
@@ -127,6 +134,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 		defer func() { _ = srv.Stop() }()
 	}
 
+	if sc != nil {
+		sc.install(r)
+	}
+
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if duration > 0 {
@@ -134,11 +145,15 @@ func runServe(cmd *cobra.Command, args []string) error {
 		ctx, cancel = context.WithTimeout(ctx, duration)
 		defer cancel()
 	}
-	if err := runProjectServe(ctx, r, duration, realtime); err != nil {
+	runErr := runProjectServe(ctx, r, duration, realtime)
+	if sc != nil {
+		sc.report(errOut, format, runErr)
+	}
+	if runErr != nil {
 		if srv == nil {
-			return fmt.Errorf("serve: %w", err)
+			return fmt.Errorf("serve: %w", runErr)
 		}
-		reportServe(errOut, format, "scan_stopped", err)
+		reportServe(errOut, format, "scan_stopped", runErr)
 		<-ctx.Done() // keep serving the last image
 	}
 	st, err := r.status(nil)

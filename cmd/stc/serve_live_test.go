@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -137,4 +139,60 @@ func TestServeLiveHandshake(t *testing.T) {
 	s.cancel()
 	assert.NoError(t, s.wait(t))
 	assert.NotContains(t, s.stderr.String(), "write_error")
+}
+
+// TestServeScenario is 29-01's live scenario mode: `stc serve --scenario`
+// fires toggle.toml's step as Ticks elapse, and a subscribed OPC UA client
+// sees the sensor's HMI status follow the stimulated input exactly once.
+func TestServeScenario(t *testing.T) {
+	addr := freeServeAddr(t)
+	s := startServe(t, true, "--project", liveFixture, "--opcua", addr, "--cycle", "10ms",
+		"--scenario", filepath.Join(liveFixture, "toggle.toml"))
+	c := dialServe(t, s.info.Endpoint)
+	requireRunning(t, c)
+
+	const hRaw = 1
+	sub := subscribeLive(t, c, map[uint32]ua.NodeID{hRaw: s4("GVL_Live.sensor.HMI.p_stat_xRaw")})
+	eventually(t, "xRaw goes TRUE", func() bool {
+		v := sub.values(hRaw)
+		return len(v) >= 2 && v[len(v)-1] == true
+	})
+	assert.Equal(t, []any{false, true}, sub.values(hRaw))
+
+	s.cancel()
+	assert.NoError(t, s.wait(t))
+	assert.Contains(t, s.stderr.String(), `"event":"scenario"`)
+	assert.Contains(t, s.stderr.String(), `"passed":true`)
+}
+
+// TestServeScenarioInvalid checks a scenario that does not validate stops
+// serve before the OPC UA server starts, with its diagnostic.
+func TestServeScenarioInvalid(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "bad.toml")
+	require.NoError(t, os.WriteFile(bad, []byte("[[step]]\ncycle = 0\nset = { path = \"GVL_Live.nope\", value = 1 }\n"), 0o644))
+	var stdout, stderr bytes.Buffer
+	root := newRootCmd()
+	root.SetArgs([]string{"serve", "--project", liveFixture, "--opcua", freeServeAddr(t), "--scenario", bad})
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	err := root.Execute()
+	require.Error(t, err)
+	assert.Contains(t, stderr.String(), "bad.toml:1:1: error: step 1: set: unknown path")
+	assert.Empty(t, stdout.String(), "no server start-up line")
+}
+
+// TestServeScenarioText runs a short text-mode serve whose scenario ends
+// before its expect is due, so the report shows the failed expect as a
+// warning and serve still succeeds.
+func TestServeScenarioText(t *testing.T) {
+	sc := filepath.Join(t.TempDir(), "late.toml")
+	require.NoError(t, os.WriteFile(sc, []byte("[scenario]\nname = \"late\"\n[[step]]\ncycle = 100000\nexpect = { path = \"GVL_Live.xProbe\", value = true }\n"), 0o644))
+	var stdout, stderr bytes.Buffer
+	root := newRootCmd()
+	root.SetArgs([]string{"serve", "--project", liveFixture, "--cycle", "10ms", "--duration", "100ms", "--scenario", sc})
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	require.NoError(t, root.Execute())
+	assert.Contains(t, stderr.String(), "scenario late:")
+	assert.Contains(t, stderr.String(), "late.toml:3:1: warning: step 1 never fired")
 }

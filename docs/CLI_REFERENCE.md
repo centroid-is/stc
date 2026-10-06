@@ -571,12 +571,21 @@ OPC UA with the TwinCAT TF6100 address space. See [OPCUA.md](OPCUA.md).
 stc serve <project.tsproj|project.plcproj|file.st|dir ...> [--io Device1.xml ...] [--persist state.json]
           [--persist-interval 10s] [--cycle 10ms] [--realtime] [--duration 0 | --run-for 0]
           [--opcua :4840] [--security none|basic256sha256] [--cert FILE --key FILE] [--pki-dir DIR] [-D SYM]
+          [--scenario x.toml]
 ```
 
 Without `--opcua` no server is started. Overruns are counted per task. On
 stop the final status (tasks, runs, overruns, `sim_time_ns`, diagnostics,
 warnings) is printed; `--format json` prints it as one object, preceded by
 the OPC UA start-up object when `--opcua` is given.
+
+`--scenario x.toml` fires a scenario file's steps (see [EtherCAT Simulation,
+Scenarios](ETHERCAT_SIMULATION.md#scenarios)) as Ticks elapse. Between Ticks
+the expects are evaluated first, then pending OPC UA writes are applied,
+then the next Tick's steps fire. A file that does not validate prints its
+diagnostics and exits 1 before the server starts. On stop the scenario
+report is printed to stderr (`{"event":"scenario",...}` with `--format
+json`); failed expects are warnings and do not change the exit code.
 
 Exits 0 on SIGINT/SIGTERM or after `--duration`; exits 1 when the project
 cannot be loaded or instantiated, has analysis errors, `--io` links do not
