@@ -354,37 +354,39 @@ func (p *Parser) parsePostfix(expr ast.Expr) ast.Expr {
 			}
 
 		case lexer.LParen:
-			// Check for named-argument FB call: ident(name := ...) or ident(name => ...)
-			// These are statement-level constructs, not expression calls.
-			// Use lookahead: if ( is followed by ident then := or =>, leave for stmt parser.
-			if p.isNamedArgCall() {
+			// At statement head, fb(name := ...) is left for parseAssignOrCall,
+			// which builds a CallStmt. Everywhere else named, output and mixed
+			// arguments form an expression call.
+			if p.stmtHead && p.isNamedArgCall() {
 				return expr
 			}
 			p.advance()
-			var args []ast.Expr
-			if !p.at(lexer.RParen) {
-				args = append(args, p.parseExpr(0))
-				for p.match(lexer.Comma) {
-					args = append(args, p.parseExpr(0))
-				}
-			}
+			saved := p.stmtHead
+			p.stmtHead = false
+			all := p.parseCallArgs()
+			p.stmtHead = saved
 			endTok := p.expect(lexer.RParen)
+			args, named := splitCallArgs(all)
 			expr = &ast.CallExpr{
 				NodeBase: ast.NodeBase{
 					NodeKind: ast.KindCallExpr,
 					NodeSpan: ast.SpanFrom(expr.Span().Start, astPos(endTok.EndPos)),
 				},
-				Callee: expr,
-				Args:   args,
+				Callee:    expr,
+				Args:      args,
+				NamedArgs: named,
 			}
 
 		case lexer.LBracket:
 			p.advance()
+			saved := p.stmtHead
+			p.stmtHead = false
 			var indices []ast.Expr
 			indices = append(indices, p.parseExpr(0))
 			for p.match(lexer.Comma) {
 				indices = append(indices, p.parseExpr(0))
 			}
+			p.stmtHead = saved
 			endTok := p.expect(lexer.RBracket)
 			expr = &ast.IndexExpr{
 				NodeBase: ast.NodeBase{
@@ -459,6 +461,21 @@ func (p *Parser) bitAccess(target ast.Expr, dotTok lexer.Token, index string, st
 		Target: target,
 		Index:  idx,
 	}
+}
+
+// splitCallArgs splits parsed call arguments into the CallExpr shape:
+// leading positional arguments go to Args as plain expressions, and
+// everything from the first named argument on goes to NamedArgs in source
+// order (a later positional argument keeps Name == nil).
+func splitCallArgs(all []*ast.CallArg) ([]ast.Expr, []*ast.CallArg) {
+	var args []ast.Expr
+	for i, a := range all {
+		if a.Name != nil {
+			return args, all[i:]
+		}
+		args = append(args, a.Value)
+	}
+	return args, nil
 }
 
 // splitBitPair splits a real literal like "3.1" into its two digit runs.

@@ -108,7 +108,9 @@ func (p *Parser) parseStatement() ast.Statement {
 // parseAssignOrCall parses either an assignment (x := expr;) or FB call (fb(args);).
 func (p *Parser) parseAssignOrCall() ast.Statement {
 	startTok := p.peek()
+	p.stmtHead = true
 	lhs := p.parseExpr(0)
+	p.stmtHead = false
 
 	// Assignment: lhs := rhs ;
 	if p.match(lexer.Assign) {
@@ -400,6 +402,9 @@ func (p *Parser) parseCallArgs() []*ast.CallArg {
 		if !p.match(lexer.Comma) {
 			break
 		}
+		if p.at(lexer.RParen) {
+			break // trailing comma: f(a := 1, ) — dropped
+		}
 	}
 	return args
 }
@@ -422,6 +427,7 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
+					NodeKind: ast.KindCallArg,
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
 				},
 				Name:  makeIdent(nameTok),
@@ -436,6 +442,7 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 			}
 			return &ast.CallArg{
 				NodeBase: ast.NodeBase{
+					NodeKind: ast.KindCallArg,
 					NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
 				},
 				Name:     makeIdent(nameTok),
@@ -451,6 +458,7 @@ func (p *Parser) parseCallArg() *ast.CallArg {
 	value := p.parseExpr(0)
 	return &ast.CallArg{
 		NodeBase: ast.NodeBase{
+			NodeKind: ast.KindCallArg,
 			NodeSpan: spanFromTokens(startTok, p.tokens[maxInt(p.pos-1, 0)]),
 		},
 		Value: value,
