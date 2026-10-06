@@ -39,6 +39,15 @@ type Runtime struct {
 	// consts holds the upper-case ROOT.NAME of every member of a CONSTANT
 	// block in a GVL or PROGRAM; Set rejects writes below them.
 	consts map[string]bool
+	// roots lists the GVLs (registration order) and then the PROGRAMs
+	// (source order) with their variable names, for Snapshot.
+	roots []rootInfo
+}
+
+// rootInfo is one GVL or PROGRAM root of a Runtime.
+type rootInfo struct {
+	name string // declared case
+	vars []string
 }
 
 // NewRuntime registers opts.LibraryFiles and then files on a fresh
@@ -55,6 +64,7 @@ func NewRuntime(files []*ast.SourceFile, opts ...RuntimeOpts) (*Runtime, error) 
 	all = append(all, files...)
 
 	r := &Runtime{interp: New(), consts: make(map[string]bool)}
+	var progs []rootInfo
 	if err := r.interp.RegisterFiles(all); err != nil {
 		return nil, err
 	}
@@ -67,6 +77,7 @@ func NewRuntime(files []*ast.SourceFile, opts ...RuntimeOpts) (*Runtime, error) 
 			case *ast.GVLDecl:
 				if d.Name != nil {
 					r.addConsts(d.Name.Name, d.Blocks)
+					r.roots = append(r.roots, rootInfo{name: d.Name.Name, vars: varNames(d.Blocks)})
 				}
 			case *ast.ProgramDecl:
 				if d.Name == nil {
@@ -76,12 +87,14 @@ func NewRuntime(files []*ast.SourceFile, opts ...RuntimeOpts) (*Runtime, error) 
 				e.Initialize()
 				r.programs = append(r.programs, &programRun{name: d.Name.Name, engine: e})
 				r.addConsts(d.Name.Name, d.VarBlocks)
+				progs = append(progs, rootInfo{name: d.Name.Name, vars: varNames(d.VarBlocks)})
 			}
 		}
 	}
 	if err := errors.Join(r.interp.InitErrors()...); err != nil {
 		return nil, err
 	}
+	r.roots = append(r.roots, progs...)
 	return r, nil
 }
 
@@ -137,4 +150,24 @@ func (r *Runtime) program(name string) *programRun {
 // other goroutines call Tick, Get or Set must provide their own locking.
 func (r *Runtime) Interpreter() *Interpreter {
 	return r.interp
+}
+
+// Snapshot returns the whole live image as a JSON-ready object: one member
+// per GVL (registration order) and then per PROGRAM (source order), each an
+// object of its variables in declaration order rendered with ToJSON.
+func (r *Runtime) Snapshot() any {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := &orderedObject{}
+	for _, root := range r.roots {
+		env := r.rootEnv(root.name)
+		obj := &orderedObject{}
+		for _, n := range root.vars {
+			if v, ok := env.GetLocal(n); ok {
+				obj.add(n, r.ToJSON(v))
+			}
+		}
+		out.add(root.name, obj)
+	}
+	return out
 }
