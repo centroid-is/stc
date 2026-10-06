@@ -26,14 +26,17 @@ func newVendorExtractCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "extract <path.plcproj>",
 		Short: "Extract FB stubs from a TwinCAT project",
-		Long: `Parse a TwinCAT .plcproj file, find all .TcPOU files referenced in it,
-and extract FUNCTION_BLOCK declarations (without implementation bodies)
-as .st stub files suitable for use with stc type-checking.`,
+		Long: `Parse a TwinCAT .plcproj file and extract every POU, GVL, DUT and interface
+it lists as a declaration-only .st stub (methods and properties keep their
+signatures, implementation bodies are dropped), in plcproj order.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plcprojPath := args[0]
 
-			stubs, err := vendor.ExtractProject(plcprojPath)
+			stubs, diags, err := vendor.ExtractProject(plcprojPath)
+			for _, d := range diags {
+				fmt.Fprintln(os.Stderr, d.String())
+			}
 			if err != nil {
 				return fmt.Errorf("extracting stubs: %w", err)
 			}
@@ -50,7 +53,8 @@ as .st stub files suitable for use with stc type-checking.`,
 				}
 			}
 
-			for name, stub := range stubs {
+			for _, st := range stubs {
+				name, stub := st.Name, st.Text
 				if outputDir == "" {
 					// Print to stdout
 					fmt.Printf("(* %s *)\n%s\n", name, stub)

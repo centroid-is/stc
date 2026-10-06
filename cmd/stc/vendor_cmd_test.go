@@ -38,8 +38,8 @@ func TestVendorExtractCmd_DemoOrder(t *testing.T) {
 		}
 		last = i
 	}
-	if !strings.Contains(stderr, "VEND021") {
-		t.Errorf("stderr lacks VEND021: %s", stderr)
+	if !strings.Contains(stderr, "Screen.TcVIS") {
+		t.Errorf("stderr lacks the unsupported-item warning: %s", stderr)
 	}
 }
 

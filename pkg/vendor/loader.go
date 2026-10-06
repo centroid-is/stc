@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/pipeline"
@@ -25,7 +26,15 @@ func LoadLibraries(cfg *project.Config, projectDir string) ([]*ast.SourceFile, e
 
 	var result []*ast.SourceFile
 
-	for libName, libPath := range cfg.Build.LibraryPaths {
+	// Visit keys in sorted order so first-library-wins is deterministic.
+	names := make([]string, 0, len(cfg.Build.LibraryPaths))
+	for name := range cfg.Build.LibraryPaths {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, libName := range names {
+		libPath := cfg.Build.LibraryPaths[libName]
 		// Resolve relative paths against project directory
 		if !filepath.IsAbs(libPath) {
 			libPath = filepath.Join(projectDir, libPath)

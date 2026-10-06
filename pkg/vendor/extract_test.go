@@ -87,10 +87,10 @@ func TestExtractProjectErrors(t *testing.T) {
 		t.Error("want error for missing plcproj")
 	}
 	dir := t.TempDir()
-	writeFileT(t, dir+"/P.plcproj", `<Project><ItemGroup><Compile Include="Bad.TcPOU" /></ItemGroup></Project>`)
+	writeFileT(t, dir+"/P.plcproj", `<Project><ItemGroup><Compile Include="Bad.TcPOU" /><Compile Include="Gone.TcPOU" /></ItemGroup></Project>`)
 	writeFileT(t, dir+"/Bad.TcPOU", "<TcPlcObject><POU")
 	stubs, ds, err := ExtractProject(dir + "/P.plcproj")
-	if err != nil || len(stubs) != 0 || len(ds) != 1 || ds[0].Code != twincat.CodeBadXML {
+	if err != nil || len(stubs) != 0 || len(ds) != 2 || ds[0].Code != twincat.CodeBadXML || !strings.Contains(ds[1].Message, "cannot read") {
 		t.Errorf("stubs %v diags %v err %v", stubs, ds, err)
 	}
 }
