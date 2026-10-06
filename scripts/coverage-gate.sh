@@ -2,7 +2,7 @@
 #
 # Reproduce the CI coverage gate (.github/workflows/coverage.yml) locally.
 #
-# Builds the same merged profile CI builds (unit tests with -coverpkg=./...
+# Builds the same merged profile CI builds (unit tests with -coverpkg=<module>/...
 # plus exec-based cmd/stc coverage via GOCOVERDIR), then prints per-package
 # statement coverage for the packages gated in .testcoverage.yml and exits
 # non-zero if any of them is below its threshold.
@@ -20,9 +20,11 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/stc-coverage.XXXXXX")"
 COVDATA="$WORK/covdata"
 mkdir -p "$COVDATA"
 
-echo "==> unit tests (-coverpkg=./...)"
+echo "==> unit tests (-coverpkg=$MODULE/...)"
+# The module path, not ./...: -coverpkg=./... also instruments the vendored
+# third_party/awcullen-opcua module (a go.mod replace) wherever it is imported.
 go test -coverprofile="$WORK/unit.txt" -covermode=atomic \
-    -coverpkg=./... ./... -count=1 -timeout 5m >"$WORK/unit.log" 2>&1 || {
+    -coverpkg="$MODULE/..." ./... -count=1 -timeout 5m >"$WORK/unit.log" 2>&1 || {
     cat "$WORK/unit.log"
     echo "unit tests failed" >&2
     exit 1
