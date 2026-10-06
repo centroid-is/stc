@@ -195,7 +195,7 @@ func TestBuild(t *testing.T) {
 				arrayOf("s", unknownBounds(stAB), attrs(da("1"))),
 				arrayOf("quiet", unknownBounds(types.TypeINT), nil),
 				node(KindArray, "notarray", types.TypeINT, attrs(da("1"))))),
-			want:  []string{"G|Obj||"},
+			want:  []string{},
 			diags: []string{"OPCUA003", "OPCUA003", "OPCUA003"},
 		},
 		{
@@ -204,7 +204,7 @@ func TestBuild(t *testing.T) {
 				ptr("p", da("1")), refVar("r", da("1")), ptr("quiet"),
 				arrayOf("ap", arr(&types.PointerType{BaseType: types.TypeINT}, [2]int{0, 1}), attrs(da("1"))),
 				scalar("ps", &types.PointerType{BaseType: types.TypeINT}, da("1")))),
-			want:  []string{"G|Obj||"},
+			want:  []string{},
 			diags: []string{"OPCUA002", "OPCUA002", "OPCUA002", "OPCUA002"},
 		},
 		{
@@ -212,7 +212,7 @@ func TestBuild(t *testing.T) {
 			root: root(gvl("G",
 				scalar("v", types.TypeVOID, da("1")),
 				enumVar("e", &types.EnumType{Name: "E_Bad", Values: []string{"a"}}, da("1")))),
-			want:  []string{"G|Obj||"},
+			want:  []string{},
 			diags: []string{"OPCUA003", "OPCUA003"},
 		},
 		{
@@ -330,5 +330,36 @@ func TestBuildST301Space(t *testing.T) {
 		if _, ok := sp.Find(p); !ok {
 			t.Errorf("missing %s", p)
 		}
+	}
+}
+
+func TestStructEligible(t *testing.T) {
+	self := &types.StructType{Name: "ST_Self"}
+	self.Members = []types.StructMember{{Name: "me", Type: self}}
+	cases := map[string]*types.StructType{
+		"no name":        {},
+		"self":           self,
+		"unknown bounds": {Name: "ST_A", Members: []types.StructMember{{Name: "a", Type: unknownBounds(types.TypeINT)}}},
+		"bad enum":       {Name: "ST_E", Members: []types.StructMember{{Name: "e", Type: &types.EnumType{Name: "E", Values: []string{"x"}}}}},
+		"nested bad":     {Name: "ST_N", Members: []types.StructMember{{Name: "n", Type: badStruct()}}},
+	}
+	for name, st := range cases {
+		if err := structEligible(st); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+	ok := &types.StructType{Name: "ST_OK", Members: []types.StructMember{
+		{Name: "a", Type: arr(eDriveState, [2]int{0, 1})}, {Name: "s", Type: stBus}}}
+	if err := structEligible(ok); err != nil {
+		t.Errorf("eligible struct: %v", err)
+	}
+	// A KindStruct node whose type is not a struct cannot be structured.
+	sp, ds := Build(root(gvl("G", node(KindStruct, "s", types.TypeINT, attrs(da("1"), structured())),
+		node(KindStruct, "t", nil, attrs(da("2"))))), nil)
+	if got := codes(ds); !reflect.DeepEqual(got, []string{"OPCUA005", "OPCUA005"}) {
+		t.Errorf("diagnostics %v", ds)
+	}
+	if got := shape(sp); !reflect.DeepEqual(got, []string{"G|Obj||", "G.s|Obj||"}) {
+		t.Errorf("nodes %q", got)
 	}
 }

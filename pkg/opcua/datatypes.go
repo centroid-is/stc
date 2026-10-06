@@ -322,3 +322,46 @@ func (s *Server) structMember(st *types.StructType, m types.StructMember) (struc
 	f.GoType = gt
 	return f, def, nil
 }
+
+// structEligible reports whether st can be served as a structured DataType
+// (the rules ensureStruct enforces), without touching any server: every
+// member must be elementary, a valid enum, an eligible struct, or an array
+// with constant bounds of those.
+func structEligible(st *types.StructType) error {
+	return structEligibleRec(st, map[*types.StructType]bool{})
+}
+
+func structEligibleRec(st *types.StructType, open map[*types.StructType]bool) error {
+	if st.Name == "" {
+		return fmt.Errorf("%w: struct type without a name", ErrTypeMismatch)
+	}
+	if open[st] {
+		return fmt.Errorf("%w: struct %s contains itself", ErrTypeMismatch, st.Name)
+	}
+	open[st] = true
+	defer delete(open, st)
+	for _, m := range st.Members {
+		elem := m.Type
+		if a, ok := elem.(*types.ArrayType); ok {
+			if _, err := arrayLen(a); err != nil {
+				return fmt.Errorf("%w: %s.%s: %v", ErrTypeMismatch, st.Name, m.Name, err)
+			}
+			elem = a.ElementType
+		}
+		switch et := elem.(type) {
+		case *types.StructType:
+			if err := structEligibleRec(et, open); err != nil {
+				return err
+			}
+		case *types.EnumType:
+			if err := validateEnum(et); err != nil {
+				return err
+			}
+		default:
+			if _, ok := uaDataType(elem); !ok {
+				return fmt.Errorf("%w: %s.%s of type %s has no OPC UA DataType", ErrTypeMismatch, st.Name, m.Name, typeName(m.Type))
+			}
+		}
+	}
+	return nil
+}

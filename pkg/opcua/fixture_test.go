@@ -32,7 +32,9 @@ func (f *fakeNode) EnumStrings() map[int64]string { return f.enums }
 func (f *fakeNode) Children() []SymbolNode {
 	out := make([]SymbolNode, len(f.kids))
 	for i, k := range f.kids {
-		out[i] = k
+		if k != nil { // keep a nil child an untyped nil interface
+			out[i] = k
+		}
 	}
 	return out
 }
@@ -72,7 +74,9 @@ func enumVar(name string, et *types.EnumType, as ...ast.Attribute) *fakeNode {
 	n := node(KindEnum, name, et, as)
 	n.enums = map[int64]string{}
 	for i, v := range et.Values {
-		n.enums[et.Ordinals[i]] = v
+		if i < len(et.Ordinals) {
+			n.enums[et.Ordinals[i]] = v
+		}
 	}
 	return n
 }
@@ -110,7 +114,9 @@ func elems(arrName string, lo, hi int, mk func(name string) *fakeNode) []*fakeNo
 func root(kids ...*fakeNode) *fakeNode {
 	r := &fakeNode{kind: KindRoot, kids: kids}
 	for _, k := range kids {
-		setPaths(k, r)
+		if k != nil {
+			setPaths(k, r)
+		}
 	}
 	return r
 }
