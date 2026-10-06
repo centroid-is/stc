@@ -212,3 +212,37 @@ func (p *Project) Tick() error {
 	p.rt.interp.clock = now
 	return errors.Join(errs...)
 }
+
+// Advance runs d / BaseTick Ticks. d must be a non-negative multiple of
+// BaseTick. The first Tick error stops the run and is returned.
+func (p *Project) Advance(d time.Duration) error {
+	if d < 0 || d%p.base != 0 {
+		return fmt.Errorf("advance %v is not a multiple of the base tick %v", d, p.base)
+	}
+	for n := d / p.base; n > 0; n-- {
+		if err := p.Tick(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetIOBinder attaches EtherCAT links to the project. The binder steps the
+// network once per Tick that runs a task, not once per task, so it is held
+// by the Project rather than by the task engines. Nil detaches it.
+func (p *Project) SetIOBinder(b *IOBinder) {
+	p.rt.mu.Lock()
+	defer p.rt.mu.Unlock()
+	if b != nil {
+		b.interp = p.rt.interp
+		b.progEnv = func(name string) *Env {
+			if pr := p.rt.program(name); pr != nil {
+				pr.engine.Initialize()
+				return pr.engine.env
+			}
+			return nil
+		}
+		b.resolved = false
+	}
+	p.binder = b
+}

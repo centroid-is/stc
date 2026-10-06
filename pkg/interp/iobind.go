@@ -18,7 +18,9 @@ import (
 // program and GVL envs exist; bindings that do not resolve are dropped and
 // reported through Errors.
 type IOBinder struct {
-	engine   *ScanCycleEngine
+	interp *Interpreter
+	// progEnv returns the env of the PROGRAM called name, or nil.
+	progEnv  func(name string) *Env
 	net      *ecat.Network
 	images   *ecat.Images
 	bindings []ecat.Binding
@@ -50,7 +52,13 @@ func NewIOBinder(bindings []ecat.Binding, net *ecat.Network) *IOBinder {
 // copies. A nil binder restores the plain scan cycle.
 func (e *ScanCycleEngine) SetIOBinder(b *IOBinder) {
 	if b != nil {
-		b.engine = e
+		b.interp = e.interp
+		b.progEnv = func(name string) *Env {
+			if e.program.Name != nil && strings.EqualFold(e.program.Name.Name, name) {
+				return e.env
+			}
+			return nil
+		}
 		b.resolved = false
 	}
 	e.ioBinder = b
@@ -83,7 +91,6 @@ func (b *IOBinder) resolve() {
 }
 
 func (b *IOBinder) resolveOne(bd ecat.Binding) (boundSlot, bool) {
-	e := b.engine
 	steps := bd.Var.Steps
 	if len(steps) < 2 {
 		b.fail(bd, "binding path needs a GVL or program and a variable")
@@ -97,9 +104,9 @@ func (b *IOBinder) resolveOne(bd ecat.Binding) (boundSlot, bool) {
 		b.fail(bd, "no process image for master %q", bd.Slot.Master)
 		return boundSlot{}, false
 	}
-	env := e.interp.lookupGVL(steps[0])
-	if env == nil && e.program.Name != nil && strings.EqualFold(e.program.Name.Name, steps[0]) {
-		env = e.env
+	env := b.interp.lookupGVL(steps[0])
+	if env == nil {
+		env = b.progEnv(steps[0])
 	}
 	if env == nil {
 		b.fail(bd, "unknown GVL or program %q", steps[0])
@@ -136,7 +143,7 @@ func (b *IOBinder) resolveOne(bd ecat.Binding) (boundSlot, bool) {
 // lookupType resolves a declared type name to its user TYPE spec, following
 // aliases; nil for elementary or unknown names.
 func (b *IOBinder) lookupType(name string, depth int) ast.TypeSpec {
-	ts, ok := b.engine.interp.TypeDecls[strings.ToUpper(name)]
+	ts, ok := b.interp.TypeDecls[strings.ToUpper(name)]
 	if !ok || depth > maxTypeNestDepth {
 		return nil
 	}

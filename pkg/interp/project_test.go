@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/ecat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -197,4 +198,160 @@ func TestLoadProject(t *testing.T) {
 		_, err := LoadProject(ProjectSpec{Files: []*ast.SourceFile{f}})
 		assert.Error(t, err)
 	})
+}
+
+func gvlScalars(t *testing.T, p *Project) map[string]int64 {
+	t.Helper()
+	out := map[string]int64{}
+	for _, path := range []string{"GCnt.calls", "GCnt.seq", "GCnt.fastAt", "GCnt.slowAt", "GData.seeded", "MAIN.sum", "MAIN.n", "SLOW.n", "MAIN.w.total"} {
+		out[path] = prjInt(t, p, path)
+	}
+	return out
+}
+
+func TestProjectTick(t *testing.T) {
+	t.Run("1000 ticks of a 1 ms task advance exactly 1 s, identically", func(t *testing.T) {
+		run := func() (*Project, map[string]int64) {
+			p, err := LoadProject(prjSpec(t, TaskSpec{Name: "T", Cycle: time.Millisecond, Programs: []string{"MAIN"}}))
+			require.NoError(t, err)
+			for i := 0; i < 1000; i++ {
+				require.NoError(t, p.Tick())
+			}
+			return p, gvlScalars(t, p)
+		}
+		p1, s1 := run()
+		_, s2 := run()
+		assert.Equal(t, time.Second, p1.Clock())
+		assert.Equal(t, uint64(1000), p1.Tasks()[0].Runs)
+		assert.Equal(t, s1, s2)
+		assert.Equal(t, time.Second, p1.Runtime().Interpreter().Clock())
+	})
+
+	t.Run("two tasks run at their cycles in priority order", func(t *testing.T) {
+		p, err := LoadProject(prjSpec(t,
+			TaskSpec{Name: "Slow", Cycle: 10 * time.Millisecond, Priority: 20, Programs: []string{"SLOW"}},
+			TaskSpec{Name: "Fast", Cycle: time.Millisecond, Priority: 1, Programs: []string{"MAIN"}},
+		))
+		require.NoError(t, err)
+		assert.Equal(t, time.Millisecond, p.BaseTick())
+		require.NoError(t, p.Tick())
+		assert.Equal(t, int64(1), prjInt(t, p, "GCnt.fastAt"), "prio 1 runs first")
+		assert.Equal(t, int64(2), prjInt(t, p, "GCnt.slowAt"))
+		for i := 1; i < 100; i++ {
+			require.NoError(t, p.Tick())
+		}
+		ts := p.Tasks()
+		assert.Equal(t, "Fast", ts[0].Name)
+		assert.Equal(t, uint64(100), ts[0].Runs)
+		assert.Equal(t, uint64(10), ts[1].Runs)
+		assert.Equal(t, int64(10), prjInt(t, p, "SLOW.n"))
+	})
+
+	t.Run("TON in a 10 ms task advances 10 ms per run", func(t *testing.T) {
+		p, err := LoadProject(prjSpec(t,
+			TaskSpec{Name: "Fast", Cycle: time.Millisecond, Priority: 1, Programs: []string{"MAIN"}},
+			TaskSpec{Name: "Slow", Cycle: 10 * time.Millisecond, Priority: 20, Programs: []string{"SLOW"}},
+		))
+		require.NoError(t, err)
+		et := func(path string) time.Duration {
+			v, err := p.Runtime().Get(path)
+			require.NoError(t, err)
+			return v.Time
+		}
+		require.NoError(t, p.Tick())
+		assert.Equal(t, 10*time.Millisecond, et("SLOW.t.ET"))
+		assert.Equal(t, time.Millisecond, et("MAIN.t.ET"))
+		require.NoError(t, p.Advance(10*time.Millisecond))
+		assert.Equal(t, 20*time.Millisecond, et("SLOW.t.ET"))
+		assert.Equal(t, 11*time.Millisecond, et("MAIN.t.ET"))
+	})
+
+	t.Run("engine errors name task and program and do not stop other tasks", func(t *testing.T) {
+		f := parseRT(t, "p.st", `
+PROGRAM Bad
+VAR a : ARRAY[1..2] OF INT; i : INT := 5; END_VAR
+a[i] := 1;
+END_PROGRAM
+PROGRAM Good
+VAR n : INT; END_VAR
+n := n + 1;
+END_PROGRAM
+`)
+		p, err := LoadProject(ProjectSpec{Files: []*ast.SourceFile{f}, Tasks: []TaskSpec{
+			{Name: "A", Cycle: time.Millisecond, Priority: 1, Programs: []string{"Bad"}},
+			{Name: "B", Cycle: time.Millisecond, Priority: 2, Programs: []string{"Good"}},
+		}})
+		require.NoError(t, err)
+		err = p.Tick()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "task A PROGRAM Bad")
+		assert.Equal(t, int64(1), prjInt(t, p, "Good.n"))
+	})
+}
+
+func TestProjectAdvance(t *testing.T) {
+	p, err := LoadProject(prjSpec(t, TaskSpec{Name: "T", Cycle: time.Millisecond, Programs: []string{"MAIN"}}))
+	require.NoError(t, err)
+	require.NoError(t, p.Advance(250*time.Millisecond))
+	assert.Equal(t, 250*time.Millisecond, p.Clock())
+	assert.Equal(t, uint64(250), p.Tasks()[0].Runs)
+
+	q, err := LoadProject(prjSpec(t, TaskSpec{Name: "T", Cycle: time.Millisecond, Programs: []string{"MAIN"}}))
+	require.NoError(t, err)
+	for i := 0; i < 250; i++ {
+		require.NoError(t, q.Tick())
+	}
+	assert.Equal(t, gvlScalars(t, q), gvlScalars(t, p))
+
+	assert.Error(t, p.Advance(1500*time.Microsecond))
+	assert.Error(t, p.Advance(-time.Millisecond))
+
+	bad := parseRT(t, "b.st", "PROGRAM MAIN\nVAR a : ARRAY[1..2] OF INT; i : INT := 5; END_VAR\na[i] := 1;\nEND_PROGRAM\n")
+	pb, err := LoadProject(ProjectSpec{Files: []*ast.SourceFile{bad}})
+	require.NoError(t, err)
+	assert.Error(t, pb.Advance(20*time.Millisecond))
+	assert.Equal(t, 10*time.Millisecond, pb.Clock(), "first error stops the run")
+}
+
+const prjIOSrc = `
+VAR_GLOBAL
+	inp : INT;
+	outp : INT;
+END_VAR
+`
+
+func TestProjectIOBinder(t *testing.T) {
+	gvl := parseRT(t, "IO.st", prjIOSrc)
+	progs := parseRT(t, "p.st", `
+PROGRAM PA
+IO.inp := 0;
+END_PROGRAM
+PROGRAM PB
+VAR last : INT; END_VAR
+IO.outp := IO.inp + 1;
+last := IO.outp + 1;
+END_PROGRAM
+`)
+	p, err := LoadProject(ProjectSpec{Files: []*ast.SourceFile{gvl, progs}, Tasks: []TaskSpec{
+		{Name: "A", Cycle: time.Millisecond, Priority: 1, Programs: []string{"PA"}},
+		{Name: "B", Cycle: time.Millisecond, Priority: 2, Programs: []string{"PB"}},
+	}})
+	require.NoError(t, err)
+	net := ioNet()
+	b := NewIOBinder([]ecat.Binding{
+		bind(ecat.DirIn, 0, 16, "INT", "IO", "INP"),
+		bind(ecat.DirOut, 0, 16, "INT", "IO", "OUTP"),
+		bind(ecat.DirOut, 2, 16, "INT", "pb", "LAST"),
+		bind(ecat.DirOut, 4, 16, "INT", "Nope", "X"),
+	}, net)
+	p.SetIOBinder(b)
+	img := net.Images().Get(ioMaster)
+	ecat.WriteBits(img.In, 0, 0, 16, 41)
+	require.NoError(t, p.Tick())
+	require.Len(t, b.Errors(), 1, "unknown root reported")
+	assert.Equal(t, uint64(1), ecat.ReadBits(img.Out, 0, 0, 16), "inputs copied once before the first task, not again before B")
+	assert.Equal(t, uint64(2), ecat.ReadBits(img.Out, 2, 0, 16), "program variables resolve across the project")
+
+	p.SetIOBinder(nil)
+	require.NoError(t, p.Tick())
 }
