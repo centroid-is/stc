@@ -459,7 +459,7 @@ Plans:
 - [x] 24-01-PLAN.md -- pkg/ecat loader, generate_gvl.py tree/link-path port, process image layout + pseudo-input slots, synthetic Demo Device fixtures
 - [x] 24-02-PLAN.md -- TcLinkTo parsing, CollectLinks, Resolve (ECAT001-007), `stc ecat validate` CLI
 - [x] 24-03-PLAN.md -- Network + Device registry + healthy pseudo-inputs/fault API, interp IOBinder with two scan.go hooks
-- [ ] 24-04-PLAN.md -- env-gated ST301 equivalence gate, docs, VALIDATION sign-off, coverage gate
+- [x] 24-04-PLAN.md -- env-gated ST301 equivalence gate, docs, VALIDATION sign-off, coverage gate
 
 ### Phase 25: EtherCAT Terminal Models
 **Goal**: Every non-drive terminal in the sildarvinnsla hardware list behaves like the real device at PDO level, selected automatically by vendor and product code
@@ -547,7 +547,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 21. TwinCAT Project Import & Library Stubs | v1.2 | 0/TBD | Not started | - |
 | 22. Symbol Tree & Value Semantics | v1.2 | 0/TBD | Not started | - |
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
-| 24. EtherCAT Topology & Link Binding | v1.2 | 3/4 | In Progress|  |
+| 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete   | 2026-10-06 |
 | 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
 | 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
