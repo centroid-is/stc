@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/projectload"
 	"github.com/centroid-is/stc/pkg/scenario"
 	"github.com/spf13/cobra"
 )
@@ -89,7 +90,7 @@ func runSimScenario(cmd *cobra.Command, r *projectRunner, path string, cycles in
 		return fmt.Errorf("%w: %s", errScenarioFailed, runErr)
 	case !rep.Passed || hasErrorDiag(res.Diagnostics):
 		return fmt.Errorf("%w: %d of %d assertion(s) failed, %d error diagnostic(s)", errScenarioFailed,
-			rep.Failed(), len(rep.Assertions), countErrors(res.Diagnostics))
+			rep.Failed(), len(rep.Assertions), projectload.CountErrors(res.Diagnostics))
 	}
 	return nil
 }
@@ -183,7 +184,7 @@ func writeScenarioResult(out, errOut io.Writer, format string, res simScenarioRe
 
 // hasErrorDiag reports whether ds holds an error.
 func hasErrorDiag(ds []diag.Diagnostic) bool {
-	return countErrors(ds) > 0
+	return projectload.CountErrors(ds) > 0
 }
 
 // sortDiags orders ds by file, line, column, code and message.

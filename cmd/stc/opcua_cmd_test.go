@@ -13,6 +13,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/opcua"
 	"github.com/centroid-is/stc/pkg/opcua/bind"
+	"github.com/centroid-is/stc/pkg/projectload"
 	"github.com/centroid-is/stc/pkg/symtree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,7 +37,7 @@ func runSnapshot(t *testing.T, args ...string) (string, string, error) {
 // a MapSource, so a test can assert that no write reached the source.
 func serveMapSource(t *testing.T) (*opcua.Server, *opcua.MapSource) {
 	t.Helper()
-	_, res, _, err := loadProjectAnalysis([]string{serveFixture}, map[string]bool{"STC_SIM": true})
+	_, res, _, err := projectload.Load([]string{serveFixture}, map[string]bool{"STC_SIM": true})
 	require.NoError(t, err)
 	tree, err := symtree.Build(res)
 	require.NoError(t, err)

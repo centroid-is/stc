@@ -1,6 +1,7 @@
 // Package projectload loads a TwinCAT project or ST sources into an
-// interp.ProjectSpec and attaches the EtherCAT network of --io exports. It
-// is shared by cmd/stc (`stc sim`, `stc serve`) and cmd/stc-mcp.
+// interp.ProjectSpec with its analysis result. It is shared by cmd/stc
+// (`stc sim`, `stc serve`, `stc test --project`) and cmd/stc-mcp; the
+// EtherCAT network of --io exports is built by scenario.BuildPlantSpec.
 package projectload
 
 import (
@@ -188,4 +189,15 @@ func FirstError(ds []diag.Diagnostic) error {
 		}
 	}
 	return nil
+}
+
+// CountErrors counts the error-severity diagnostics of ds.
+func CountErrors(ds []diag.Diagnostic) int {
+	n := 0
+	for _, d := range ds {
+		if d.Severity == diag.Error {
+			n++
+		}
+	}
+	return n
 }

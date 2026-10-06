@@ -65,7 +65,7 @@ type projectSetupOpts struct {
 // order, so --set overrides persisted values. Errors are returned; load
 // diagnostics that fail the load are printed to errOut first.
 func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, opts projectSetupOpts, errOut io.Writer) (*projectRunner, error) {
-	spec, res, ds, err := loadProjectAnalysis(inputs, defines)
+	spec, res, ds, err := projectload.Load(inputs, defines)
 	if err != nil {
 		for _, d := range ds {
 			if d.Severity == diag.Error {
@@ -143,7 +143,7 @@ func buildPlant(spec interp.ProjectSpec, ioFiles []string) (*scenario.Plant, []d
 		if ps.Topology == nil {
 			return nil, nil, fmt.Errorf("--io: %w", err)
 		}
-		return nil, ps.Diagnostics, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", countErrors(ps.Diagnostics))
+		return nil, ps.Diagnostics, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", projectload.CountErrors(ps.Diagnostics))
 	}
 	plant, err := ps.New()
 	if err != nil {
@@ -176,7 +176,6 @@ func expandIOGlobs(values []string) ([]string, error) {
 }
 
 // countErrors counts the error-severity diagnostics of ds.
-func countErrors(ds []diag.Diagnostic) int { return projectload.CountErrors(ds) }
 
 // ticks runs n deterministic Ticks; the first Tick error stops the run.
 func (r *projectRunner) ticks(n int) error {

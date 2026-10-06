@@ -7,6 +7,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/project"
+	"github.com/centroid-is/stc/pkg/projectload"
 	"github.com/centroid-is/stc/pkg/scenario"
 	stctesting "github.com/centroid-is/stc/pkg/testing"
 	"github.com/centroid-is/stc/pkg/twincat"
@@ -151,7 +152,7 @@ func loadTestPlant(cmd *cobra.Command, projectPaths, ioFlags []string, defines m
 		if spec.Topology == nil {
 			return nil, fmt.Errorf("--io: %w", err)
 		}
-		return nil, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", countErrors(spec.Diagnostics))
+		return nil, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", projectload.CountErrors(spec.Diagnostics))
 	}
 	return &spec, nil
 }
