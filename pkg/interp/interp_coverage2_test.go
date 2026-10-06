@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -557,8 +558,12 @@ func TestEvalMemberAccess_StructNotFound(t *testing.T) {
 		Object: &ast.Ident{Name: "s"},
 		Member: &ast.Ident{Name: "NONEXISTENT"},
 	})
-	if err == nil {
-		t.Fatal("expected error for missing member")
+	// An undeclared member reads as zero with a warning naming the path.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if w := interp.Warnings(); len(w) != 1 || w[0].Code != CodeUndeclaredMember || !strings.Contains(w[0].Message, "s.NONEXISTENT") {
+		t.Fatalf("want one undeclared-member warning naming s.NONEXISTENT, got %v", w)
 	}
 }
 
@@ -570,8 +575,12 @@ func TestEvalMemberAccess_NilStruct(t *testing.T) {
 		Object: &ast.Ident{Name: "s"},
 		Member: &ast.Ident{Name: "x"},
 	})
-	if err == nil {
-		t.Fatal("expected error for nil struct")
+	// An undeclared member reads as zero with a warning naming the path.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if w := interp.Warnings(); len(w) != 1 || w[0].Code != CodeUndeclaredMember || !strings.Contains(w[0].Message, "s.x") {
+		t.Fatalf("want one undeclared-member warning naming s.x, got %v", w)
 	}
 }
 
@@ -1141,7 +1150,7 @@ func TestStdlib_MUX_OutOfRange(t *testing.T) {
 
 func TestTP_PulseCompletionWithINFalse(t *testing.T) {
 	tp := &TP{}
-	tp.SetInput("PT", TimeValue(100 * time.Millisecond))
+	tp.SetInput("PT", TimeValue(100*time.Millisecond))
 
 	// Rising edge starts pulse
 	tp.SetInput("IN", BoolValue(true))
@@ -1307,7 +1316,7 @@ func TestFBInstance_SetInput_NilEnv(t *testing.T) {
 func TestFBInstance_GetMember_StdlibFallback(t *testing.T) {
 	ton := &TON{}
 	ton.SetInput("IN", BoolValue(true))
-	ton.SetInput("PT", TimeValue(100 * time.Millisecond))
+	ton.SetInput("PT", TimeValue(100*time.Millisecond))
 	ton.Execute(200 * time.Millisecond)
 
 	inst := &FBInstance{TypeName: "TON", FB: ton}
@@ -1350,7 +1359,7 @@ func TestCTUD_GetOutput_All(t *testing.T) {
 
 func TestTOF_GetOutput_ET(t *testing.T) {
 	tof := &TOF{}
-	tof.SetInput("PT", TimeValue(100 * time.Millisecond))
+	tof.SetInput("PT", TimeValue(100*time.Millisecond))
 	tof.SetInput("IN", BoolValue(true))
 	tof.Execute(10 * time.Millisecond)
 	tof.SetInput("IN", BoolValue(false))
@@ -1365,7 +1374,7 @@ func TestTOF_GetOutput_ET(t *testing.T) {
 
 func TestTP_GetOutput_ET(t *testing.T) {
 	tp := &TP{}
-	tp.SetInput("PT", TimeValue(100 * time.Millisecond))
+	tp.SetInput("PT", TimeValue(100*time.Millisecond))
 	tp.SetInput("IN", BoolValue(true))
 	tp.Execute(50 * time.Millisecond)
 	et := tp.GetOutput("ET")

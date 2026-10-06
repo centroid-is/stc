@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/centroid-is/stc/pkg/checker"
+	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/twincat"
 	"github.com/stretchr/testify/assert"
@@ -101,4 +103,36 @@ func TestLoadProjectSpec(t *testing.T) {
 		_, _, err := loadProjectSpec([]string{"../../pkg/twincat/testdata/broken/Broken.plcproj"}, nil)
 		assert.Error(t, err)
 	})
+}
+
+// Undeclared types and members are warnings for sim and serve: the runtime
+// auto-stubs them. Other analysis errors still fail the load.
+func TestLoadProjectSpecTolerantDrift(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "main.st")
+	src := `TYPE ST_R : STRUCT a : INT; END_STRUCT END_TYPE
+PROGRAM MAIN
+VAR conv : FB_Missing; r : ST_R; z : INT; END_VAR
+conv();
+z := r.gone;
+END_PROGRAM
+`
+	require.NoError(t, os.WriteFile(p, []byte(src), 0o644))
+	spec, ds, err := loadProjectSpec([]string{p}, nil)
+	require.NoError(t, err)
+	var codes []string
+	for _, d := range ds {
+		assert.Equal(t, diag.Warning, d.Severity, d.String())
+		codes = append(codes, d.Code)
+	}
+	assert.Contains(t, codes, checker.CodeUndeclaredType)
+	assert.Contains(t, codes, checker.CodeNoMember)
+	prj, err := interp.LoadProject(spec)
+	require.NoError(t, err)
+	require.NoError(t, prj.Tick())
+
+	bad := filepath.Join(dir, "bad.st")
+	require.NoError(t, os.WriteFile(bad, []byte("PROGRAM MAIN\nVAR z : INT; END_VAR\nz := nope;\nEND_PROGRAM\n"), 0o644))
+	_, _, err = loadProjectSpec([]string{bad}, nil)
+	assert.Error(t, err)
 }

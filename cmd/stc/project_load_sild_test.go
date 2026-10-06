@@ -19,7 +19,7 @@ func TestLoadProjectSild(t *testing.T) {
 	if dir == "" {
 		t.Skip("STC_SILD_DIR not set")
 	}
-	for _, name := range []string{"ST101"} {
+	for _, name := range []string{"ST101", "ST301"} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(dir, name, name+" solution.tsproj")
 			spec, _, err := loadProjectSpec([]string{path}, nil)
@@ -28,6 +28,10 @@ func TestLoadProjectSild(t *testing.T) {
 			require.NoError(t, err)
 			for i := 0; i < 1000; i++ {
 				require.NoError(t, p.Tick(), "tick %d", i)
+			}
+			// Undeclared library types run as auto-stubs and are reported.
+			for _, w := range p.Runtime().Interpreter().Warnings() {
+				t.Log(w.String())
 			}
 		})
 	}

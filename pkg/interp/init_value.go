@@ -403,6 +403,12 @@ func exprText(x ast.Expr) string {
 		}
 	case *ast.ParenExpr:
 		return "(" + exprText(e.Inner) + ")"
+	case *ast.IndexExpr:
+		idx := make([]string, len(e.Indices))
+		for i, x := range e.Indices {
+			idx[i] = exprText(x)
+		}
+		return exprText(e.Object) + "[" + strings.Join(idx, ", ") + "]"
 	case *ast.UnaryExpr:
 		return e.Op.Text + exprText(e.Operand)
 	case *ast.BinaryExpr:

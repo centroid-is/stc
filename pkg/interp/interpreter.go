@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/types"
 )
 
@@ -59,6 +60,11 @@ type Interpreter struct {
 	// initErrs collects array bound and initialiser failures found while
 	// instantiating variables; see InitErrors.
 	initErrs []error
+
+	// warnings are the run-time warnings (auto-stubbed undeclared types,
+	// undeclared member reads), deduplicated through warned; see Warnings.
+	warnings []diag.Diagnostic
+	warned   map[string]bool
 
 	// FBDecls maps uppercase user-defined function block names to their
 	// declarations. FB instantiation consults this so that an FB-typed VAR
@@ -1210,7 +1216,10 @@ func (interp *Interpreter) evalMemberAccess(env *Env, e *ast.MemberAccessExpr) (
 				return v, nil
 			}
 		}
-		return Value{}, &RuntimeError{Msg: fmt.Sprintf("struct has no member '%s'", memberName)}
+		// A member the struct does not declare (library drift) reads as
+		// zero with a warning naming the path, rather than stopping the scan.
+		interp.warn(CodeUndeclaredMember, e, "%s: structure has no member '%s'; it reads as zero", exprText(e), memberName)
+		return Value{}, nil
 	case ValInt:
 		// w.cBit with a constant integer cBit is a bit read (ruling A3).
 		if n, ok := constBitIndex(env, e); ok {
@@ -1562,6 +1571,10 @@ func (interp *Interpreter) evalMethodCall(env *Env, memberAccess *ast.MemberAcce
 			if v, ok := fbInst.Env.GetLocal(methodName); ok && v.Kind == ValFBInstance && v.FBRef != nil {
 				return Value{}, interp.runFBInstance(v.FBRef)
 			}
+		}
+		// An auto-stub (undeclared type) accepts every method call.
+		if _, stub := fbInst.FB.(*autoStubFB); stub {
+			return Value{}, nil
 		}
 		return Value{}, &RuntimeError{Msg: fmt.Sprintf("method '%s' not found on FB '%s'", methodName, fbInst.TypeName)}
 	}

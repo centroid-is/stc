@@ -8,6 +8,7 @@ import (
 
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/checker"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/pipeline"
@@ -22,7 +23,10 @@ import (
 // own 10 ms MAIN default). Any other paths are parsed and analysed together
 // as .st files and yield no tasks. All import, parse and analysis
 // diagnostics are returned; error-severity ones also fail the load with the
-// first error's file:line:col.
+// first error's file:line:col. Undeclared types and members (library drift
+// such as an FB_TwoWayConveyor the project never declares) are downgraded to
+// warnings by runTolerant: the runtime runs them as zero-output auto-stubs
+// and zero-valued member reads, each reported as a warning.
 func loadProjectSpec(paths []string, defines map[string]bool) (interp.ProjectSpec, []diag.Diagnostic, error) {
 	if len(paths) == 0 {
 		return interp.ProjectSpec{}, nil, errors.New("no project or source files given")
@@ -46,7 +50,7 @@ func loadTwinCATSpec(path string, defines map[string]bool) (interp.ProjectSpec, 
 		cfg, _ = project.LoadConfig(cp)
 	}
 	res := analyzer.AnalyzeProject(m, cfg, defines)
-	ds = append(ds, res.Diags...)
+	ds = append(ds, runTolerant(res.Diags)...)
 	if err := firstError(ds); err != nil {
 		return interp.ProjectSpec{}, ds, fmt.Errorf("project %s has errors: %w", path, err)
 	}
@@ -82,11 +86,26 @@ func loadSTSpec(paths []string, defines map[string]bool) (interp.ProjectSpec, []
 		cfg, _ = project.LoadConfig(cp)
 	}
 	res := analyzer.Analyze(files, cfg)
-	ds = append(ds, res.Diags...)
+	ds = append(ds, runTolerant(res.Diags)...)
 	if err := firstError(ds); err != nil {
 		return interp.ProjectSpec{}, ds, err
 	}
 	return interp.ProjectSpec{Files: files}, ds, nil
+}
+
+// runTolerant downgrades the analysis errors the runtime tolerates to
+// warnings: undeclared types (auto-stubbed) and undeclared members (read as
+// zero). The diagnostics are modified in place and returned.
+func runTolerant(ds []diag.Diagnostic) []diag.Diagnostic {
+	for i := range ds {
+		switch ds[i].Code {
+		case checker.CodeUndeclaredType, checker.CodeNoMember:
+			if ds[i].Severity == diag.Error {
+				ds[i].Severity = diag.Warning
+			}
+		}
+	}
+	return ds
 }
 
 // firstError returns the first error-severity diagnostic as an error, or nil.

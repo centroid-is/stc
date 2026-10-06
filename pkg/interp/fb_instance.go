@@ -424,7 +424,12 @@ func zeroFromType(ts ast.TypeSpec, ctx typeCtx, depth int) Value {
 				}
 			}
 		}
-		// Unknown type name; default to INT zero
+		// Unknown type name: with an interpreter it is an undeclared FB or
+		// TYPE (library drift), run as a zero-output auto-stub with a
+		// warning; without one, default to DINT zero.
+		if ctx.interp != nil && t.Name != nil {
+			return ctx.interp.autoStub(t)
+		}
 		return Zero(types.KindDINT)
 	case *ast.ArrayType:
 		return zeroArrayCtx(t, ctx, depth)
