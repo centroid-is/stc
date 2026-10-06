@@ -1357,6 +1357,10 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 		}
 	}
 
+	if calleeName == "SIZEOF" {
+		return interp.evalSizeOf(env, e)
+	}
+
 	// Handle ADR() specially: it needs the variable reference, not its value
 	if calleeName == "ADR" {
 		if len(e.Args) != 1 {
