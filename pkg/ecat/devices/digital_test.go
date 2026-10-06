@@ -187,8 +187,8 @@ func TestDemoDiagnosticsOnlyLaterPlanModels(t *testing.T) {
 		got = append(got, d.Message[i+1:j])
 	}
 	sort.Strings(got)
-	// ATV320 lands in Phase 26; EL9222, EL2912 and PS2001 in plan 25-02.
-	want := []string{"ATV320 EtherCAT", "EL2912", "EL9222-5500", "PS2001-2410"}
+	// ATV320 lands in Phase 26; EL2912 and PS2001 later in plan 25-02.
+	want := []string{"ATV320 EtherCAT", "EL2912", "PS2001-2410"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("ECAT010 models = %v, want %v", got, want)
 	}

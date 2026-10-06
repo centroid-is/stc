@@ -187,9 +187,15 @@ func TestPassiveCouplersNoDiagnostic(t *testing.T) {
 	n.Step(0)
 	n.Step(0)
 	after := n.Images().Get(dev1).In
-	// Only pseudo-inputs change; with no stimulus every PDO byte stays put.
+	// Only pseudo-inputs change; with no stimulus every PDO byte of a passive
+	// or digital slave stays put. Models with status (EL9222) report state.
 	m := topo.Master(dev1)
 	for _, s := range m.Slaves {
+		switch dv, _ := n.DeviceByName(s.Name); dv.(type) {
+		case *Passive, *DigitalIO, *ecat.Passthrough:
+		default:
+			continue
+		}
 		for _, pd := range s.Pdos {
 			for _, e := range pd.Entries {
 				slot, ok := m.Slot(ecat.LinkPath(m.Name, s, pd, e))

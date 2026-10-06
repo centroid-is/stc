@@ -27,6 +27,7 @@ const (
 	ProductCTEU   uint32 = 0x0008bc8c // Festo CTEU-EtherCAT bus node (572556)
 	ProductEL3054 uint32 = 0x0bee3052
 	ProductEL3064 uint32 = 0x0bf83052 // Beckhoff numbering; not in the reference exports
+	ProductEL9222 uint32 = 0x24063052 // EL9222-5500
 )
 
 type deviceID struct {
@@ -39,6 +40,7 @@ func passive() ecat.Device       { return &Passive{} }
 func digitalIO() ecat.Device     { return &DigitalIO{} }
 func analogIn4to20() ecat.Device { return &Analog{kind: analogCurrent} }
 func analogIn0to10() ecat.Device { return &Analog{kind: analogVoltage} }
+func el9222() ecat.Device        { return &EL9222{} }
 
 // knownIDs lists every exact (vendor, product) registration.
 var knownIDs = []deviceID{
@@ -55,6 +57,7 @@ var knownIDs = []deviceID{
 	{"CTEU", VendorFesto, ProductCTEU, digitalIO},
 	{"EL3054", VendorBeckhoff, ProductEL3054, analogIn4to20},
 	{"EL3064", VendorBeckhoff, ProductEL3064, analogIn0to10},
+	{"EL9222-5500", VendorBeckhoff, ProductEL9222, el9222},
 }
 
 type modelFallback struct {
@@ -73,6 +76,7 @@ var beckhoffFallbacks = []modelFallback{
 	{regexp.MustCompile(`^EP2338`), digitalIO},
 	{regexp.MustCompile(`^EL305\d$`), analogIn4to20},
 	{regexp.MustCompile(`^EL306\d$`), analogIn0to10},
+	{regexp.MustCompile(`^EL922\d`), el9222},
 }
 
 // Register installs every device model into r.
