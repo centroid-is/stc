@@ -136,7 +136,7 @@ func attachECat(p *interp.Project, spec interp.ProjectSpec, ioFiles []string) (*
 	if err != nil {
 		return nil, nil, fmt.Errorf("--io: %w", err)
 	}
-	vars, ds := ecat.CollectLinks(spec.Files)
+	vars, ds := ecat.CollectLinksWithLibraries(spec.Files, spec.LibraryFiles)
 	bindings, rds := ecat.Resolve(topo, vars)
 	ds = append(ds, rds...)
 	ecat.SortDiagnostics(ds)

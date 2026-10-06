@@ -74,7 +74,16 @@ func newTypeIndex(files []*ast.SourceFile) *typeIndex {
 // rather than the checker so projects whose library types are not loaded
 // can still be validated.
 func CollectLinks(files []*ast.SourceFile) ([]LinkedVar, []diag.Diagnostic) {
-	idx := newTypeIndex(files)
+	return CollectLinksWithLibraries(files, nil)
+}
+
+// CollectLinksWithLibraries is CollectLinks with the TYPE and FUNCTION_BLOCK
+// declarations of libs (resolved project libraries) also indexed, so links
+// to members of library structs (ST301's ECT terminal structs declared in
+// SVNCoreComponents) resolve. Links are collected from files only; a
+// project declaration shadows a library one of the same name.
+func CollectLinksWithLibraries(files, libs []*ast.SourceFile) ([]LinkedVar, []diag.Diagnostic) {
+	idx := newTypeIndex(append(append([]*ast.SourceFile{}, libs...), files...))
 	c := &collector{idx: idx}
 	for _, f := range files {
 		if f == nil {

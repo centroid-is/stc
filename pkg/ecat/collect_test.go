@@ -295,3 +295,34 @@ func TestCollectHelpers(t *testing.T) {
 		t.Errorf("constInt(-2#101) = %d %v", v, ok)
 	}
 }
+
+// TestCollectLinksWithLibraries resolves member links through a struct
+// declared only in a library (ST301's ECT terminal structs live in
+// SVNCoreComponents); links inside the library are not collected.
+func TestCollectLinksWithLibraries(t *testing.T) {
+	lib := parseSrc(t, `TYPE ST_Term :
+STRUCT
+	ok AT %I* : BOOL;
+END_STRUCT
+END_TYPE
+VAR_GLOBAL
+	{attribute 'TcLinkTo' := 'TIID^Device 1 (EtherCAT)^Lib^In'}
+	libVar AT %I* : BOOL;
+END_VAR
+`)
+	files := parseSrc(t, `VAR_GLOBAL
+	{attribute 'TcLinkTo' := '.ok:=TIID^Device 1 (EtherCAT)^Term 1^Status^Ok'}
+	t1 : ST_Term;
+END_VAR
+`)
+	if _, diags := CollectLinks(files); len(diags) == 0 {
+		t.Fatal("without the library the member should be undeclared")
+	}
+	vars, diags := CollectLinksWithLibraries(files, lib)
+	if len(diags) != 0 || len(vars) != 1 {
+		t.Fatalf("vars %+v diags %v", vars, diags)
+	}
+	if vars[0].TypeName != "BOOL" || !strings.Contains(strings.ToLower(vars[0].Path), "t1.ok") {
+		t.Errorf("linked var %+v", vars[0])
+	}
+}
