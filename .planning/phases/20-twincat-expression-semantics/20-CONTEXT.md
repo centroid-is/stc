@@ -103,3 +103,15 @@ Acceptance oracle: `tests/twincat_probes/` fixtures (remove the Phase 20 line al
 - TcPOU/TcGVL/TcDUT XML import and library placeholder resolution: Phase 21.
 
 </deferred>
+
+<orchestrator_rulings>
+## Orchestrator rulings on research assumptions (2026-10-06, user unavailable)
+
+- A1 (mixed named/positional arguments): TwinCAT accepts `f(named := 1, positional, named2 := 3)` in shipped libraries (svncore line 3738). Ruling: any mix is accepted; duplicate bindings and binding a name that does not exist are errors. The earlier "named-then-positional is an error" line is withdrawn.
+- A2: counter PV/CV are typed INT (IEC 61131-3); CTUD likewise.
+- A3: a constant identifier as bit index parses as a member access and is reinterpreted by the checker when the member resolves to a CONSTANT integer; accepted.
+- A4: non-strict enums stay permissive (implicit enum↔integer allowed, as CODESYS does without `strict`); accepted.
+- RUNT-08 input-name aliases: register both IEC (R, LD, S1, R1) and Tc2_Standard (RESET, LOAD, SET1, RESET1) names in checker and interpreter so TwinCAT code and portable code both work.
+- REF= to member paths: implement path references (research proposal) rather than env-variable-only references.
+- Inline VAR enums must register their values (fixes ~60 SEMA010 errors); fmt/emit must print enum base types.
+</orchestrator_rulings>
