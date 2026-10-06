@@ -400,3 +400,137 @@ func TestEL6001PartialLayouts(t *testing.T) {
 		t.Fatal("transmit toggle not acknowledged")
 	}
 }
+
+// plcSerial is a Go port of the PLC side of FB_SerialFramer.TcPOU
+// (sildarvinnsla Baader/gagnasofnun/POUs/Serial), one PLC cycle per call:
+// the init handshake (CASE initState, lines 69-94), receive (lines 96-110:
+// copy Input_length bytes on a Receive_request change, then toggle
+// Receive_accepted) and transmit (lines 112-155: chunks of at most 21 bytes,
+// Output_length then a Transmit_request toggle, next chunk only after
+// Transmit_accepted changes). It reads and writes only the master images.
+type plcSerial struct {
+	s *serialSlots
+
+	initState            int
+	initialized          bool
+	initReq, txReq       bool
+	rxAcc                bool
+	rxReqLast, txAccLast bool
+	txLength             uint64
+
+	rx      []byte
+	tx      []byte
+	txSent  int
+	txState int
+}
+
+func (p *plcSerial) cycle() {
+	ia := p.s.stat("Init accepted") != 0
+	rrq := p.s.stat("Receive request") != 0
+	ta := p.s.stat("Transmit accepted") != 0
+	switch p.initState {
+	case 0:
+		p.initReq = true
+		if ia {
+			p.initState = 10
+		}
+	case 10:
+		p.initReq = false
+		if !ia {
+			p.rx, p.tx, p.txState = nil, nil, 0
+			p.rxReqLast, p.txAccLast = rrq, ta
+			p.rxAcc, p.txReq = false, false
+			p.initialized = true
+			p.initState = 20
+		}
+	}
+	if p.initialized {
+		if rrq != p.rxReqLast {
+			p.rxReqLast = rrq
+			p.rx = append(p.rx, p.s.readData(int(p.s.stat("Input length")))...)
+			p.rxAcc = !p.rxAcc
+		}
+		switch p.txState {
+		case 0:
+			if len(p.tx) > 0 {
+				p.txSent, p.txAccLast, p.txState = 0, ta, 10
+			}
+		case 10:
+			if p.txSent >= len(p.tx) {
+				p.tx, p.txState = nil, 0
+			} else {
+				chunk := len(p.tx) - p.txSent
+				if chunk > 21 {
+					chunk = 21
+				}
+				p.s.writeData(p.tx[p.txSent : p.txSent+chunk])
+				p.txSent += chunk
+				p.txLength = uint64(chunk)
+				p.txReq = !p.txReq
+				p.txAccLast = ta
+				p.txState = 20
+			}
+		case 20:
+			if ta != p.txAccLast {
+				p.txAccLast = ta
+				p.txState = 10
+			}
+		}
+	}
+	p.s.setCtrl("Init request", b2u(p.initReq))
+	p.s.setCtrl("Output length", p.txLength)
+	p.s.setCtrl("Transmit request", b2u(p.txReq))
+	p.s.setCtrl("Receive accepted", b2u(p.rxAcc))
+}
+
+// exchange sends cmd and runs PLC cycle + Network.Step until a reply ending
+// in the Baader terminator arrives, returning it and the steps taken.
+func (p *plcSerial) exchange(t *testing.T, n *ecat.Network, cmd string, limit int) (string, int) {
+	t.Helper()
+	p.rx = nil
+	p.tx = []byte(cmd)
+	for steps := 1; steps <= limit; steps++ {
+		p.cycle()
+		n.Step(0)
+		if bytes.HasSuffix(p.rx, []byte(DefaultTerminator)) {
+			p.cycle() // acknowledge the last chunk
+			return string(p.rx), steps
+		}
+	}
+	t.Fatalf("%q: no reply within %d steps (got %q)", cmd, limit, p.rx)
+	return "", 0
+}
+
+func TestEL6001BaaderMdMt1(t *testing.T) {
+	for _, delay := range []int{0, 5} {
+		forBothLayouts(t, func(t *testing.T, _ *ecat.Topology, n *ecat.Network, d *EL6001, s *serialSlots) {
+			peer := BaaderPeer()
+			for i := range peer.Rules {
+				peer.Rules[i].Delay = delay
+			}
+			d.SetPeer(peer)
+			plc := &plcSerial{s: s}
+			for i := 0; i < 10 && !plc.initialized; i++ {
+				plc.cycle()
+				n.Step(0)
+			}
+			if !plc.initialized {
+				t.Fatal("init handshake did not complete")
+			}
+			// Bounds: one transmit handshake plus one receive handshake per
+			// 22-byte chunk, plus the peer delay.
+			md, mdSteps := plc.exchange(t, n, "md\r", 6+delay)
+			mt1, mt1Steps := plc.exchange(t, n, "mt1\r", 10+delay)
+			if md != BaaderMdReply {
+				t.Errorf("md reply %q", md)
+			}
+			if mt1 != BaaderMt1Reply {
+				t.Errorf("mt1 reply %q", mt1)
+			}
+			if r := peer.Requests(); len(r) != 2 || r[0] != "md" || r[1] != "mt1" {
+				t.Errorf("peer saw %q", r)
+			}
+			t.Logf("delay %d: md %d steps, mt1 %d steps", delay, mdSteps, mt1Steps)
+		})
+	}
+}
