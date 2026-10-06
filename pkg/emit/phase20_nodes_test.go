@@ -156,21 +156,26 @@ func TestPhase20Nodes(t *testing.T) {
 	for _, w := range p20Want {
 		want = append(want, strings.TrimSuffix(w, " // rebind"))
 	}
-	beckhoff := Emit(p20File(), DefaultOptions())
+	// Targets without OOP and references replace the REF=, THIS^ and
+	// SUPER^ statements (the last three) with a removal comment (ME-04).
 	for _, target := range []Target{TargetBeckhoff, TargetSchneider, TargetPortable} {
 		t.Run(string(target), func(t *testing.T) {
 			opts := DefaultOptions()
 			opts.Target = target
 			out := Emit(p20File(), opts)
-			for _, w := range want {
-				if !strings.Contains(out, w) {
-					t.Errorf("missing %q in:\n%s", w, out)
+			w := want
+			if target != TargetBeckhoff {
+				w = want[:len(want)-3]
+				for _, what := range []string{"REF=", "THIS^", "SUPER^"} {
+					w = append(w, "(* stc emit: statement removed, "+what+" is not supported by the "+string(target)+" target *)")
 				}
 			}
-			assertEmitInOrder(t, out, want...)
-			if out != beckhoff {
-				t.Errorf("%s output differs from beckhoff:\n%s\n---\n%s", target, out, beckhoff)
+			for _, s := range w {
+				if !strings.Contains(out, s) {
+					t.Errorf("missing %q in:\n%s", s, out)
+				}
 			}
+			assertEmitInOrder(t, out, w...)
 		})
 	}
 	t.Run("lowercase keywords", func(t *testing.T) {

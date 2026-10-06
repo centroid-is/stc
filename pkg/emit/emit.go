@@ -5,6 +5,7 @@ package emit
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/centroid-is/stc/pkg/ast"
@@ -32,6 +33,14 @@ type emitter struct {
 	buf    strings.Builder
 	indent int
 	opts   Options
+
+	// dropped holds the upper-cased names of variables whose declarations
+	// the target filtered out in the current top-level declaration;
+	// droppedGlobal those filtered out of a GVL. Statements naming them are
+	// removed (see unsupportedStmt). inGVL is set while a GVL prints.
+	dropped       map[string]bool
+	droppedGlobal map[string]bool
+	inGVL         bool
 }
 
 // --- helpers ---
@@ -165,6 +174,7 @@ func (e *emitter) emitSourceFile(file *ast.SourceFile) {
 		if i > 0 {
 			e.newline()
 		}
+		e.dropped = nil
 		e.emitDecl(decl)
 	}
 }
@@ -204,9 +214,11 @@ func (e *emitter) emitDecl(decl ast.Declaration) {
 func (e *emitter) emitGVLDecl(d *ast.GVLDecl) {
 	e.emitAttrs(d.Attributes, d.Pragmas)
 	e.emitLeadingTrivia(&d.NodeBase)
+	e.inGVL = true
 	for _, vb := range d.Blocks {
 		e.emitVarBlock(vb)
 	}
+	e.inGVL = false
 	e.emitTrailingTrivia(&d.NodeBase)
 }
 
@@ -568,6 +580,10 @@ func (e *emitter) emitVarBlock(vb *ast.VarBlock) {
 	for _, vd := range vb.Declarations {
 		if !e.shouldSkipVarDecl(vd) {
 			kept = append(kept, vd)
+			continue
+		}
+		for _, n := range vd.Names {
+			e.markDropped(n.Name)
 		}
 	}
 	// If all declarations were filtered, skip the entire block
@@ -708,7 +724,163 @@ func (e *emitter) emitTypeSpec(ts ast.TypeSpec) {
 func (e *emitter) emitIndentedStmt(s ast.Statement) {
 	e.emitLeadingTrivia(e.nodeBase(s))
 	e.emitIndent()
+	if reason := e.unsupportedStmt(s); reason != "" {
+		e.writef("(* stc emit: statement removed, %s *)", reason)
+		e.newline()
+		return
+	}
 	e.emitStmt(s)
+}
+
+// markDropped records that the declaration of variable name was filtered
+// out for the target.
+func (e *emitter) markDropped(name string) {
+	set := &e.dropped
+	if e.inGVL {
+		set = &e.droppedGlobal
+	}
+	if *set == nil {
+		*set = make(map[string]bool)
+	}
+	(*set)[strings.ToUpper(name)] = true
+}
+
+// unsupportedStmt reports why s cannot be printed for the target, or ""
+// when it can: REF= without references, THIS^ or SUPER^ without OOP, or a
+// variable whose declaration was filtered out. Only the statement's own
+// expressions count; a compound statement's body is checked statement by
+// statement as it prints.
+func (e *emitter) unsupportedStmt(s ast.Statement) string {
+	if e.opts.Target.supportsOOP() && e.opts.Target.supportsReferenceTo() && len(e.dropped)+len(e.droppedGlobal) == 0 {
+		return ""
+	}
+	target := string(e.opts.Target)
+	if _, ok := s.(*ast.RefAssignStmt); ok && !e.opts.Target.supportsReferenceTo() {
+		return "REF= is not supported by the " + target + " target"
+	}
+	reason := ""
+	for _, n := range stmtHeadNodes(s) {
+		ast.Inspect(n, func(n ast.Node) bool {
+			if reason != "" || isNilNode(n) {
+				return false
+			}
+			switch x := n.(type) {
+			case *ast.ThisExpr:
+				if !e.opts.Target.supportsOOP() {
+					reason = "THIS^ is not supported by the " + target + " target"
+				}
+			case *ast.SuperExpr:
+				if !e.opts.Target.supportsOOP() {
+					reason = "SUPER^ is not supported by the " + target + " target"
+				}
+			case *ast.MemberAccessExpr:
+				// Only the object can name a variable; the member is a
+				// field, method or bit of it.
+				ast.Inspect(x.Object, func(m ast.Node) bool {
+					if isNilNode(m) {
+						return false
+					}
+					if reason == "" {
+						reason = e.droppedReason(m)
+					}
+					return reason == ""
+				})
+				return false
+			case *ast.Ident:
+				reason = e.droppedReason(x)
+			}
+			return reason == ""
+		})
+		if reason != "" {
+			return reason
+		}
+	}
+	return ""
+}
+
+// droppedReason returns the removal reason when n names a variable whose
+// declaration was filtered out, else "". THIS^ and SUPER^ inside a member
+// object are reported here too.
+func (e *emitter) droppedReason(n ast.Node) string {
+	target := string(e.opts.Target)
+	switch x := n.(type) {
+	case *ast.Ident:
+		key := strings.ToUpper(x.Name)
+		if e.dropped[key] || e.droppedGlobal[key] {
+			return x.Name + " is not declared for the " + target + " target"
+		}
+	case *ast.ThisExpr:
+		if !e.opts.Target.supportsOOP() {
+			return "THIS^ is not supported by the " + target + " target"
+		}
+	case *ast.SuperExpr:
+		if !e.opts.Target.supportsOOP() {
+			return "SUPER^ is not supported by the " + target + " target"
+		}
+	}
+	return ""
+}
+
+// isNilNode reports whether n is an interface holding a nil pointer, which
+// hand-built ASTs may contain (a nil *ast.CallArg in an argument list).
+func isNilNode(n ast.Node) bool {
+	v := reflect.ValueOf(n)
+	return !v.IsValid() || (v.Kind() == reflect.Pointer && v.IsNil())
+}
+
+// stmtHeadNodes returns the expressions that belong to s itself, not to
+// the statements nested in its body.
+func stmtHeadNodes(s ast.Statement) []ast.Node {
+	var out []ast.Node
+	add := func(xs ...ast.Expr) {
+		for _, x := range xs {
+			if x != nil {
+				out = append(out, x)
+			}
+		}
+	}
+	switch st := s.(type) {
+	case *ast.AssignStmt:
+		add(st.Target, st.Value)
+	case *ast.RefAssignStmt:
+		add(st.Target, st.Value)
+	case *ast.CallStmt:
+		add(st.Callee)
+		for _, a := range st.Args {
+			if a != nil {
+				add(a.Value)
+			}
+		}
+	case *ast.IfStmt:
+		add(st.Condition)
+		for _, ei := range st.ElsIfs {
+			if ei != nil {
+				add(ei.Condition)
+			}
+		}
+	case *ast.CaseStmt:
+		add(st.Expr)
+		for _, b := range st.Branches {
+			if b == nil {
+				continue
+			}
+			for _, l := range b.Labels {
+				if l != nil {
+					out = append(out, l)
+				}
+			}
+		}
+	case *ast.ForStmt:
+		if st.Variable != nil {
+			add(st.Variable)
+		}
+		add(st.From, st.To, st.By)
+	case *ast.WhileStmt:
+		add(st.Condition)
+	case *ast.RepeatStmt:
+		add(st.Condition)
+	}
+	return out
 }
 
 func (e *emitter) emitStmt(s ast.Statement) {
