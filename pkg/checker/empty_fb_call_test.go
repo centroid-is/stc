@@ -30,6 +30,8 @@ func TestEmptyFBCall(t *testing.T) {
 		{"unknown named input", "", "fb(nope := 1);\nn := n;", []string{CodeNoMember}},
 		{"INT variable still not callable", "\tx : INT;\n", "x();\nn := n;", []string{CodeNotCallable}},
 		{"undeclared FB type reports only SEMA037", "\tbad : FB_Missing;\n", "bad();\nbad(n);\nn := n;", []string{CodeUndeclaredType}},
+		{"undeclared callee", "", "zz();\nn := n;", []string{CodeUndeclared}},
+		{"undeclared FB type with named args", "\tbad : FB_Missing;\n", "bad(1, a := n);", []string{CodeUndeclaredType}},
 		{"FB instance as value still not callable", "\ty : INT;\n", "y := fb();\nn := n;", []string{CodeNotCallable}},
 	}
 	for _, tc := range tests {
