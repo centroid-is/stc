@@ -22,6 +22,8 @@ func TestAttribute_String(t *testing.T) {
 		{"closing brace in value", Attribute{Name: "x", Value: "a}b", HasValue: true}, "{attribute 'x' := 'a)b'}"},
 		{"closing brace in name", Attribute{Name: "n}"}, "{attribute 'n)'}"},
 		{"double quoted name", Attribute{Name: "qualified_only", DoubleQuoted: true}, `{attribute "qualified_only"}`},
+		{"IEC escapes verbatim", Attribute{Name: "x", Value: "line $'1$' ($$) it's", HasValue: true}, "{attribute 'x' := 'line $'1$' ($$) it''s'}"},
+		{"trailing dollar", Attribute{Name: "x", Value: "a$", HasValue: true}, "{attribute 'x' := 'a$$'}"},
 		{"double quoted with value", Attribute{Name: "x", Value: `a"b'c}`, HasValue: true, DoubleQuoted: true}, `{attribute "x" := "a""b'c)"}`},
 	}
 	for _, tt := range tests {

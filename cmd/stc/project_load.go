@@ -3,8 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/ast"
@@ -28,22 +31,67 @@ import (
 // warnings by runTolerant: the runtime runs them as zero-output auto-stubs
 // and zero-valued member reads, each reported as a warning.
 func loadProjectSpec(paths []string, defines map[string]bool) (interp.ProjectSpec, []diag.Diagnostic, error) {
+	spec, _, ds, err := loadProjectAnalysis(paths, defines)
+	return spec, ds, err
+}
+
+// loadProjectAnalysis is loadProjectSpec that also returns the analysis
+// result (symbol table and files), which `stc serve --opcua` needs to build
+// the OPC UA address space.
+func loadProjectAnalysis(paths []string, defines map[string]bool) (interp.ProjectSpec, analyzer.AnalysisResult, []diag.Diagnostic, error) {
 	if len(paths) == 0 {
-		return interp.ProjectSpec{}, nil, errors.New("no project or source files given")
+		return interp.ProjectSpec{}, analyzer.AnalysisResult{}, nil, errors.New("no project or source files given")
 	}
 	if hasProjectArg(paths) {
 		if len(paths) != 1 {
-			return interp.ProjectSpec{}, nil, errors.New("a project path (.tsproj or .plcproj) must be the only argument")
+			return interp.ProjectSpec{}, analyzer.AnalysisResult{}, nil, errors.New("a project path (.tsproj or .plcproj) must be the only argument")
 		}
 		return loadTwinCATSpec(paths[0], defines)
 	}
-	return loadSTSpec(paths, defines)
+	files, err := expandSTInputs(paths)
+	if err != nil {
+		return interp.ProjectSpec{}, analyzer.AnalysisResult{}, nil, err
+	}
+	return loadSTSpec(files, defines)
 }
 
-func loadTwinCATSpec(path string, defines map[string]bool) (interp.ProjectSpec, []diag.Diagnostic, error) {
+// expandSTInputs lists the .st files named by inputs, walking directories
+// in lexical order. Files are kept as given; a directory without .st files
+// is an error.
+func expandSTInputs(inputs []string) ([]string, error) {
+	var out []string
+	for _, in := range inputs {
+		fi, err := os.Stat(in)
+		if err != nil || !fi.IsDir() {
+			out = append(out, in) // a missing file is reported when it is read
+			continue
+		}
+		var found []string
+		err = filepath.WalkDir(in, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && strings.EqualFold(filepath.Ext(path), ".st") {
+				found = append(found, path)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(found) == 0 {
+			return nil, fmt.Errorf("no .st files in %s", in)
+		}
+		sort.Strings(found)
+		out = append(out, found...)
+	}
+	return out, nil
+}
+
+func loadTwinCATSpec(path string, defines map[string]bool) (interp.ProjectSpec, analyzer.AnalysisResult, []diag.Diagnostic, error) {
 	m, ds, err := twincat.Import(path, twincat.Options{Defines: defines})
 	if err != nil {
-		return interp.ProjectSpec{}, ds, fmt.Errorf("importing %s: %w", path, err)
+		return interp.ProjectSpec{}, analyzer.AnalysisResult{}, ds, fmt.Errorf("importing %s: %w", path, err)
 	}
 	var cfg *project.Config
 	if cp, err := project.FindConfig(filepath.Dir(m.ProjectPath)); err == nil {
@@ -52,7 +100,7 @@ func loadTwinCATSpec(path string, defines map[string]bool) (interp.ProjectSpec, 
 	res := analyzer.AnalyzeProject(m, cfg, defines)
 	ds = append(ds, runTolerant(res.Diags)...)
 	if err := firstError(ds); err != nil {
-		return interp.ProjectSpec{}, ds, fmt.Errorf("project %s has errors: %w", path, err)
+		return interp.ProjectSpec{}, res, ds, fmt.Errorf("project %s has errors: %w", path, err)
 	}
 	spec := interp.ProjectSpec{Files: res.Files, LibraryFiles: res.LibraryFiles}
 	for _, t := range m.Tasks {
@@ -66,16 +114,16 @@ func loadTwinCATSpec(path string, defines map[string]bool) (interp.ProjectSpec, 
 			Programs: append([]string(nil), t.Programs...),
 		})
 	}
-	return spec, ds, nil
+	return spec, res, ds, nil
 }
 
-func loadSTSpec(paths []string, defines map[string]bool) (interp.ProjectSpec, []diag.Diagnostic, error) {
+func loadSTSpec(paths []string, defines map[string]bool) (interp.ProjectSpec, analyzer.AnalysisResult, []diag.Diagnostic, error) {
 	var ds []diag.Diagnostic
 	files := make([]*ast.SourceFile, 0, len(paths))
 	for _, p := range paths {
 		src, err := os.ReadFile(p)
 		if err != nil {
-			return interp.ProjectSpec{}, ds, fmt.Errorf("cannot read %s: %w", p, err)
+			return interp.ProjectSpec{}, analyzer.AnalysisResult{}, ds, fmt.Errorf("cannot read %s: %w", p, err)
 		}
 		res := pipeline.Parse(p, string(src), defines)
 		ds = append(ds, res.Diags...)
@@ -88,9 +136,9 @@ func loadSTSpec(paths []string, defines map[string]bool) (interp.ProjectSpec, []
 	res := analyzer.Analyze(files, cfg)
 	ds = append(ds, runTolerant(res.Diags)...)
 	if err := firstError(ds); err != nil {
-		return interp.ProjectSpec{}, ds, err
+		return interp.ProjectSpec{}, res, ds, err
 	}
-	return interp.ProjectSpec{Files: files}, ds, nil
+	return interp.ProjectSpec{Files: files}, res, ds, nil
 }
 
 // runTolerant downgrades the analysis errors the runtime tolerates to

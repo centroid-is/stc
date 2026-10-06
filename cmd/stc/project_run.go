@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/centroid-is/stc/pkg/analyzer"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/ecat"
 	"github.com/centroid-is/stc/pkg/interp"
@@ -33,8 +34,12 @@ func addProjectRunFlags(cmd *cobra.Command) {
 
 // projectRunner is a loaded project ready to run.
 type projectRunner struct {
-	P            *interp.Project
-	Spec         interp.ProjectSpec
+	P        *interp.Project
+	Spec     interp.ProjectSpec
+	Analysis analyzer.AnalysisResult // symbol table for the OPC UA address space
+	// BeforeTick hooks run on the scan goroutine between Ticks of runFree
+	// (stc serve --opcua applies queued OPC UA writes there).
+	BeforeTick   []func()
 	Binder       *interp.IOBinder
 	Diags        []diag.Diagnostic // load warnings
 	Warnings     []string          // state file and I/O warnings
@@ -56,7 +61,7 @@ type projectSetupOpts struct {
 // order, so --set overrides persisted values. Errors are returned; load
 // diagnostics that fail the load are printed to errOut first.
 func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, opts projectSetupOpts, errOut io.Writer) (*projectRunner, error) {
-	spec, ds, err := loadProjectSpec(inputs, defines)
+	spec, res, ds, err := loadProjectAnalysis(inputs, defines)
 	if err != nil {
 		for _, d := range ds {
 			if d.Severity == diag.Error {
@@ -79,7 +84,7 @@ func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, 
 	if err != nil {
 		return nil, fmt.Errorf("initialisation error: %w", err)
 	}
-	r := &projectRunner{P: p, Spec: spec}
+	r := &projectRunner{P: p, Spec: spec, Analysis: res}
 	for _, d := range ds {
 		if d.Severity != diag.Error {
 			r.Diags = append(r.Diags, d)
@@ -174,9 +179,15 @@ func (r *projectRunner) runFree(ctx context.Context, duration time.Duration, clo
 		clock = interp.NewWallClock()
 	}
 	opts := interp.RunOpts{Duration: duration, Clock: clock}
-	if r.PersistPath != "" {
+	if r.PersistPath != "" || len(r.BeforeTick) > 0 {
 		last := clock.Now()
 		opts.OnTick = func(time.Duration) {
+			for _, h := range r.BeforeTick {
+				h()
+			}
+			if r.PersistPath == "" {
+				return
+			}
 			if now := clock.Now(); now-last >= r.PersistEvery {
 				last = now
 				if err := r.P.SaveState(r.PersistPath); err != nil {

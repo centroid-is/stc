@@ -513,6 +513,20 @@ A load or read failure prints `{"error": "..."}` in JSON mode and exits 1.
 
 ---
 
+### `stc serve`
+
+Run a project's scan and serve its OPC.UA.DA symbols over OPC UA with the
+TwinCAT TF6100 address space. See [OPCUA.md](OPCUA.md).
+
+```bash
+stc serve <project.tsproj|project.plcproj|file.st|dir ...> [--opcua :4840] [--security none|basic256sha256]
+          [--cert FILE --key FILE] [--pki-dir DIR] [--cycle 10ms] [--realtime] [--run-for 0] [-D SYM]
+```
+
+Exits 0 on SIGINT/SIGTERM or after `--run-for`; exits 1 when the project
+cannot be loaded or instantiated, a flag is invalid, or the listener cannot
+start (for example, the port is in use).
+
 ## Exit Code Summary
 
 | Code | Meaning |

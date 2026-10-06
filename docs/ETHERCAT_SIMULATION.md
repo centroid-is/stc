@@ -49,4 +49,20 @@ Overrides show up on the next `Tick`.
 
 ## Device models
 
-Each slave runs a `Device` chosen from a `Registry` by vendor and product id. The default `Passthrough` model leaves inputs as the test wrote them. Behavioural models for specific terminals and drives are planned for Phases 25 and 26, and scenario scripting on top of the fault API for Phase 27.
+Each slave runs a `Device` chosen from a `Registry` by vendor and product id. The default `Passthrough` model leaves inputs as the test wrote them. Package `pkg/ecat/devices` registers behavioural models; scenario scripting on top of the fault API is planned for Phase 27.
+
+### ATV320 drive
+
+`devices.ATV320` models a Schneider Altivar 320 with the EtherCAT option (VendorId 0x0800005A, ProductCode 0x389). It boots in PreOp and needs a state request to reach OP. CMD drives a CiA402 state machine and ETA reports its status word. RFR ramps toward LFR at the ACC and DEC times, clamped to LSP and HSP. HMIS, LFT, LCR and DI report drive status. An object dictionary answers SDO reads and writes for the parameters FB_ATV320 configures, including the EEPROM save object 0x2032:01. Tests can call `InjectFault`, `ClearFault`, `SetDI` and `SetSTO`. See the package documentation for units and status words.
+
+## Tc2_EtherCAT function blocks
+
+Programs that call the Tc2_EtherCAT library talk to the simulated master through Go mocks of its function blocks. These include slave and master state, set state, CRC counters, physical write and CoE SDO read and write. Attach them before the first scan:
+
+```go
+net := ecat.NewNetwork(topo, nil)
+eng.SetNetwork(net)                        // before FBs are instantiated
+eng.SetIOBinder(interp.NewIOBinder(bindings, net)) // same network
+```
+
+Each request stays busy for two scans, then reports done or an ADS or CoE error code. `F_CreateAmsNetId` is available too. With this wiring the unmodified SVNCoreComponents `FB_ATV320` configures the simulated drive from PreOp to `cfgReady` and runs it, and `FB_EcDeviceDiag` fills its diagnostic records. `pkg/interp/ecat_e2e_test.go` shows the full setup.

@@ -81,6 +81,13 @@ type Interpreter struct {
 	// callDepth counts nested ACTION, METHOD, user FUNCTION and user FB
 	// executions; see EnterCall.
 	callDepth int
+
+	// fbOverrides are engine-local StandardFB factories (Tc2_EtherCAT mocks)
+	// that win over FBDecls and StdlibFBFactory; see stdFBFactory.
+	fbOverrides map[string]func() StandardFB
+	// localParams names the parameters of LocalFunctions that accept named
+	// arguments; see localArgs.
+	localParams map[string][]string
 }
 
 // MaxCallDepth bounds nested ACTION, METHOD, FUNCTION and FB calls. A
@@ -1389,7 +1396,7 @@ func (interp *Interpreter) evalCall(env *Env, e *ast.CallExpr) (Value, error) {
 	// Check LocalFunctions first (per-instance overrides for test assertions, etc.)
 	if interp.LocalFunctions != nil {
 		if fn, ok := interp.LocalFunctions[calleeName]; ok {
-			args, err := interp.positionalArgs(env, e, calleeName)
+			args, err := interp.localArgs(env, e, calleeName)
 			if err != nil {
 				return Value{}, err
 			}

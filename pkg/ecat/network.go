@@ -2,8 +2,15 @@ package ecat
 
 import (
 	"fmt"
+	"regexp"
 	"time"
+
+	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/source"
 )
+
+// CodeNoModel warns that a slave has no device model and runs as Passthrough.
+const CodeNoModel = "ECAT010"
 
 // Device simulates one slave's process data. Step receives views over the
 // byte span of the slave's own PDO entries: out is master-to-slave (read it),
@@ -25,9 +32,17 @@ func (Passthrough) Step(time.Duration, []byte, []byte) {}
 
 type deviceKey struct{ vendor, product uint32 }
 
-// Registry maps (VendorId, ProductCode) to device model factories.
+type modelPattern struct {
+	vendor  uint32
+	re      *regexp.Regexp
+	factory func() Device
+}
+
+// Registry maps (VendorId, ProductCode) to device model factories, with
+// vendor-scoped model-name patterns as a fallback.
 type Registry struct {
 	factories map[deviceKey]func() Device
+	patterns  []modelPattern
 }
 
 // NewRegistry returns an empty registry; unknown slaves get Passthrough.
@@ -45,9 +60,35 @@ func (r *Registry) Register(vendor, product uint32, factory func() Device) {
 	r.factories[deviceKey{vendor, product}] = factory
 }
 
+// RegisterModel installs a fallback factory used when no exact (vendor,
+// product) factory exists and pattern matches the slave's Model for vendor.
+// Patterns are tried in registration order.
+func (r *Registry) RegisterModel(vendor uint32, pattern *regexp.Regexp, factory func() Device) {
+	r.patterns = append(r.patterns, modelPattern{vendor, pattern, factory})
+}
+
+// RegisterPassive marks (vendor, product) as known with a Passthrough model.
+func (r *Registry) RegisterPassive(vendor, product uint32) {
+	r.Register(vendor, product, func() Device { return Passthrough{} })
+}
+
+// Lookup returns the factory for s: exact (vendor, product) first, then the
+// first model-name pattern registered for s.Vendor that matches s.Model.
+func (r *Registry) Lookup(s *Slave) (func() Device, bool) {
+	if f, ok := r.factories[deviceKey{s.Vendor, s.Product}]; ok {
+		return f, true
+	}
+	for _, p := range r.patterns {
+		if p.vendor == s.Vendor && p.re.MatchString(s.Model) {
+			return p.factory, true
+		}
+	}
+	return nil, false
+}
+
 // New creates the device model for s, falling back to Passthrough.
 func (r *Registry) New(s *Slave) Device {
-	if f, ok := r.factories[deviceKey{s.Vendor, s.Product}]; ok {
+	if f, ok := r.Lookup(s); ok {
 		return f()
 	}
 	return Passthrough{}
@@ -64,6 +105,7 @@ type span struct{ lo, hi int } // byte range [lo, hi); lo == hi when empty
 type slaveRT struct {
 	slave   *Slave
 	dev     Device
+	layout  *Layout
 	in, out span
 }
 
@@ -88,22 +130,50 @@ type Network struct {
 	slaveState map[slaveRef]uint16
 	wcBad      map[slaveRef]bool
 	devState   map[string]uint16
+
+	diags []diag.Diagnostic
+	svc   services
+
+	// StateDelay is the number of Steps a state request on a plain device
+	// takes (DefaultStateDelay unless changed).
+	StateDelay int
 }
 
 // NewNetwork allocates images for topo and creates a device for every slave
-// from reg (DefaultRegistry when nil).
+// from reg (DefaultRegistry when nil). Devices implementing Binder receive
+// their Layout after Init. Slaves without a model run as Passthrough and are
+// reported as ECAT010 warnings (see Diagnostics).
 func NewNetwork(topo *Topology, reg *Registry) *Network {
 	if reg == nil {
 		reg = DefaultRegistry
 	}
-	n := &Network{Topo: topo, images: NewImages(topo)}
+	n := &Network{Topo: topo, images: NewImages(topo), StateDelay: DefaultStateDelay}
+	n.svc.plainState = map[slaveRef]uint16{}
+	n.svc.pending = map[slaveRef]pendingState{}
 	n.ClearFaults()
 	for _, m := range topo.Masters {
 		mr := &masterRT{m: m, img: n.images.Get(m.Name)}
 		for _, s := range m.Slaves {
-			rt := slaveRT{slave: s, dev: reg.New(s)}
+			rt := slaveRT{slave: s}
+			if f, ok := reg.Lookup(s); ok {
+				rt.dev = f()
+			} else {
+				rt.dev = Passthrough{}
+				n.diags = append(n.diags, diag.Diagnostic{
+					Severity: diag.Warning,
+					Pos:      source.Pos{File: m.Name},
+					Code:     CodeNoModel,
+					Message: fmt.Sprintf("no device model for %s (vendor %#x, product %#x); using passthrough",
+						s.Name, s.Vendor, s.Product),
+				})
+			}
 			rt.in, rt.out = slaveSpans(m, s)
+			rt.layout = slaveLayout(m, s, rt.in, rt.out)
 			rt.dev.Init(s)
+			if b, ok := rt.dev.(Binder); ok {
+				b.Bind(rt.layout)
+			}
+			bindLayout(m, rt)
 			mr.slaves = append(mr.slaves, rt)
 		}
 		n.masters = append(n.masters, mr)
@@ -171,6 +241,44 @@ func (n *Network) slaveRef(master string, slave int) (slaveRef, error) {
 	return slaveRef{master, slave}, nil
 }
 
+// Diagnostics returns the ECAT010 warnings for slaves without a device model.
+func (n *Network) Diagnostics() []diag.Diagnostic {
+	return append([]diag.Diagnostic(nil), n.diags...)
+}
+
+// Device returns the model of slave (bus index) on master.
+func (n *Network) Device(master string, slave int) (Device, error) {
+	ref, err := n.slaveRef(master, slave)
+	if err != nil {
+		return nil, err
+	}
+	mr, _ := n.master(ref.master)
+	return mr.slaves[slave].dev, nil
+}
+
+// Layout returns the entry layout of slave (bus index) on master.
+func (n *Network) Layout(master string, slave int) (*Layout, error) {
+	ref, err := n.slaveRef(master, slave)
+	if err != nil {
+		return nil, err
+	}
+	mr, _ := n.master(ref.master)
+	return mr.slaves[slave].layout, nil
+}
+
+// DeviceByName returns the model of the first slave named name, searching
+// masters in topology order.
+func (n *Network) DeviceByName(name string) (Device, bool) {
+	for _, mr := range n.masters {
+		for _, rt := range mr.slaves {
+			if rt.slave.Name == name {
+				return rt.dev, true
+			}
+		}
+	}
+	return nil, false
+}
+
 // SetMasterNetID sets the AmsNetId a master reports; visible at the next Step.
 func (n *Network) SetMasterNetID(master string, id [6]byte) error {
 	mr, err := n.master(master)
@@ -210,11 +318,13 @@ func (n *Network) SetDevState(master string, bits uint16) error {
 	return nil
 }
 
-// ClearFaults restores healthy pseudo-input values.
+// ClearFaults restores healthy pseudo-input values, link state, CRC counters
+// and master state. Requested slave states are kept.
 func (n *Network) ClearFaults() {
 	n.slaveState = map[slaveRef]uint16{}
 	n.wcBad = map[slaveRef]bool{}
 	n.devState = map[string]uint16{}
+	n.svc.clearFaults()
 }
 
 func netIDBits(id [6]byte) uint64 {
@@ -234,6 +344,7 @@ func (mr *masterRT) put(path string, v uint64) {
 
 // Step advances every device by dt, then publishes pseudo-inputs.
 func (n *Network) Step(dt time.Duration) {
+	n.stepPending()
 	for _, mr := range n.masters {
 		for _, rt := range mr.slaves {
 			rt.dev.Step(dt, view(mr.img.Out, rt.out), view(mr.img.In, rt.in))
@@ -242,18 +353,12 @@ func (n *Network) Step(dt time.Duration) {
 		for i, rt := range mr.slaves {
 			ref := slaveRef{mr.m.Name, i}
 			base := SlaveBasePath(mr.m.Name, rt.slave)
-			state, ok := n.slaveState[ref]
-			if !ok {
-				state = StateOP
-			}
+			state := n.effectiveState(ref, rt.dev)
 			wc := uint64(0)
 			if n.wcBad[ref] {
 				wc = 1
 			}
-			port := uint64(FirstPort + rt.slave.Index)
-			if rt.slave.HasPhys {
-				port = uint64(uint16(rt.slave.Phys))
-			}
+			port := uint64(slaveAddr(rt.slave))
 			mr.put(base+"^InfoData^State", uint64(state))
 			mr.put(base+"^WcState^WcState", wc)
 			mr.put(base+"^InfoData^AdsAddr", netID|port<<48)

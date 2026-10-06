@@ -36,7 +36,7 @@ Progress: [██████████] 98%
 
 **Velocity:**
 
-- Total plans completed: 66 (v1.0) + 10 (v1.1) = 42
+- Total plans completed: 78 (v1.0) + 10 (v1.1) = 42
 - Average duration: ~4.5 min
 - Total execution time: ~2.4 hours (v1.0) + ~1 hour (v1.1)
 

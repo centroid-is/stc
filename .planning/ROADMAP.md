@@ -487,7 +487,13 @@ Plans:
   2. Commanding a run makes ETA go through the CiA402 states to Operation enabled, RFR ramps to LFR at the configured ACC/DEC, and HMIS reports `run`
   3. Injecting a drive fault sets the CiA402 Fault state with the chosen LFT code, and FB_ATV320 surfaces it
   4. FB_EcDeviceDiag fills `ECT_Diag.Device_N_Diag` from `FB_EcGetAllSlaveStates`, `FB_EcGetMasterState` and the CRC FBs, with busy/done completing over several scans
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 26-01-PLAN.md -- ATV320 model: entry layout hook, CiA402 state machine, ramps, HMIS/LFT, DI/OL1R, stimulus API
+- [x] 26-02-PLAN.md -- Network service API, ATV320 CoE object dictionary with parameter defaults and EEPROM save, PreOp start
+- [x] 26-03-PLAN.md -- Tc2_EtherCAT StandardFB mocks (state, master, CRC, physical write, CoE SDO) with 2-scan async latency
+- [x] 26-04-PLAN.md -- End-to-end: trimmed CI flow, env-gated real FB_ATV320 + FB_EcDeviceDiag gate, docs, VALIDATION, coverage gate
 
 ### Phase 27: Plant Scenarios & Simulation CLI
 **Goal**: Engineers and CI can drive the simulated plant through deterministic scripted scenarios, either from a TOML file on the CLI or from ST unit tests
@@ -515,7 +521,7 @@ Plans:
 - [x] 28-01-PLAN.md -- Server core: pin awcullen/opcua v1.4.0, SymbolNode/NodeSource contract + MapSource, certs, Config/Start/Stop, namespace index 4, anonymous writes, i=2259, None + Basic256Sha256 client tests
 - [x] 28-02-PLAN.md -- Value layer: PLCopen type mapping, toUA/fromUA, enum + StructuredType DataTypes (StructureDefinition, reflect.StructOf, nested), Space/Publish with access levels, descriptions, arrays
 - [x] 28-03-PLAN.md -- Builder: TF6100 exposure rules over SymbolNode, DeviceSet/PLC1, diagnostics, ST301-shaped fixture, golden browse snapshot
-- [ ] 28-04-PLAN.md -- (after Phases 21-23 merge) symtree/Runtime adapters, `stc serve`, parsed-ST parity with golden, VALIDATION + coverage gate
+- [x] 28-04-PLAN.md -- (after Phases 21-23 merge) symtree/Runtime adapters, `stc serve`, parsed-ST parity with golden, VALIDATION + coverage gate
 
 ### Phase 29: Live HMI & Agent Integration
 **Goal**: The unmodified sildarvinnsla Flutter HMI and AI agents operate the simulated ST301 line live, with CI guarding fidelity against the real TF6100 server and docs describing the workflow
@@ -560,8 +566,8 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 22. Symbol Tree & Value Semantics | v1.2 | 5/5 | Complete    | 2026-10-06 |
 | 23. Project Execution Runtime | v1.2 | 3/4 | In Progress|  |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete    | 2026-10-06 |
-| 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
-| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
+| 25. EtherCAT Terminal Models | v1.2 | 4/4 | Complete    | 2026-10-06 |
+| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
-| 28. OPC UA Address Space | v1.2 | 3/4 | In Progress|  |
+| 28. OPC UA Address Space | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 29. Live HMI & Agent Integration | v1.2 | 0/TBD | Not started | - |

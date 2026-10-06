@@ -22,7 +22,8 @@ func (n *Attribute) Children() []Node { return nil }
 // String renders the attribute in canonical form. Name and value are
 // single-quoted, or double-quoted when DoubleQuoted is set so a formatter
 // never turns an ignored attribute into an active one. Every occurrence of
-// the quote character is doubled, so the output cannot close the quoted
+// the quote character is doubled (IEC $ escapes are copied verbatim), so
+// the output cannot close the quoted
 // string early. The lexer ends a
 // pragma at the first closing brace regardless of quotes, so a closing brace
 // in a programmatically built name or value is replaced by a closing
@@ -44,16 +45,37 @@ func (n *Attribute) String() string {
 	return b.String()
 }
 
-var attrEscaper = strings.NewReplacer("'", "''", "}", ")")
+func quoteAttr(s string) string { return quoteAttrWith(s, '\'') }
 
-func quoteAttr(s string) string {
-	return "'" + attrEscaper.Replace(s) + "'"
-}
+func quoteAttrDouble(s string) string { return quoteAttrWith(s, '"') }
 
-var attrEscaperDouble = strings.NewReplacer(`"`, `""`, "}", ")")
-
-func quoteAttrDouble(s string) string {
-	return `"` + attrEscaperDouble.Replace(s) + `"`
+// quoteAttrWith quotes s with q. The parser keeps IEC escapes ($', $$, $N)
+// raw, so a "$x" pair is copied verbatim and its quote is not doubled; a
+// trailing lone '$' becomes "$$" (the same character once unescaped) so it
+// cannot swallow the closing quote.
+func quoteAttrWith(s string, q byte) string {
+	var b strings.Builder
+	b.WriteByte(q)
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '$' && i+1 < len(s):
+			b.WriteByte(c)
+			b.WriteByte(s[i+1])
+			i++
+		case c == '$':
+			b.WriteString("$$")
+		case c == q:
+			b.WriteByte(q)
+			b.WriteByte(q)
+		case c == '}':
+			b.WriteByte(')')
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte(q)
+	return b.String()
 }
 
 // HasAttribute reports whether attrs contains an attribute with the given

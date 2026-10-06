@@ -12,6 +12,7 @@ import (
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/diag"
 	"github.com/centroid-is/stc/pkg/ecat"
+	_ "github.com/centroid-is/stc/pkg/ecat/devices" // registers device models into ecat.DefaultRegistry
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/spf13/cobra"
 )

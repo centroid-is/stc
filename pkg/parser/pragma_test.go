@@ -33,6 +33,10 @@ func TestAttributeText(t *testing.T) {
 		{"leading space and tab", "{ \tattribute 'x'}", "x", "", false, true},
 		{"empty value", "{attribute 'x' := ''}", "x", "", true, true},
 		{"double quoted value with doubling", `{attribute "x" := "a""b"}`, "x", `a"b`, true, true},
+		{"IEC dollar escapes kept raw", "{attribute 'OPC.UA.DA.Description' := 'line $'1$' ($$ counted)'}",
+			"OPC.UA.DA.Description", "line $'1$' ($$ counted)", true, true},
+		{"dollar escape in double quotes", `{attribute "x" := "a$"b"}`, "x", `a$"b`, true, true},
+		{"dollar before closing quote", "{attribute 'x' := 'a$'}", "", "", false, false},
 		{"warning pragma", "{warning disable C0139}", "", "", false, false},
 		{"region pragma", `{region "x"}`, "", "", false, false},
 		{"attribute without name", "{attribute}", "", "", false, false},
@@ -71,6 +75,8 @@ func TestAttributeTextRoundTrip(t *testing.T) {
 		"{attribute 'TcLinkTo' := 'TIID^Device 1 (EtherCAT)^Term 2 (EL1008)^Channel 1^Input'}",
 		"{attribute 'OPC.UA.DA.Description' := 'controller''s — count'}",
 		`{attribute "qualified_only"}`,
+		"{attribute 'OPC.UA.DA.Description' := 'line $'1$' ($$ counted) it''s'}",
+		`{attribute "x" := "a$"b ""c"""}`,
 	} {
 		name, value, hasValue, dq, ok := parseAttributeText(text)
 		require.True(t, ok, text)

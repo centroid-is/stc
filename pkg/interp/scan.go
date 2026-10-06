@@ -38,6 +38,7 @@ type ScanCycleEngine struct {
 	ioTable    *iomap.IOTable // I/O process image table
 	ioBindings []IOBinding    // AT-addressed variable bindings
 	ioBinder   *IOBinder      // EtherCAT TcLinkTo bindings, nil when unused
+	ecat       *ecatServices  // Tc2_EtherCAT mock backend, nil when unused
 
 	initialized bool
 }
@@ -100,6 +101,9 @@ func (e *ScanCycleEngine) tick(dt time.Duration, advance bool) error {
 	}
 	if e.ioBinder != nil {
 		e.ioBinder.preScan(dt)
+	}
+	if e.ecat != nil {
+		e.ecat.preScan(dt, e.ioBinder)
 	}
 
 	// 1. Copy inputs into env
