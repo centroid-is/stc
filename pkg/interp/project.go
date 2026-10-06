@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
+	"github.com/centroid-is/stc/pkg/iomap"
 )
 
 // DefaultTaskName and DefaultTaskCycle describe the task LoadProject creates
@@ -64,6 +65,10 @@ type Project struct {
 	base   time.Duration
 	clock  time.Duration
 	binder *IOBinder
+	// io is the process image shared by every engine and the AT slots.
+	io    *iomap.IOTable
+	files []*ast.SourceFile // library files then project files
+	slots []ioSlot
 }
 
 // LoadProject registers spec.LibraryFiles and then spec.Files on one
@@ -84,7 +89,11 @@ func LoadProject(spec ProjectSpec) (*Project, error) {
 		specs = []TaskSpec{{Name: DefaultTaskName, Cycle: DefaultTaskCycle, Programs: []string{"MAIN"}}}
 	}
 
-	p := &Project{rt: rt}
+	p := &Project{rt: rt, io: iomap.NewIOTable()}
+	p.files = append(append(p.files, spec.LibraryFiles...), spec.Files...)
+	for _, pr := range rt.programs {
+		pr.engine.ioTable = p.io
+	}
 	var errs []error
 	owner := make(map[string]string) // upper program name -> task name
 	for _, ts := range specs {
@@ -121,6 +130,7 @@ func LoadProject(spec ProjectSpec) (*Project, error) {
 		}
 		return a.Name < b.Name
 	})
+	p.allocIO()
 	return p, nil
 }
 
@@ -174,7 +184,8 @@ func (p *Project) Clock() time.Duration {
 // the current clock runs, in priority then name order, each of its PROGRAMs
 // in list order with dt equal to the task cycle; the clock then advances by
 // BaseTick. An attached IOBinder steps once before the first due task and
-// copies outputs once after the last. Engine errors do not stop other tasks;
+// copies outputs once after the last; the Project's AT slots (see IOSlot)
+// are copied in and out at the same points. Engine errors do not stop other tasks;
 // they are returned joined with the task and program names. Tick holds the
 // Runtime mutex, so it is serialised with Runtime Get and Set.
 func (p *Project) Tick() error {
@@ -192,6 +203,7 @@ func (p *Project) Tick() error {
 			if p.binder != nil {
 				p.binder.preScan(p.base)
 			}
+			p.syncIOIn()
 		}
 		// FB timers measure the interpreter clock between their runs, so
 		// it is the end of this tick; dt is the task cycle for first runs.
@@ -205,8 +217,11 @@ func (p *Project) Tick() error {
 		t.runs++
 		t.nextDue += t.spec.Cycle
 	}
-	if ran && p.binder != nil {
-		p.binder.postScan()
+	if ran {
+		p.syncIOOut()
+		if p.binder != nil {
+			p.binder.postScan()
+		}
 	}
 	p.clock = now
 	p.rt.interp.clock = now
@@ -245,4 +260,5 @@ func (p *Project) SetIOBinder(b *IOBinder) {
 		b.resolved = false
 	}
 	p.binder = b
+	p.allocIO() // wildcards claimed by the binder lose their auto slots
 }

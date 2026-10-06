@@ -14,6 +14,10 @@ import (
 type IOBinding struct {
 	VarName string // uppercase variable name in env
 	Address iomap.IOAddress
+	// Spec is the declared type. With it the variable is read and written
+	// by its IEC type through the shared ioCodec; without it (nil) the
+	// address width decides (BYTE, INT, DINT).
+	Spec ast.TypeSpec
 }
 
 // ScanCycleEngine implements the PLC scan cycle model:
@@ -91,7 +95,7 @@ func (e *ScanCycleEngine) tick(dt time.Duration, advance bool) error {
 	// 0. Copy I/O table values into env for AT-bound variables (inputs + memory)
 	for _, b := range e.ioBindings {
 		if b.Address.Area == iomap.AreaInput || b.Address.Area == iomap.AreaMemory {
-			e.env.Set(b.VarName, e.readIOValue(b.Address))
+			e.env.Set(b.VarName, e.readIOValue(b))
 		}
 	}
 	if e.ioBinder != nil {
@@ -130,7 +134,7 @@ func (e *ScanCycleEngine) tick(dt time.Duration, advance bool) error {
 	for _, b := range e.ioBindings {
 		if b.Address.Area == iomap.AreaOutput || b.Address.Area == iomap.AreaMemory {
 			if v, ok := e.env.Get(b.VarName); ok {
-				e.writeIOValue(b.Address, v)
+				e.writeIOValue(b, v)
 			}
 		}
 	}
@@ -144,8 +148,21 @@ func (e *ScanCycleEngine) tick(dt time.Duration, advance bool) error {
 	return nil
 }
 
-// readIOValue reads a value from the IOTable based on the address size.
-func (e *ScanCycleEngine) readIOValue(addr iomap.IOAddress) Value {
+// readIOValue reads b's value from the IOTable. A binding with a declared
+// type decodes by that type (an INT at %IW0 holding 0xFFFB reads -5, a REAL
+// at %ID4 reads its IEEE value); a declared type the codec cannot copy
+// (STRING) keeps its current value. Without a declared type the address
+// width decides.
+func (e *ScanCycleEngine) readIOValue(b IOBinding) Value {
+	if b.Spec != nil {
+		c := ioCodec{interp: e.interp}
+		cur, _ := e.env.Get(b.VarName)
+		if !c.codecSupports(cur, b.Spec, 0) {
+			return cur
+		}
+		return ioDecodeAt(c, e.ioTable, b.Address, cur, b.Spec)
+	}
+	addr := b.Address
 	switch addr.Size {
 	case iomap.SizeBit:
 		return BoolValue(e.ioTable.GetBit(addr.Area, addr.ByteOffset, addr.BitOffset))
@@ -159,8 +176,18 @@ func (e *ScanCycleEngine) readIOValue(addr iomap.IOAddress) Value {
 	return Value{}
 }
 
-// writeIOValue writes a value to the IOTable based on the address size.
-func (e *ScanCycleEngine) writeIOValue(addr iomap.IOAddress, v Value) {
+// writeIOValue writes v to the IOTable at b's address: by declared type
+// when b has one (types the codec cannot copy write nothing), else by
+// address width.
+func (e *ScanCycleEngine) writeIOValue(b IOBinding, v Value) {
+	if b.Spec != nil {
+		c := ioCodec{interp: e.interp}
+		if c.codecSupports(v, b.Spec, 0) {
+			ioEncodeAt(c, e.ioTable, b.Address, v, b.Spec)
+		}
+		return
+	}
+	addr := b.Address
 	switch addr.Size {
 	case iomap.SizeBit:
 		e.ioTable.SetBit(addr.Area, addr.ByteOffset, addr.BitOffset, v.Bool)
@@ -171,6 +198,45 @@ func (e *ScanCycleEngine) writeIOValue(addr iomap.IOAddress, v Value) {
 	case iomap.SizeDWord:
 		e.ioTable.SetDWord(addr.Area, addr.ByteOffset, uint32(v.Int))
 	}
+}
+
+// ioByteLen is the number of image bytes a value of cur's shape occupies at
+// a slot starting at bit bitOff of its first byte (at least one).
+func ioByteLen(c ioCodec, cur Value, spec ast.TypeSpec, bitOff int) int {
+	n := (bitOff + c.bitSize(cur, spec) + 7) / 8
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// ioWindow returns the table bytes of area from off for n bytes, growing
+// the area first; writes through it land in the table.
+func ioWindow(t *iomap.IOTable, area iomap.Area, off, n int) []byte {
+	t.GetByte(area, off+n-1) // grows the area to cover the window
+	var s []byte
+	switch area {
+	case iomap.AreaOutput:
+		s = t.Q
+	case iomap.AreaMemory:
+		s = t.M
+	default:
+		s = t.I
+	}
+	return s[off : off+n]
+}
+
+// ioDecodeAt decodes cur's declared type from the table at addr.
+func ioDecodeAt(c ioCodec, t *iomap.IOTable, addr iomap.IOAddress, cur Value, spec ast.TypeSpec) Value {
+	buf := ioWindow(t, addr.Area, addr.ByteOffset, ioByteLen(c, cur, spec, addr.BitOffset))
+	return c.decodeBytes(cur, spec, buf, addr.BitOffset)
+}
+
+// ioEncodeAt encodes v by declared type into the table at addr; bits
+// outside the value's own span are left untouched.
+func ioEncodeAt(c ioCodec, t *iomap.IOTable, addr iomap.IOAddress, v Value, spec ast.TypeSpec) {
+	buf := ioWindow(t, addr.Area, addr.ByteOffset, ioByteLen(c, v, spec, addr.BitOffset))
+	c.encodeBytes(v, spec, buf, addr.BitOffset)
 }
 
 // SetInput stages an input value to be copied into the program env on the
@@ -265,6 +331,7 @@ func (e *ScanCycleEngine) initializeEnv() {
 						e.ioBindings = append(e.ioBindings, IOBinding{
 							VarName: upper,
 							Address: addr,
+							Spec:    vd.Type,
 						})
 					}
 				}
