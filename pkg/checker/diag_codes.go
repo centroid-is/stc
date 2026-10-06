@@ -32,6 +32,12 @@ const (
 	CodeGVLQualifiedOnly = "SEMA033" // bare access to a qualified_only GVL variable
 	CodeAssignToConstant = "SEMA034" // assignment to a VAR_GLOBAL CONSTANT member
 
+	// Phase 20: TwinCAT expression semantics
+	CodeBitAccess      = "SEMA035" // bit access on a non-integer type, or bit index out of range
+	CodeEnumRule       = "SEMA036" // bare use of a qualified_only enum value, strict enum misuse
+	CodeUndeclaredType = "SEMA037" // undeclared type name
+	CodeRefThisSuper   = "SEMA038" // invalid REF=, THIS or SUPER use
+
 	// Vendor warnings
 	CodeVendorOOP       = "VEND001" // OOP not supported by target vendor
 	CodeVendorPointer   = "VEND002" // POINTER TO not supported

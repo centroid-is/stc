@@ -402,6 +402,13 @@ func (c *Checker) checkCallStmt(s *ast.CallStmt) {
 	// Resolve callee - should be an FB instance
 	calleeType := c.checkExpr(s.Callee)
 	if calleeType == types.Invalid {
+		// The callee is already reported (undeclared name or type). Still
+		// check the argument values so their variables count as used.
+		for _, arg := range s.Args {
+			if arg.Value != nil {
+				c.checkExpr(arg.Value)
+			}
+		}
 		return
 	}
 

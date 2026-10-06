@@ -506,3 +506,73 @@ END_FUNCTION_BLOCK
 	// Should produce redeclaration error -- mock cannot override user code
 	assert.True(t, diags.HasErrors(), "mock override of user code should produce error")
 }
+
+// TestResolveWithoutPrePass covers the resolveX entry points called directly,
+// without CollectDeclarations' pre-pass: each allocates its own type object.
+func TestResolveWithoutPrePass(t *testing.T) {
+	file := parseFile("PROGRAM P\nEND_PROGRAM\nFUNCTION_BLOCK FB\nEND_FUNCTION_BLOCK\nFUNCTION F : INT\nF := 1;\nEND_FUNCTION\n" +
+		"TYPE S :\nSTRUCT\n    a : INT;\nEND_STRUCT\nEND_TYPE\nTYPE E : (one, two); END_TYPE\n")
+	table := symbols.NewTable()
+	r := NewResolver(table, diag.NewCollector())
+	r.fbs = make(map[string]*fbEntry)
+	r.resolveProgram(file.Declarations[0].(*ast.ProgramDecl), false)
+	r.resolveFunctionBlock(file.Declarations[1].(*ast.FunctionBlockDecl), false)
+	r.resolveFunction(file.Declarations[2].(*ast.FunctionDecl), false)
+	r.resolveTypeDecl(file.Declarations[3].(*ast.TypeDecl), false)
+	r.resolveTypeDecl(file.Declarations[4].(*ast.TypeDecl), false)
+
+	assert.Equal(t, "P", table.LookupGlobal("P").Type.(*types.FunctionBlockType).Name)
+	assert.Equal(t, "FB", table.LookupGlobal("FB").Type.(*types.FunctionBlockType).Name)
+	assert.Equal(t, types.TypeINT, table.LookupGlobal("F").Type.(*types.FunctionType).ReturnType)
+	assert.Equal(t, "S", table.LookupGlobal("S").Type.(*types.StructType).Name)
+	assert.Equal(t, "E", table.LookupGlobal("E").Type.(*types.EnumType).Name)
+}
+
+// TestResolveLibraryOverrides covers the redeclaration rules of every POU
+// kind against library symbols and the standard FBs.
+func TestResolveLibraryOverrides(t *testing.T) {
+	libSrc := "PROGRAM LP\nEND_PROGRAM\nPROGRAM LP\nEND_PROGRAM\n" +
+		"FUNCTION LF : INT\nLF := 1;\nEND_FUNCTION\nFUNCTION LF : INT\nLF := 2;\nEND_FUNCTION\n" +
+		"INTERFACE LI\nEND_INTERFACE\nINTERFACE LI\nEND_INTERFACE\n" +
+		"FUNCTION TOF : BOOL\nTOF := TRUE;\nEND_FUNCTION\n" +
+		"INTERFACE TP\nEND_INTERFACE\n" +
+		"PROGRAM CTU\nEND_PROGRAM\n" +
+		"TYPE R_TRIG : INT; END_TYPE\n"
+	userSrc := "PROGRAM LP\nEND_PROGRAM\nFUNCTION LF : BOOL\nLF := TRUE;\nEND_FUNCTION\nINTERFACE LI\nEND_INTERFACE\n"
+	ds, table := runGVL(t, []gvlFile{{"main.st", userSrc}}, ResolveOpts{LibraryFiles: parseGVLFiles(t, []gvlFile{{"lib.st", libSrc}})})
+	assert.Empty(t, errorsOf(ds), "library duplicates are ignored; user code replaces library symbols")
+
+	assert.False(t, table.LookupGlobal("LP").IsLibrary)
+	assert.Equal(t, types.TypeBOOL, table.LookupGlobal("LF").Type.(*types.FunctionType).ReturnType)
+	assert.False(t, table.LookupGlobal("LI").IsLibrary)
+	assert.Equal(t, symbols.KindFunction, table.LookupGlobal("TOF").Kind, "library FUNCTION replaces standard TOF")
+	assert.Equal(t, symbols.KindInterface, table.LookupGlobal("TP").Kind, "library INTERFACE replaces standard TP")
+	assert.Equal(t, symbols.KindProgram, table.LookupGlobal("CTU").Kind, "library PROGRAM replaces standard CTU")
+	assert.Equal(t, symbols.KindType, table.LookupGlobal("R_TRIG").Kind, "library TYPE replaces standard R_TRIG")
+}
+
+func TestResolveEdgeCases(t *testing.T) {
+	t.Run("TYPE declaration without a name is skipped", func(t *testing.T) {
+		file := &ast.SourceFile{Declarations: []ast.Declaration{&ast.TypeDecl{Type: &ast.StructType{}}}}
+		table := symbols.NewTable()
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{file})
+		assert.Empty(t, diags.All())
+	})
+
+	t.Run("EXTENDS a FUNCTION is ignored", func(t *testing.T) {
+		ds := runAction(t, "FUNCTION F : INT\nF := 1;\nEND_FUNCTION\nFUNCTION_BLOCK FB_X EXTENDS F\nEND_FUNCTION_BLOCK\n")
+		assert.Empty(t, errorsOf(ds))
+	})
+
+	t.Run("namespace-qualified symbol registered by a loader", func(t *testing.T) {
+		table := symbols.NewTable()
+		qualified := &types.StructType{Name: "Lib.ST_Q"}
+		require.NoError(t, table.GlobalScope().Insert(&symbols.Symbol{Name: "Lib.ST_Q", Kind: symbols.KindType, Type: qualified, IsLibrary: true}))
+		file := parseFile("PROGRAM P\nVAR\n    q : Lib.ST_Q;\nEND_VAR\nEND_PROGRAM\n")
+		diags := diag.NewCollector()
+		NewResolver(table, diags).CollectDeclarations([]*ast.SourceFile{file})
+		assert.Empty(t, diags.All())
+		assert.Same(t, qualified, table.LookupPOU("P").LookupLocal("q").Type)
+	})
+}

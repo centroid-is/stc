@@ -58,6 +58,18 @@ var elementaryTypes = map[string]Type{
 	"TOD":           TypeTOD,
 	"CHAR":          TypeCHAR,
 	"WCHAR":         TypeWCHAR,
+
+	// IEC 61131-3 3rd edition long date and time types. stc has no 64-bit
+	// time kinds yet, so each maps to the kind of its short counterpart.
+	"LTIME":          TypeTIME,
+	"LDATE":          TypeDATE,
+	"LTIME_OF_DAY":   TypeTOD,
+	"LTOD":           TypeTOD,
+	"LDATE_AND_TIME": TypeDT,
+	"LDT":            TypeDT,
+
+	// VOID is the return type of a FUNCTION without a result (CODESYS).
+	"VOID": TypeVOID,
 }
 
 // LookupElementaryType resolves a type name (case-insensitive) to its Type constant.

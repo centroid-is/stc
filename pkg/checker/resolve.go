@@ -56,6 +56,13 @@ type Resolver struct {
 	probing bool
 	missed  bool
 
+	// inLibrary is set while library declarations are resolved: unknown
+	// type names inside vendor stubs are not reported.
+	inLibrary bool
+	// reportedTypes deduplicates SEMA037: resolveTypeSpec runs twice on the
+	// var declarations of FBs and FUNCTIONs (scope and parameter passes).
+	reportedTypes map[*ast.NamedType]bool
+
 	// std maps an upper-cased standard FB name to its symbol.
 	std map[string]*symbols.Symbol
 	// fbs maps an upper-cased FUNCTION_BLOCK name to the declaration that
@@ -65,9 +72,10 @@ type Resolver struct {
 }
 
 type fbEntry struct {
-	decl  *ast.FunctionBlockDecl
-	scope *symbols.Scope
-	typ   *types.FunctionBlockType
+	decl      *ast.FunctionBlockDecl
+	scope     *symbols.Scope
+	typ       *types.FunctionBlockType
+	isLibrary bool
 }
 
 // fileGroup is a set of source files that share an IsLibrary flag.
@@ -83,7 +91,7 @@ type pendingGVL struct {
 
 // NewResolver creates a new Resolver that populates the given symbol table.
 func NewResolver(table *symbols.Table, diags *diag.Collector) *Resolver {
-	return &Resolver{table: table, diags: diags}
+	return &Resolver{table: table, diags: diags, reportedTypes: make(map[*ast.NamedType]bool)}
 }
 
 // CollectDeclarations walks all source files and registers POU declarations,
@@ -114,10 +122,12 @@ func (r *Resolver) CollectDeclarations(files []*ast.SourceFile, opts ...ResolveO
 
 	r.fbs = make(map[string]*fbEntry)
 	for _, g := range groups {
+		r.inLibrary = g.isLibrary
 		for _, file := range g.files {
 			r.collectFileDeclarations(file, g.isLibrary)
 		}
 	}
+	r.inLibrary = false
 
 	// Inherited scope: every FB now has its own members filled in.
 	r.resolveExtends()
@@ -146,9 +156,6 @@ func (r *Resolver) preRegister(groups []fileGroup) {
 	var order []string
 	for _, g := range groups {
 		for _, file := range g.files {
-			if file == nil {
-				continue
-			}
 			for _, decl := range file.Declarations {
 				name, shell := declShell(decl)
 				if name == "" {
@@ -170,12 +177,14 @@ func (r *Resolver) preRegister(groups []fileGroup) {
 	}
 
 	var pending []*ast.TypeDecl
+	library := make(map[*ast.TypeDecl]bool)
 	for _, key := range order {
 		o := owners[key]
 		if shell, ok := r.shells[o.decl]; ok {
 			r.forward[key] = shell
 		} else if td, ok := o.decl.(*ast.TypeDecl); ok {
 			pending = append(pending, td)
+			library[td] = o.isLibrary
 		}
 	}
 
@@ -185,6 +194,7 @@ func (r *Resolver) preRegister(groups []fileGroup) {
 	// mutually recursive, or naming an unknown type) resolve with
 	// diagnostics in resolveTypeDecl.
 	for len(pending) > 0 {
+		before := len(pending)
 		var next []*ast.TypeDecl
 		for _, td := range pending {
 			if typ, ok := r.probe(td.Type); ok {
@@ -194,11 +204,22 @@ func (r *Resolver) preRegister(groups []fileGroup) {
 				next = append(next, td)
 			}
 		}
-		if len(next) == len(pending) {
+		pending = next
+		if len(next) == before {
 			break
 		}
-		pending = next
 	}
+
+	// Leftover aliases resolve with diagnostics now, so the root cause is
+	// reported once at the alias declaration and later uses of the alias
+	// get its (possibly Invalid) type silently.
+	for _, td := range pending {
+		r.inLibrary = library[td]
+		typ := r.resolveTypeSpec(td.Type)
+		r.aliases[td] = typ
+		r.forward[strings.ToUpper(td.Name.Name)] = typ
+	}
+	r.inLibrary = false
 }
 
 // declShell returns the declared name and a fresh, empty type object for a
@@ -535,7 +556,7 @@ func (r *Resolver) resolveFunctionBlock(d *ast.FunctionBlockDecl, isLibrary bool
 	if _, seen := r.fbs[key]; !seen {
 		r.fbOrder = append(r.fbOrder, key)
 	}
-	r.fbs[key] = &fbEntry{decl: d, scope: pouScope, typ: fbType}
+	r.fbs[key] = &fbEntry{decl: d, scope: pouScope, typ: fbType, isLibrary: isLibrary}
 }
 
 // resolveExtends gives every FUNCTION_BLOCK with EXTENDS the members of its
@@ -565,7 +586,11 @@ func (r *Resolver) resolveExtends() {
 		baseScope := r.table.LookupPOU(baseName)
 		baseSym := r.table.LookupGlobal(baseName)
 		if baseScope == nil || baseSym == nil {
-			return // undeclared base
+			if !e.isLibrary {
+				r.diags.Errorf(astPosToSource(e.decl.Extends.Span().Start), CodeUndeclaredType,
+					"undeclared type '%s'", baseName)
+			}
+			return
 		}
 		baseType, ok := baseSym.Type.(*types.FunctionBlockType)
 		if !ok {
@@ -744,11 +769,11 @@ func (r *Resolver) resolveTypeDecl(d *ast.TypeDecl, isLibrary bool) {
 
 // fbShell returns the pre-registered FunctionBlockType of a PROGRAM or
 // FUNCTION_BLOCK declaration, or a new one when the declaration has none.
-func (r *Resolver) fbShell(d ast.Declaration, name string) *types.FunctionBlockType {
+func (r *Resolver) fbShell(d ast.Declaration, pouName string) *types.FunctionBlockType {
 	if fb, ok := r.shells[d].(*types.FunctionBlockType); ok {
 		return fb
 	}
-	return &types.FunctionBlockType{Name: name}
+	return &types.FunctionBlockType{Name: pouName}
 }
 
 // typeDeclType resolves a TYPE declaration's spec. STRUCT and enum specs
@@ -759,17 +784,15 @@ func (r *Resolver) typeDeclType(d *ast.TypeDecl) types.Type {
 		return typ
 	}
 	resolved := r.resolveTypeSpec(d.Type)
+	// A STRUCT or enum shell exists only for a STRUCT or enum spec, which
+	// resolveTypeSpec always turns into the same Go type.
 	switch sh := r.shells[d].(type) {
 	case *types.StructType:
-		if st, ok := resolved.(*types.StructType); ok {
-			sh.Members = st.Members
-		}
+		sh.Members = resolved.(*types.StructType).Members
 		return sh
 	case *types.EnumType:
-		if et, ok := resolved.(*types.EnumType); ok {
-			sh.BaseType = et.BaseType
-			sh.Values = et.Values
-		}
+		et := resolved.(*types.EnumType)
+		sh.BaseType, sh.Values = et.BaseType, et.Values
 		return sh
 	}
 	return resolved
@@ -839,30 +862,24 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 			return types.Invalid
 		}
 		name := t.Name.Name
-		// Try elementary type first
+		// Lib.Type: the qualified name first, then the bare name.
+		if t.Namespace != nil {
+			if typ, ok := r.lookupTypeName(t.Namespace.Name + "." + name); ok {
+				return typ
+			}
+		}
 		if typ, ok := types.LookupElementaryType(name); ok {
 			return typ
 		}
-		// A declared type: the pre-registered object of the declaration that
-		// owns the name, so forward references get the final, filled type.
-		if typ, ok := r.forward[strings.ToUpper(name)]; ok {
+		if typ, ok := r.lookupTypeName(name); ok {
 			return typ
-		}
-		// Any other global symbol (library symbols registered outside the
-		// pre-pass, such as the standard FBs)
-		if sym := r.table.GlobalScope().Lookup(name); sym != nil {
-			if sym.Type != nil {
-				if typ, ok := sym.Type.(types.Type); ok {
-					return typ
-				}
-			}
 		}
 		if r.probing {
 			r.missed = true
 			return types.Invalid
 		}
-		// Unknown name -- create a placeholder FunctionBlockType.
-		return &types.FunctionBlockType{Name: name}
+		r.reportUndeclaredType(t)
+		return types.Invalid
 
 	case *ast.ArrayType:
 		elemType := r.resolveTypeSpec(t.ElementType)
@@ -920,6 +937,37 @@ func (r *Resolver) resolveTypeSpec(ts ast.TypeSpec) types.Type {
 	}
 
 	return types.Invalid
+}
+
+// lookupTypeName finds a declared type by name: the pre-registered object
+// of the declaration that owns the name (so forward references get the
+// final, filled type), else any global symbol with a type (library symbols
+// registered outside the pre-pass, such as the standard FBs).
+func (r *Resolver) lookupTypeName(name string) (types.Type, bool) {
+	if typ, ok := r.forward[strings.ToUpper(name)]; ok {
+		return typ, true
+	}
+	if sym := r.table.GlobalScope().Lookup(name); sym != nil {
+		if typ, ok := sym.Type.(types.Type); ok {
+			return typ, true
+		}
+	}
+	return nil, false
+}
+
+// reportUndeclaredType reports SEMA037 once per type reference. Names inside
+// library declarations are not reported: a stub may name a type from a
+// library that is not loaded, and the user cannot fix the stub.
+func (r *Resolver) reportUndeclaredType(t *ast.NamedType) {
+	if r.inLibrary || r.reportedTypes[t] {
+		return
+	}
+	r.reportedTypes[t] = true
+	name := t.Name.Name
+	if t.Namespace != nil {
+		name = t.Namespace.Name + "." + name
+	}
+	r.diags.Errorf(astPosToSource(t.Span().Start), CodeUndeclaredType, "undeclared type '%s'", name)
 }
 
 // evalConstInt evaluates a constant integer expression from an AST node.
