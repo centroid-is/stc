@@ -62,35 +62,16 @@ func TestTestProjectErrors(t *testing.T) {
 	}
 }
 
-type simJSON struct {
-	NumCycles int   `json:"num_cycles"`
-	Duration  int64 `json:"duration"`
-	Cycles    []struct {
-		Time int64 `json:"time"`
-	} `json:"cycles"`
-}
-
-func runSimJSON(t *testing.T, args ...string) simJSON {
-	t.Helper()
-	stdout, stderr, code := runStc(t, append([]string{"sim", "--format", "json"}, args...)...)
-	if code != 0 {
-		t.Fatalf("sim %v: exit %d %s", args, code, stderr)
-	}
-	var r simJSON
-	if err := json.Unmarshal([]byte(stdout), &r); err != nil {
-		t.Fatalf("bad JSON: %v\n%s", err, stdout)
-	}
-	return r
-}
-
+// TestSimProjectInline runs a project whose task calls no program: the
+// default 10 ms MAIN task applies and --dt is refused in project mode.
 func TestSimProjectInline(t *testing.T) {
-	r := runSimJSON(t, inlineTsproj, "--cycles", "10")
-	if r.NumCycles != 10 || r.Duration != 200_000_000 || r.Cycles[1].Time-r.Cycles[0].Time != 20_000_000 {
-		t.Errorf("default dt from task: %+v", r)
+	st := runSimProjectJSON(t, inlineTsproj, "--cycles", "10")
+	if st.Cycles != 10 || st.SimTimeNS != 100_000_000 || len(st.Tasks) != 1 || st.Tasks[0].Runs != 10 {
+		t.Errorf("default task: %+v", st)
 	}
-	r = runSimJSON(t, inlineTsproj, "--cycles", "10", "--dt", "5ms")
-	if r.Duration != 50_000_000 {
-		t.Errorf("--dt override: %+v", r)
+	_, stderr, code := runStc(t, "sim", inlineTsproj, "--dt", "5ms")
+	if code == 0 || !strings.Contains(stderr, "--dt is not supported in project mode") {
+		t.Errorf("--dt in project mode: exit %d %s", code, stderr)
 	}
 }
 
@@ -123,24 +104,19 @@ which%[1]s := GVL_Sim.hits;]]></ST></Implementation></POU></TcPlcObject>`, name)
 
 func TestSimProjectTaskProgram(t *testing.T) {
 	p := writeTwoProgramProject(t, "second")
-	stdout, stderr, code := runStc(t, "sim", p, "--cycles", "3", "--format", "json")
-	if code != 0 {
-		t.Fatalf("exit %d %s", code, stderr)
+	st := runSimProjectJSON(t, p, "--cycles", "3", "--get", "Second.whichSecond", "--get", "First.whichFirst")
+	if st.SimTimeNS != 6_000_000 || st.Tasks[0].CycleNS != 2_000_000 {
+		t.Errorf("sim time %d, want 6ms from the 2ms task", st.SimTimeNS)
 	}
-	if !strings.Contains(stdout, "WHICHSECOND") || strings.Contains(stdout, "WHICHFIRST") {
-		t.Errorf("task program not selected:\n%s", stdout)
-	}
-	var r simJSON
-	_ = json.Unmarshal([]byte(stdout), &r)
-	if r.Duration != 6_000_000 {
-		t.Errorf("duration %d, want 6ms from the 2ms task", r.Duration)
+	if st.Get["Second.whichSecond"] != float64(3) || st.Get["First.whichFirst"] != float64(0) {
+		t.Errorf("only the task program runs: %v", st.Get)
 	}
 
-	// A PouCall naming no PROGRAM falls back to the first PROGRAM.
+	// A PouCall naming no PROGRAM fails the load.
 	p = writeTwoProgramProject(t, "Missing")
-	stdout, _, code = runStc(t, "sim", p, "--cycles", "1", "--format", "json")
-	if code != 0 || !strings.Contains(stdout, "WHICHFIRST") {
-		t.Errorf("fallback: exit %d %s", code, stdout)
+	_, stderr, code := runStc(t, "sim", p, "--cycles", "1")
+	if code == 0 || !strings.Contains(stderr, "unknown PROGRAM Missing") {
+		t.Errorf("unknown task program: exit %d %s", code, stderr)
 	}
 }
 
@@ -156,7 +132,7 @@ func TestSimProjectErrors(t *testing.T) {
 	writeTestFile(t, p, `<Project><ItemGroup><Compile Include="F.TcPOU" /></ItemGroup></Project>`)
 	writeTestFile(t, filepath.Join(dir, "F.TcPOU"), `<TcPlcObject><POU Name="F"><Declaration><![CDATA[FUNCTION F : INT]]></Declaration><Implementation><ST><![CDATA[F := 1;]]></ST></Implementation></POU></TcPlcObject>`)
 	_, stderr, code = runStc(t, "sim", p)
-	if code == 0 || !strings.Contains(stderr, "no PROGRAM") {
+	if code == 0 || !strings.Contains(stderr, "no PROGRAM MAIN") {
 		t.Errorf("no program: exit %d %s", code, stderr)
 	}
 }

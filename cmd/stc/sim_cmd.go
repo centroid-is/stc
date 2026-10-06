@@ -2,38 +2,45 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/centroid-is/stc/pkg/ast"
 	"github.com/centroid-is/stc/pkg/interp"
 	"github.com/centroid-is/stc/pkg/pipeline"
 	"github.com/centroid-is/stc/pkg/sim"
-	"github.com/centroid-is/stc/pkg/twincat"
 	"github.com/spf13/cobra"
 )
 
 func newSimCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "sim <file.st|x.tsproj|x.plcproj>",
-		Short: "Run closed-loop simulation of an ST program",
+		Use:   "sim <file.st | x.tsproj | x.plcproj | file.st...>",
+		Short: "Run closed-loop simulation of an ST program or a whole project",
 		Long: `Run a deterministic simulation of a Structured Text program with waveform
 injection and optional plant model feedback. The simulation runs the program's
 scan cycle for a specified number of iterations at a fixed time step.
 
-Given a TwinCAT project, the program called by the first task runs (or the
-first PROGRAM when the task calls none) on one runtime with every project
-POU, GVL and library stub, and --dt defaults to the task cycle time.`,
-		Args: cobra.ExactArgs(1),
+Project mode runs a whole project with its task schedule: every task's
+PROGRAMs at the task cycle on one runtime with every POU, GVL and library
+stub. It applies to a .tsproj/.plcproj, to several .st files (default task:
+MAIN every 10ms), to --project, and whenever --io, --persist, --realtime or
+--duration is given. --cycles then counts base ticks (the GCD of the task
+cycles) and the JSON result has cycles, sim_time_ns, tasks (runs, overruns),
+get, diagnostics and warnings. --realtime runs free-running against the wall
+clock for --duration (or until SIGINT/SIGTERM) instead of --cycles.
+--wave and --dt apply to single-file mode only.`,
 		RunE: runSim,
 	}
 
-	cmd.Flags().Int("cycles", 100, "Number of scan cycles to run")
-	cmd.Flags().String("dt", "10ms", "Cycle time as Go duration (e.g., 10ms, 100us)")
+	cmd.Flags().Int("cycles", 100, "Number of scan cycles to run (base ticks in project mode)")
+	cmd.Flags().String("dt", "10ms", "Cycle time as Go duration (e.g., 10ms, 100us); single-file mode")
 	cmd.Flags().StringSlice("wave", nil, `Waveform bindings: INPUT_NAME:KIND:AMPLITUDE:FREQUENCY
   KIND: step, ramp, sine, square
   Example: --wave "SENSOR:sine:100.0:0.5"`)
@@ -42,12 +49,31 @@ POU, GVL and library stub, and --dt defaults to the task cycle time.`,
   such as T#5s or 16#FF. Example: --set MAIN.limit=5 --set GVL.x.p_cmd_Start=true`)
 	cmd.Flags().StringArray("get", nil, "Print a variable after the last cycle: PATH (repeatable)")
 	cmd.Flags().StringSliceP("define", "D", nil, "Define preprocessor symbols (can be repeated)")
+	cmd.Flags().StringSlice("project", nil, "Run in project mode: a .tsproj/.plcproj or .st files (alternative to positional arguments)")
+	cmd.Flags().Bool("realtime", false, "Project mode: run free-running against the wall clock for --duration (or until SIGINT/SIGTERM)")
+	cmd.Flags().Duration("duration", 0, "Wall time to run with --realtime (0 = until SIGINT/SIGTERM)")
+	addProjectRunFlags(cmd)
 
 	return cmd
 }
 
+// simProjectFlags are the flags that select project mode on their own.
+var simProjectFlags = []string{"project", "io", "persist", "realtime", "duration"}
+
+// isSimProjectMode reports whether `stc sim` runs args as a project.
+func isSimProjectMode(cmd *cobra.Command, args []string) bool {
+	if len(args) > 1 || hasProjectArg(args) {
+		return true
+	}
+	for _, f := range simProjectFlags {
+		if cmd.Flags().Changed(f) {
+			return true
+		}
+	}
+	return false
+}
+
 func runSim(cmd *cobra.Command, args []string) error {
-	filename := args[0]
 	format, _ := cmd.Flags().GetString("format")
 
 	defineFlags, _ := cmd.Flags().GetStringSlice("define")
@@ -58,25 +84,22 @@ func runSim(cmd *cobra.Command, args []string) error {
 	}
 	defines["STC_SIM"] = true
 
-	var files, libs []*ast.SourceFile
-	var prog *ast.ProgramDecl
-	var taskDt time.Duration
-	if isProjectPath(filename) {
-		u, l, p, dt, err := loadSimProject(filename, defines)
-		if err != nil {
-			return err
-		}
-		files, libs, prog, taskDt = u, l, p, dt
-	} else {
-		// Read and parse the ST file (with preprocessing)
-		content, err := os.ReadFile(filename)
-		if err != nil {
-			return fmt.Errorf("cannot read file: %w", err)
-		}
-		result := pipeline.Parse(filename, string(content), defines)
-		files = []*ast.SourceFile{result.File}
-		prog = selectProgram(files, nil)
+	if isSimProjectMode(cmd, args) {
+		return runSimProject(cmd, args, defines, format)
 	}
+	if len(args) != 1 {
+		return fmt.Errorf("accepts 1 arg(s), received %d", len(args))
+	}
+	filename := args[0]
+
+	// Read and parse the ST file (with preprocessing)
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("cannot read file: %w", err)
+	}
+	result := pipeline.Parse(filename, string(content), defines)
+	files := []*ast.SourceFile{result.File}
+	prog := selectProgram(files, nil)
 	if prog == nil {
 		return fmt.Errorf("no PROGRAM declaration found in %s", filename)
 	}
@@ -88,9 +111,9 @@ func runSim(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// All TYPEs, FBs, FUNCTIONs, GVLs and PROGRAMs of the file (or project,
-	// with its library stubs) live on one runtime; the simulation drives prog.
-	rt, err := interp.NewRuntime(files, interp.RuntimeOpts{LibraryFiles: libs})
+	// All TYPEs, FBs, FUNCTIONs, GVLs and PROGRAMs of the file live on one
+	// runtime; the simulation drives prog.
+	rt, err := interp.NewRuntime(files)
 	if err != nil {
 		return fmt.Errorf("initialisation error: %w", err)
 	}
@@ -106,9 +129,6 @@ func runSim(cmd *cobra.Command, args []string) error {
 	dt, err := time.ParseDuration(dtStr)
 	if err != nil {
 		return fmt.Errorf("invalid --dt value %q: %w", dtStr, err)
-	}
-	if taskDt > 0 && !cmd.Flags().Changed("dt") {
-		dt = taskDt
 	}
 
 	waveStrs, _ := cmd.Flags().GetStringSlice("wave")
@@ -153,6 +173,61 @@ func runSim(cmd *cobra.Command, args []string) error {
 	}
 }
 
+// runSimProject is `stc sim` project mode: --cycles deterministic base
+// ticks, or free-running with --realtime, then the project status.
+func runSimProject(cmd *cobra.Command, args []string, defines map[string]bool, format string) error {
+	projFlag, _ := cmd.Flags().GetStringSlice("project")
+	inputs := append(append([]string{}, projFlag...), args...)
+	if len(inputs) == 0 {
+		return errors.New("no project given: pass a .tsproj/.plcproj or .st files")
+	}
+	for _, f := range []string{"wave", "dt"} {
+		if cmd.Flags().Changed(f) {
+			return fmt.Errorf("--%s is not supported in project mode: ticks follow the task cycles", f)
+		}
+	}
+	realtime, _ := cmd.Flags().GetBool("realtime")
+	duration, _ := cmd.Flags().GetDuration("duration")
+	cycles, _ := cmd.Flags().GetInt("cycles")
+	switch {
+	case realtime && cmd.Flags().Changed("cycles"):
+		return errors.New("--realtime runs for --duration of wall time; --cycles cannot be combined with it")
+	case !realtime && cmd.Flags().Changed("duration"):
+		return errors.New("--duration requires --realtime; use --cycles for a deterministic run")
+	case duration < 0:
+		return fmt.Errorf("--duration must not be negative, got %s", duration)
+	case cycles < 0:
+		return fmt.Errorf("--cycles must not be negative, got %d", cycles)
+	}
+	setFlags, _ := cmd.Flags().GetStringArray("set")
+	getFlags, _ := cmd.Flags().GetStringArray("get")
+	sets, err := parseSetFlags(setFlags)
+	if err != nil {
+		return err
+	}
+	cmd.SilenceUsage = true
+	errOut := cmd.ErrOrStderr()
+	r, err := projectSetup(cmd, inputs, defines, sets, errOut)
+	if err != nil {
+		return err
+	}
+	if realtime {
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		err = r.runFree(ctx, duration, nil)
+	} else {
+		err = errors.Join(r.ticks(cycles), r.save())
+	}
+	if err != nil {
+		return fmt.Errorf("simulation error: %w", err)
+	}
+	st, err := r.status(getFlags)
+	if err != nil {
+		return err
+	}
+	return writeProjectStatus(cmd.OutOrStdout(), errOut, format, st, getFlags)
+}
+
 // selectProgram returns the PROGRAM named by want (case-insensitive) or,
 // when want names none, the first PROGRAM in files.
 func selectProgram(files []*ast.SourceFile, want []string) *ast.ProgramDecl {
@@ -173,29 +248,6 @@ func selectProgram(files []*ast.SourceFile, want []string) *ast.ProgramDecl {
 		return named
 	}
 	return first
-}
-
-// loadSimProject imports a TwinCAT project for simulation and returns the
-// parsed user and library sources, the first task's program and the task
-// cycle time. Error diagnostics abort.
-func loadSimProject(path string, defines map[string]bool) (user, libs []*ast.SourceFile, prog *ast.ProgramDecl, dt time.Duration, err error) {
-	m, ds, err := twincat.Import(path, twincat.Options{Defines: defines})
-	if err != nil {
-		return nil, nil, nil, 0, fmt.Errorf("importing %s: %w", path, err)
-	}
-	user, libs, pds := twincat.ParseModel(m, defines)
-	ds = append(ds, pds...)
-	if hasErrors(ds) {
-		for _, d := range ds {
-			fmt.Fprintln(os.Stderr, d.String())
-		}
-		return nil, nil, nil, 0, fmt.Errorf("project %s has errors", path)
-	}
-	var want []string
-	if len(m.Tasks) > 0 {
-		want, dt = m.Tasks[0].Programs, m.Tasks[0].CycleTime
-	}
-	return user, libs, selectProgram(user, want), dt, nil
 }
 
 // simSet is one parsed --set flag.

@@ -1,0 +1,277 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
+	"text/tabwriter"
+	"time"
+
+	"github.com/centroid-is/stc/pkg/diag"
+	"github.com/centroid-is/stc/pkg/ecat"
+	"github.com/centroid-is/stc/pkg/interp"
+	"github.com/spf13/cobra"
+)
+
+// This file holds the project runner shared by `stc sim` (project mode) and
+// `stc serve`: load the project into an interp.Project, attach the EtherCAT
+// network (--io), restore PERSISTENT/RETAIN state (--persist), apply --set,
+// run it deterministically or free-running, and report its status.
+
+// defaultPersistInterval is how often free-running mode saves --persist.
+const defaultPersistInterval = 10 * time.Second
+
+// addProjectRunFlags registers the flags every project runner shares.
+func addProjectRunFlags(cmd *cobra.Command) {
+	cmd.Flags().StringSlice("io", nil, "EtherCATConfig export (Device N.xml) whose network is attached to the project's TcLinkTo links (repeatable)")
+	cmd.Flags().String("persist", "", "JSON state file for PERSISTENT/RETAIN variables: loaded at start, saved periodically and on stop")
+	cmd.Flags().Duration("persist-interval", defaultPersistInterval, "Wall-time interval between --persist saves in free-running mode")
+}
+
+// projectRunner is a loaded project ready to run.
+type projectRunner struct {
+	P            *interp.Project
+	Spec         interp.ProjectSpec
+	Binder       *interp.IOBinder
+	Diags        []diag.Diagnostic // load warnings
+	Warnings     []string          // state file and I/O warnings
+	PersistPath  string
+	PersistEvery time.Duration
+}
+
+// projectSetup loads inputs (one .tsproj/.plcproj or .st files) as a
+// project, attaches --io, restores --persist and applies sets in that order,
+// so --set overrides persisted values. Errors are returned; load
+// diagnostics that fail the load are printed to errOut first.
+func projectSetup(cmd *cobra.Command, inputs []string, defines map[string]bool, sets []simSet, errOut io.Writer) (*projectRunner, error) {
+	spec, ds, err := loadProjectSpec(inputs, defines)
+	if err != nil {
+		for _, d := range ds {
+			if d.Severity == diag.Error {
+				fmt.Fprintln(errOut, d.String())
+			}
+		}
+		return nil, err
+	}
+	p, err := interp.LoadProject(spec)
+	if err != nil {
+		return nil, fmt.Errorf("initialisation error: %w", err)
+	}
+	r := &projectRunner{P: p, Spec: spec}
+	for _, d := range ds {
+		if d.Severity != diag.Error {
+			r.Diags = append(r.Diags, d)
+		}
+	}
+	ioFiles, _ := cmd.Flags().GetStringSlice("io")
+	if len(ioFiles) > 0 {
+		b, eds, err := attachECat(p, spec, ioFiles)
+		for _, d := range eds {
+			if d.Severity == diag.Error {
+				fmt.Fprintln(errOut, d.String())
+			} else {
+				r.Diags = append(r.Diags, d)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		r.Binder = b
+	}
+	r.PersistPath, _ = cmd.Flags().GetString("persist")
+	r.PersistEvery, _ = cmd.Flags().GetDuration("persist-interval")
+	if r.PersistPath != "" {
+		if r.PersistEvery <= 0 {
+			return nil, fmt.Errorf("--persist-interval must be positive, got %s", r.PersistEvery)
+		}
+		warns, err := p.LoadState(r.PersistPath)
+		if err != nil {
+			return nil, err
+		}
+		for _, w := range warns {
+			r.Warnings = append(r.Warnings, "persist: "+w)
+		}
+	}
+	for _, s := range sets {
+		if err := p.Runtime().Set(s.path, s.value); err != nil {
+			return nil, fmt.Errorf("--set %s: %w", s.path, err)
+		}
+	}
+	return r, nil
+}
+
+// attachECat loads the EtherCAT exports, resolves the TcLinkTo links of the
+// project files against them and attaches the network to p. Resolve errors
+// (unresolved links, size or direction mismatches) fail with every
+// diagnostic returned; warnings are returned with a nil error.
+func attachECat(p *interp.Project, spec interp.ProjectSpec, ioFiles []string) (*interp.IOBinder, []diag.Diagnostic, error) {
+	topo, err := ecat.LoadProject(ioFiles...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("--io: %w", err)
+	}
+	vars, ds := ecat.CollectLinks(spec.Files)
+	bindings, rds := ecat.Resolve(topo, vars)
+	ds = append(ds, rds...)
+	ecat.SortDiagnostics(ds)
+	if n := countErrors(ds); n > 0 {
+		return nil, ds, fmt.Errorf("EtherCAT links do not resolve: %d error(s)", n)
+	}
+	b := interp.NewIOBinder(bindings, ecat.NewNetwork(topo, nil))
+	p.SetIOBinder(b)
+	return b, ds, nil
+}
+
+// countErrors counts the error-severity diagnostics of ds.
+func countErrors(ds []diag.Diagnostic) int {
+	n := 0
+	for _, d := range ds {
+		if d.Severity == diag.Error {
+			n++
+		}
+	}
+	return n
+}
+
+// ticks runs n deterministic Ticks; the first Tick error stops the run.
+func (r *projectRunner) ticks(n int) error {
+	for i := 0; i < n; i++ {
+		if err := r.P.Tick(); err != nil {
+			return fmt.Errorf("cycle %d: %w", i+1, err)
+		}
+	}
+	return nil
+}
+
+// runFree runs free-running until duration of wall time passes (0: until
+// ctx is done), saving --persist every PersistEvery of wall time from the
+// Run goroutine and once more at the end, whatever stopped the run. A
+// cancelled ctx is a normal stop. Save errors are added to Warnings while
+// running and returned at the end.
+func (r *projectRunner) runFree(ctx context.Context, duration time.Duration, clock interp.WallClock) error {
+	if clock == nil {
+		clock = interp.NewWallClock()
+	}
+	opts := interp.RunOpts{Duration: duration, Clock: clock}
+	if r.PersistPath != "" {
+		last := clock.Now()
+		opts.OnTick = func(time.Duration) {
+			if now := clock.Now(); now-last >= r.PersistEvery {
+				last = now
+				if err := r.P.SaveState(r.PersistPath); err != nil {
+					r.Warnings = append(r.Warnings, "persist: "+err.Error())
+				}
+			}
+		}
+	}
+	err := r.P.Run(ctx, opts)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		err = nil
+	}
+	return errors.Join(err, r.save())
+}
+
+// save writes --persist when it is set.
+func (r *projectRunner) save() error {
+	if r.PersistPath == "" {
+		return nil
+	}
+	return r.P.SaveState(r.PersistPath)
+}
+
+// projectTaskJSON is one task in the project status.
+type projectTaskJSON struct {
+	Name     string   `json:"name"`
+	CycleNS  int64    `json:"cycle_ns"`
+	Priority int      `json:"priority"`
+	Programs []string `json:"programs"`
+	Runs     uint64   `json:"runs"`
+	Overruns uint64   `json:"overruns"`
+}
+
+// projectStatus is the result of a project run (`stc sim` project mode and
+// the final `stc serve` status).
+type projectStatus struct {
+	Cycles      int               `json:"cycles"`
+	SimTimeNS   int64             `json:"sim_time_ns"`
+	Tasks       []projectTaskJSON `json:"tasks"`
+	Get         map[string]any    `json:"get,omitempty"`
+	Diagnostics []diag.Diagnostic `json:"diagnostics"`
+	Warnings    []string          `json:"warnings"`
+}
+
+// status reports the run: ticks, the virtual clock, task counters, the
+// --get values, load and runtime diagnostics (auto-stubs RUNT001/RUNT002)
+// and state file and I/O warnings.
+func (r *projectRunner) status(gets []string) (projectStatus, error) {
+	st := projectStatus{SimTimeNS: int64(r.P.Clock()), Tasks: []projectTaskJSON{},
+		Diagnostics: []diag.Diagnostic{}, Warnings: []string{}}
+	if base := r.P.BaseTick(); base > 0 {
+		st.Cycles = int(r.P.Clock() / base)
+	}
+	for _, t := range r.P.Tasks() {
+		st.Tasks = append(st.Tasks, projectTaskJSON{Name: t.Name, CycleNS: int64(t.Cycle),
+			Priority: t.Priority, Programs: t.Programs, Runs: t.Runs, Overruns: t.Overruns})
+	}
+	if len(gets) > 0 {
+		st.Get = make(map[string]any, len(gets))
+		rt := r.P.Runtime()
+		for _, path := range gets {
+			v, err := rt.Get(path)
+			if err != nil {
+				return st, fmt.Errorf("--get %s: %w", path, err)
+			}
+			st.Get[path] = rt.ToJSON(v)
+		}
+	}
+	st.Diagnostics = append(st.Diagnostics, r.Diags...)
+	st.Diagnostics = append(st.Diagnostics, r.P.Runtime().Interpreter().Warnings()...)
+	st.Warnings = append(st.Warnings, r.Warnings...)
+	if r.Binder != nil {
+		for _, err := range r.Binder.Errors() {
+			st.Warnings = append(st.Warnings, "io: "+err.Error())
+		}
+	}
+	return st, nil
+}
+
+// writeProjectStatus prints st as indented JSON, or as text: diagnostics
+// and warnings on errOut, a task table and "PATH = JSON" lines (in gets
+// order) on out.
+func writeProjectStatus(out, errOut io.Writer, format string, st projectStatus, gets []string) error {
+	if format == "json" {
+		b, err := json.MarshalIndent(st, "", "  ")
+		if err != nil {
+			return fmt.Errorf("JSON marshal error: %w", err)
+		}
+		fmt.Fprintln(out, string(b))
+		return nil
+	}
+	for _, d := range st.Diagnostics {
+		fmt.Fprintln(errOut, d.String())
+	}
+	for _, w := range st.Warnings {
+		fmt.Fprintln(errOut, "warning: "+w)
+	}
+	fmt.Fprintf(out, "Project: %d cycles, sim time %s\n\n", st.Cycles, time.Duration(st.SimTimeNS))
+	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "TASK\tCYCLE\tPRIORITY\tPROGRAMS\tRUNS\tOVERRUNS")
+	for _, t := range st.Tasks {
+		fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%d\t%d\n", t.Name, time.Duration(t.CycleNS), t.Priority,
+			strings.Join(t.Programs, ","), t.Runs, t.Overruns)
+	}
+	_ = tw.Flush()
+	if len(gets) > 0 {
+		fmt.Fprintln(out)
+	}
+	for _, path := range gets {
+		b, err := json.Marshal(st.Get[path])
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "%s = %s\n", path, b)
+	}
+	return nil
+}
