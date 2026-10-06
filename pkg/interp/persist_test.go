@@ -121,7 +121,7 @@ func TestPersistRoundTrip(t *testing.T) {
 		"GVL_Cfg.p_cfg_Mode":                 "Manual",
 		"GVL_Cfg.p_cfg_Struct":               map[string]any{"gain": 1.5, "on": true},
 		"GVL_Cfg.p_cfg_Arr":                  []any{7, 8, 9},
-		"GVL_Cfg.p_cfg_Ramp":                 "T#1m2s3ms4us",
+		"GVL_Cfg.p_cfg_Ramp":                 json.Number("62003.004"),
 		"GVL_Cfg.p_cfg_Stamp":                "DT#2026-10-06-12:34:56.789",
 		"GVL_Cfg.fb.p_cfg_Freq":              60.0,
 		"GVL_Cfg.fb.nBaseHours":              123,
@@ -242,4 +242,18 @@ func TestPersistStateJSONKinds(t *testing.T) {
 	b, err := json.Marshal(s)
 	require.NoError(t, err)
 	assert.Equal(t, `{"A":1.000000,"B":2}`, string(b))
+}
+
+func TestPersistWalkerEdges(t *testing.T) {
+	p := persistProject(t)
+	p.files = append(p.files, nil, &ast.SourceFile{Declarations: []ast.Declaration{&ast.GVLDecl{}, &ast.ProgramDecl{}}})
+	assert.Equal(t, p.PersistPaths(), p.collectPersist(), "nil files and unnamed POUs are skipped")
+
+	w := persistWalker{rt: p.rt, seen: map[string]bool{}, visited: map[*FBInstance]bool{}}
+	w.value("x", Value{Kind: ValFBInstance}, maxJSONDepth+1)
+	w.value("x", Value{Kind: ValArray, ArrayLow: 2, Array: []Value{{}, {}}}, 0)
+	w.value("x", Value{Kind: ValArray, Array: []Value{{Kind: ValInt}}}, 0)
+	assert.Empty(t, w.out)
+
+	assert.Equal(t, []any{}, p.rt.stateJSON(Value{Kind: ValArray, ArrayLow: 5, Array: []Value{{}}}, 0))
 }

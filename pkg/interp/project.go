@@ -70,6 +70,8 @@ type Project struct {
 	io    *iomap.IOTable
 	files []*ast.SourceFile // library files then project files
 	slots []ioSlot
+	// persist lists the PERSISTENT/RETAIN paths (see PersistPaths).
+	persist []string
 }
 
 // LoadProject registers spec.LibraryFiles and then spec.Files on one
@@ -132,6 +134,7 @@ func LoadProject(spec ProjectSpec) (*Project, error) {
 		return a.Name < b.Name
 	})
 	p.allocIO()
+	p.persist = p.collectPersist()
 	return p, nil
 }
 
