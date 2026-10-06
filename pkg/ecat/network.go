@@ -131,8 +131,9 @@ type Network struct {
 	wcBad      map[slaveRef]bool
 	devState   map[string]uint16
 
-	diags []diag.Diagnostic
-	svc   services
+	diags  []diag.Diagnostic
+	svc    services
+	forces map[string]forceEntry // input forces by link path (force.go)
 
 	// StateDelay is the number of Steps a state request on a plain device
 	// takes (DefaultStateDelay unless changed).
@@ -325,6 +326,7 @@ func (n *Network) ClearFaults() {
 	n.wcBad = map[slaveRef]bool{}
 	n.devState = map[string]uint16{}
 	n.svc.clearFaults()
+	n.ReleaseAll()
 }
 
 func netIDBits(id [6]byte) uint64 {
@@ -342,7 +344,8 @@ func (mr *masterRT) put(path string, v uint64) {
 	}
 }
 
-// Step advances every device by dt, then publishes pseudo-inputs.
+// Step advances every device by dt, publishes pseudo-inputs, then writes
+// input forces (ForceInput).
 func (n *Network) Step(dt time.Duration) {
 	n.stepPending()
 	for _, mr := range n.masters {
@@ -371,4 +374,5 @@ func (n *Network) Step(dt time.Duration) {
 		mr.put(mb+"InfoData^AmsNetId", netID)
 		mr.put(mb+"InfoData^ChangeCount", 0)
 	}
+	n.applyForces()
 }
