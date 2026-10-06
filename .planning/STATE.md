@@ -4,13 +4,13 @@ milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
 status: executing
 stopped_at: v1.2 roadmap created
-last_updated: "2026-10-06T02:21:11.786Z"
+last_updated: "2026-10-06T02:34:58.004Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 15
   total_plans: 57
-  completed_plans: 52
+  completed_plans: 53
   percent: 52
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 20 (TwinCAT Expression Semantics) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-10-06
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -105,6 +105,9 @@ Recent decisions affecting current work:
 - [Phase 20]: EXTENDS re-parents the derived POU scope onto the base scope instead of copying symbols
 - [Phase 20]: Standard FBs are library symbols with Tc2_Standard names first and IEC aliases appended; stubs and user code override them silently
 - [Phase 20]: SEMA037 is reported once per NamedType node; unknown names inside library declarations are not reported
+- [Phase 20]: 20-05: runtime constant-index bit access accepts any integer symbol as index; checker SEMA035 must enforce CONSTANT
+- [Phase 20]: 20-05: bit writes keep the target IECType, mask unsigned kinds and sign-extend signed kinds
+- [Phase 20]: 20-05: an enum's zero value is its first declared value typed by its base type
 
 ### Pending Todos
 
@@ -118,7 +121,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T02:20:54.010Z
+Last session: 2026-10-06T02:34:39.941Z
 Stopped at: v1.2 roadmap created
 Resume file: None
 
