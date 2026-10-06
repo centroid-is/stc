@@ -17,6 +17,30 @@ type typeCtx struct {
 	consts  func(qual, name string) (int64, bool)
 	interp  *Interpreter
 	env     *Env
+	// fbParent is the parent env of user FB instances built as array
+	// elements or struct members; env when nil.
+	fbParent *Env
+}
+
+// fbInstance builds a fresh instance when name is a standard or registered
+// user FB type and ctx can build one (ctx.interp is set).
+func (c typeCtx) fbInstance(name string, depth int) (Value, bool) {
+	if c.interp == nil || depth > maxFBNestDepth {
+		return Value{}, false
+	}
+	upper := strings.ToUpper(name)
+	if factory := StdlibFBFactory[upper]; factory != nil {
+		return MakeFBInstanceValue(name, factory()), true
+	}
+	decl := c.interp.FBDecls[upper]
+	if decl == nil {
+		return Value{}, false
+	}
+	parent := c.fbParent
+	if parent == nil {
+		parent = c.env
+	}
+	return Value{Kind: ValFBInstance, FBRef: newUserFBInstanceDepth(name, decl, c.interp, parent, depth)}, true
 }
 
 // typeCtxFor returns the full construction context for variables
@@ -343,7 +367,9 @@ func (interp *Interpreter) instantiateVar(env, fbParent *Env, vd *ast.VarDecl, d
 		case fbDecl != nil:
 			val = Value{Kind: ValFBInstance, FBRef: newUserFBInstanceDepth(typeName, fbDecl, interp, fbParent, depth)}
 		default:
-			val = interp.zeroOf(vd.Type, env)
+			ctx := interp.typeCtxFor(env)
+			ctx.fbParent = fbParent
+			val = zeroFromType(vd.Type, ctx, depth)
 			if vd.InitValue != nil {
 				v, err := interp.evalInit(env, vd.Type, vd.InitValue, val)
 				if err != nil {

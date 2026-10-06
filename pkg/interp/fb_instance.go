@@ -403,6 +403,11 @@ func zeroFromType(ts ast.TypeSpec, ctx typeCtx, depth int) Value {
 			if typ, found := types.LookupElementaryType(name); found {
 				return Zero(typ.Kind())
 			}
+			// An FB type used as an array element or struct member: a live
+			// instance of its own (ARRAY[1..2] OF FB_Drive).
+			if fb, ok := ctx.fbInstance(t.Name.Name, depth); ok {
+				return fb
+			}
 			// Not elementary: it may be a user-defined TYPE (struct, array,
 			// enum, subrange or alias). Resolve and recurse so that aggregates
 			// nested inside other aggregates are built correctly.
@@ -475,6 +480,15 @@ func zeroArrayCtx(at *ast.ArrayType, ctx typeCtx, depth int) Value {
 	}
 	elemZero := zeroFromType(at.ElementType, ctx, depth+1)
 	arr := make([]Value, size)
+	if elemZero.Kind == ValFBInstance {
+		// FB instances are references, so Clone would share one instance
+		// between all elements: build each element separately.
+		arr[0] = elemZero
+		for i := 1; i < len(arr); i++ {
+			arr[i] = zeroFromType(at.ElementType, ctx, depth+1)
+		}
+		return Value{Kind: ValArray, Array: arr, ArrayLow: int(low)}
+	}
 	for i := range arr {
 		// Clone per element: an aggregate element is backed by a slice or map,
 		// so sharing one zero value would make a write to one slot visible in

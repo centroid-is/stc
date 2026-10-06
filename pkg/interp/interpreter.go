@@ -1088,6 +1088,15 @@ func (interp *Interpreter) execCallStmt(env *Env, s *ast.CallStmt) error {
 		if v.Kind != ValFBInstance || v.FBRef == nil {
 			return &RuntimeError{Msg: fmt.Sprintf("%s is not a function block instance", c.Member.Name)}
 		}
+	case *ast.IndexExpr:
+		// fbs[i](IN := x): an element of an ARRAY OF FB.
+		var err error
+		if v, err = interp.evalExpr(env, c); err != nil {
+			return err
+		}
+		if v.Kind != ValFBInstance || v.FBRef == nil {
+			return &RuntimeError{Msg: "array element is not a function block instance", Pos: c.Span().Start}
+		}
 	}
 	if v.Kind != ValFBInstance || v.FBRef == nil {
 		return asExpr()

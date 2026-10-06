@@ -522,3 +522,56 @@ func TestRuntimeConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestArrayOfFB(t *testing.T) {
+	src := `FUNCTION_BLOCK FB_C
+VAR_INPUT step : INT := 1; END_VAR
+VAR n : INT; END_VAR
+n := n + step;
+END_FUNCTION_BLOCK
+TYPE ST_Holder :
+STRUCT
+	c : FB_C;
+END_STRUCT
+END_TYPE
+PROGRAM P
+VAR
+	fbs : ARRAY[1..3] OF FB_C;
+	tons : ARRAY[0..1] OF TON;
+	h : ST_Holder;
+	ints : ARRAY[0..1] OF INT;
+	i : INT := 3;
+END_VAR
+fbs[1]();
+fbs[i](step := 10);
+tons[1](IN := TRUE, PT := T#1ms);
+h.c();
+END_PROGRAM
+`
+	rt, err := NewRuntime([]*ast.SourceFile{parseRT(t, "p.st", src)})
+	require.NoError(t, err)
+	require.NoError(t, rt.Tick(time.Millisecond))
+	require.NoError(t, rt.Tick(time.Millisecond))
+	assert.Equal(t, int64(2), mustGet(t, rt, "P.fbs[1].n").Int)
+	assert.Equal(t, int64(0), mustGet(t, rt, "P.fbs[2].n").Int, "elements are separate instances")
+	assert.Equal(t, int64(20), mustGet(t, rt, "P.fbs[3].n").Int)
+	assert.True(t, mustGet(t, rt, "P.tons[1].Q").Bool)
+	assert.False(t, mustGet(t, rt, "P.tons[0].Q").Bool)
+	assert.Equal(t, int64(2), mustGet(t, rt, "P.h.c.n").Int)
+
+	bad := parseRT(t, "b.st", "PROGRAM B\nVAR ints : ARRAY[0..1] OF INT; END_VAR\nints[0](x := 1);\nEND_PROGRAM\n")
+	rt, err = NewRuntime([]*ast.SourceFile{bad})
+	require.NoError(t, err)
+	err = rt.Tick(time.Millisecond)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a function block instance")
+	bad = parseRT(t, "b.st", "PROGRAM B\nVAR ints : ARRAY[0..1] OF INT; END_VAR\nints[5](x := 1);\nEND_PROGRAM\n")
+	rt, err = NewRuntime([]*ast.SourceFile{bad})
+	require.NoError(t, err)
+	assert.Error(t, rt.Tick(time.Millisecond))
+
+	// A self-referencing ARRAY OF FB stops at the nesting limit.
+	rec := parseRT(t, "r.st", "FUNCTION_BLOCK FB_R\nVAR kids : ARRAY[0..0] OF FB_R; END_VAR\nEND_FUNCTION_BLOCK\nVAR_GLOBAL r : FB_R; END_VAR\n")
+	_, err = NewRuntime([]*ast.SourceFile{rec})
+	require.NoError(t, err)
+}
