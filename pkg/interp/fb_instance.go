@@ -23,6 +23,19 @@ type StandardFB interface {
 // Plan 04 will register standard library FBs here.
 var StdlibFBFactory = map[string]func() StandardFB{}
 
+// stdFBFactory returns the Go factory for an upper-case FB type name: an
+// engine-local override (fbOverrides, the Tc2_EtherCAT mocks) first, then
+// StdlibFBFactory. A nil interpreter has no overrides.
+func (interp *Interpreter) stdFBFactory(upperType string) (func() StandardFB, bool) {
+	if interp != nil {
+		if f, ok := interp.fbOverrides[upperType]; ok {
+			return f, true
+		}
+	}
+	f, ok := StdlibFBFactory[upperType]
+	return f, ok
+}
+
 // FBInstance wraps either a StandardFB (for stdlib FBs) or an Env+Decl
 // pair (for user-defined FBs). It provides a unified interface for FB
 // call statements and member access.

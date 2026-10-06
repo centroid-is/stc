@@ -132,6 +132,11 @@ type Network struct {
 	devState   map[string]uint16
 
 	diags []diag.Diagnostic
+	svc   services
+
+	// StateDelay is the number of Steps a state request on a plain device
+	// takes (DefaultStateDelay unless changed).
+	StateDelay int
 }
 
 // NewNetwork allocates images for topo and creates a device for every slave
@@ -142,7 +147,9 @@ func NewNetwork(topo *Topology, reg *Registry) *Network {
 	if reg == nil {
 		reg = DefaultRegistry
 	}
-	n := &Network{Topo: topo, images: NewImages(topo)}
+	n := &Network{Topo: topo, images: NewImages(topo), StateDelay: DefaultStateDelay}
+	n.svc.plainState = map[slaveRef]uint16{}
+	n.svc.pending = map[slaveRef]pendingState{}
 	n.ClearFaults()
 	for _, m := range topo.Masters {
 		mr := &masterRT{m: m, img: n.images.Get(m.Name)}
@@ -166,6 +173,7 @@ func NewNetwork(topo *Topology, reg *Registry) *Network {
 			if b, ok := rt.dev.(Binder); ok {
 				b.Bind(rt.layout)
 			}
+			bindLayout(m, rt)
 			mr.slaves = append(mr.slaves, rt)
 		}
 		n.masters = append(n.masters, mr)
@@ -310,11 +318,13 @@ func (n *Network) SetDevState(master string, bits uint16) error {
 	return nil
 }
 
-// ClearFaults restores healthy pseudo-input values.
+// ClearFaults restores healthy pseudo-input values, link state, CRC counters
+// and master state. Requested slave states are kept.
 func (n *Network) ClearFaults() {
 	n.slaveState = map[slaveRef]uint16{}
 	n.wcBad = map[slaveRef]bool{}
 	n.devState = map[string]uint16{}
+	n.svc.clearFaults()
 }
 
 func netIDBits(id [6]byte) uint64 {
@@ -334,6 +344,7 @@ func (mr *masterRT) put(path string, v uint64) {
 
 // Step advances every device by dt, then publishes pseudo-inputs.
 func (n *Network) Step(dt time.Duration) {
+	n.stepPending()
 	for _, mr := range n.masters {
 		for _, rt := range mr.slaves {
 			rt.dev.Step(dt, view(mr.img.Out, rt.out), view(mr.img.In, rt.in))
@@ -342,18 +353,12 @@ func (n *Network) Step(dt time.Duration) {
 		for i, rt := range mr.slaves {
 			ref := slaveRef{mr.m.Name, i}
 			base := SlaveBasePath(mr.m.Name, rt.slave)
-			state, ok := n.slaveState[ref]
-			if !ok {
-				state = StateOP
-			}
+			state := n.effectiveState(ref, rt.dev)
 			wc := uint64(0)
 			if n.wcBad[ref] {
 				wc = 1
 			}
-			port := uint64(FirstPort + rt.slave.Index)
-			if rt.slave.HasPhys {
-				port = uint64(uint16(rt.slave.Phys))
-			}
+			port := uint64(slaveAddr(rt.slave))
 			mr.put(base+"^InfoData^State", uint64(state))
 			mr.put(base+"^WcState^WcState", wc)
 			mr.put(base+"^InfoData^AdsAddr", netID|port<<48)

@@ -481,7 +481,13 @@ Plans:
   2. Commanding a run makes ETA go through the CiA402 states to Operation enabled, RFR ramps to LFR at the configured ACC/DEC, and HMIS reports `run`
   3. Injecting a drive fault sets the CiA402 Fault state with the chosen LFT code, and FB_ATV320 surfaces it
   4. FB_EcDeviceDiag fills `ECT_Diag.Device_N_Diag` from `FB_EcGetAllSlaveStates`, `FB_EcGetMasterState` and the CRC FBs, with busy/done completing over several scans
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [x] 26-01-PLAN.md -- ATV320 model: entry layout hook, CiA402 state machine, ramps, HMIS/LFT, DI/OL1R, stimulus API
+- [x] 26-02-PLAN.md -- Network service API, ATV320 CoE object dictionary with parameter defaults and EEPROM save, PreOp start
+- [x] 26-03-PLAN.md -- Tc2_EtherCAT StandardFB mocks (state, master, CRC, physical write, CoE SDO) with 2-scan async latency
+- [x] 26-04-PLAN.md -- End-to-end: trimmed CI flow, env-gated real FB_ATV320 + FB_EcDeviceDiag gate, docs, VALIDATION, coverage gate
 
 ### Phase 27: Plant Scenarios & Simulation CLI
 **Goal**: Engineers and CI can drive the simulated plant through deterministic scripted scenarios, either from a TOML file on the CLI or from ST unit tests
@@ -555,7 +561,7 @@ v1.2 phases execute in numeric order: 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25 -> 
 | 23. Project Execution Runtime | v1.2 | 0/TBD | Not started | - |
 | 24. EtherCAT Topology & Link Binding | v1.2 | 4/4 | Complete    | 2026-10-06 |
 | 25. EtherCAT Terminal Models | v1.2 | 0/TBD | Not started | - |
-| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 0/TBD | Not started | - |
+| 26. ATV320 Drive & EtherCAT Master Services | v1.2 | 4/4 | Complete   | 2026-10-06 |
 | 27. Plant Scenarios & Simulation CLI | v1.2 | 0/TBD | Not started | - |
 | 28. OPC UA Address Space | v1.2 | 4/4 | Complete   | 2026-10-06 |
 | 29. Live HMI & Agent Integration | v1.2 | 0/TBD | Not started | - |

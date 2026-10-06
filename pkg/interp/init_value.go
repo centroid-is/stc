@@ -31,7 +31,7 @@ func (c typeCtx) fbInstance(name string, depth int) (Value, bool) {
 		return Value{}, false
 	}
 	upper := strings.ToUpper(name)
-	if factory := StdlibFBFactory[upper]; factory != nil {
+	if factory, ok := c.interp.stdFBFactory(upper); ok {
 		return MakeFBInstanceValue(name, factory()), true
 	}
 	decl := c.interp.FBDecls[upper]
@@ -351,7 +351,7 @@ func (interp *Interpreter) instantiateVar(env, fbParent *Env, vd *ast.VarDecl, d
 	var factory func() StandardFB
 	var fbDecl *ast.FunctionBlockDecl
 	if typeName != "" && depth <= maxFBNestDepth {
-		factory = StdlibFBFactory[upperType]
+		factory, _ = interp.stdFBFactory(upperType)
 		if factory == nil && interp.FBDecls != nil {
 			fbDecl = interp.FBDecls[upperType]
 		}
