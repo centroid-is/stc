@@ -389,16 +389,17 @@ Plans:
   3. `CASE e OF lft_e.eef1: ... E.a, E.b: ...` and an enum declared `(a := 0, b := 1) UINT` with `strict` / `to_string` attributes check and execute; `REF=`, `THIS^` and `SUPER^` execute with the expected results in host tests
   4. `stc check` on the flattened ST301 + SVNCoreComponents probe sources reports zero parse errors
   5. `stc check` accepts TON/TOF/TP/CTU/CTD/CTUD/R_TRIG/F_TRIG/SR/RS calls without stubs and reports an error for an undeclared type name such as `FB_DoesNotExist`
-**Plans**: 8 plans
+**Plans**: 9 plans
 
 Plans:
 - [ ] 20-01-PLAN.md -- AST contracts: bit access, named call args, REF=, THIS/SUPER, initialisers, namespace types, enum base/default; JSON kinds, fmt/emit/lint, shared enum numbering
 - [ ] 20-02-PLAN.md -- Parser expressions/statements: bit access, named args in expression calls, trailing comma, qualified CASE labels, REF=, THIS^/SUPER^
 - [ ] 20-03-PLAN.md -- Lexer and declaration parsing: typed based literals, enum base type and TYPE default, namespace-qualified types, struct/array initialisers, stray semicolons
-- [ ] 20-04-PLAN.md -- Checker resolver: pointer-stable two-pass registration, SEMA037, ten standard FBs with aliases, inherited EXTENDS scope, enum metadata and inline enums
+- [ ] 20-04-PLAN.md -- Checker resolver: pointer-stable two-pass registration, ten standard FBs with aliases, inherited EXTENDS scope, SEMA037 with fixture audit
 - [ ] 20-05-PLAN.md -- Interpreter values: bit read/write, enum numbering/qualified/inline values, TO_STRING, standard FB input aliases
-- [ ] 20-06-PLAN.md -- Checker expressions: bit access SEMA035, named-arg binding, enum rules SEMA036, REF=/THIS/SUPER SEMA038, reference auto-deref, initialiser checks
+- [ ] 20-06-PLAN.md -- Checker metadata and calls: enum metadata and inline enums, FUNCTION outputs, bit access SEMA035 (read and write), named-arg binding
 - [ ] 20-07-PLAN.md -- Interpreter calls and references: shared arg binder, FUNCTIONs in pkg/interp, unqualified methods, THIS^/SUPER^, path-based REF=
+- [ ] 20-09-PLAN.md -- Checker semantics: enum rules SEMA036 and TO_STRING, REF=/THIS/SUPER SEMA038 with reference auto-deref, initialiser checks
 - [ ] 20-08-PLAN.md -- Acceptance gate: ST dialect suites, probe gate without allowances, zero-parse-error oracle, hand-off re-run, validation sign-off
 
 ### Phase 21: TwinCAT Project Import & Library Stubs
