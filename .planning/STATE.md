@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: TwinCAT Import, EtherCAT Simulation & OPC UA
-status: ready_to_plan
-stopped_at: Phase 20 complete (9/9) — ready to discuss Phase 21
-last_updated: 2026-10-06T03:50:54.948Z
+status: executing
+stopped_at: Completed 20-09-PLAN.md
+last_updated: "2026-10-06T06:55:05.726Z"
 last_activity: 2026-10-06
 progress:
   total_phases: 29
   completed_phases: 16
-  total_plans: 57
-  completed_plans: 57
+  total_plans: 67
+  completed_plans: 58
   percent: 55
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Write ST once, validate it instantly on your machine, and deploy to any supported PLC vendor -- no hardware required for development and testing.
-**Current focus:** Phase 21 — twincat project import & library stubs
+**Current focus:** Phase 28 — OPC UA Address Space
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
-Status: Ready to plan
+Phase: 28 (OPC UA Address Space) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-10-06
 
-Progress: [██████████] 100%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -122,6 +122,8 @@ Recent decisions affecting current work:
 - [Phase 20]: 20-09: types.ArrayDimension.Known marks literal bounds; too many initialisers is reported only with known bounds and literal repetition counts
 - [Phase 20]: Phase 20 oracle asserts 0 parse diagnostics (parser.Parse) and 0 P001 (analyzer.Analyze) for st301 and svncore; semantic errors are logged as templated buckets only
 - [Phase 20]: TwinCAT dialect check tolerates only 'cannot assign DINT to INT' (Phase 22 RUNT-05), held in one named allowlist
+- [Phase 28]: 28-01: awcullen v1.4.0 always advertises secured policies once a cert loads; EnableBasic256Sha256 records intent and AllowNone=false gives a secure-only server
+- [Phase 28]: 28-01: awcullen ListenAndServe binds all interfaces and Close sleeps 3 s; Endpoint port 0 is rejected
 
 ### Pending Todos
 
@@ -135,7 +137,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-10-06T03:49:01.829Z
+Last session: 2026-10-06T06:55:00.920Z
 Stopped at: Completed 20-09-PLAN.md
 Resume file: None
 

@@ -55,8 +55,8 @@ Reference project for every acceptance test: `/Users/jonb/Projects/sildarvinnsla
 
 ### OPC UA server (OPCUA)
 
-- [ ] **OPCUA-01**: `stc serve --project ... --opcua :4840` starts an OPC UA server (awcullen/opcua) with SecurityPolicy None + Anonymous by default and optional Basic256Sha256 with self-signed certificates
-- [ ] **OPCUA-02**: The PLC namespace `urn:BeckhoffAutomation:Ua:PLC1` is registered at index 4; nodes are addressable as `ns=4;s=<GVL|PROGRAM>.<path>[i].<member>` with declared case; the standard Server object including `i=2259` ServerStatus.State is served
+- [x] **OPCUA-01**: `stc serve --project ... --opcua :4840` starts an OPC UA server (awcullen/opcua) with SecurityPolicy None + Anonymous by default and optional Basic256Sha256 with self-signed certificates
+- [x] **OPCUA-02**: The PLC namespace `urn:BeckhoffAutomation:Ua:PLC1` is registered at index 4; nodes are addressable as `ns=4;s=<GVL|PROGRAM>.<path>[i].<member>` with declared case; the standard Server object including `i=2259` ServerStatus.State is served
 - [ ] **OPCUA-03**: Exposure follows TF6100 rules: a symbol is published if it or any ancestor instance or type-level member has `OPC.UA.DA := '1'`; `'1'` inherits to children; `'0'` prunes a subtree; `'2'` publishes a struct without member nodes; type-level attributes inside FB/STRUCT declarations apply to every instance; intermediate FB/array object nodes are created when a descendant is exposed
 - [ ] **OPCUA-04**: `OPC.UA.DA.Access` 1/2/3 maps to AccessLevel (missing = read/write) and `OPC.UA.DA.Description` to the Description attribute
 - [ ] **OPCUA-05**: Structs with `OPC.UA.DA.StructuredType` (on the variable or on the TYPE/FB header) are readable as ExtensionObjects with a served DataTypeDefinition, while members remain individually addressable; enums are Int32 with EnumStrings/EnumValues; arrays are single nodes with ValueRank/ArrayDimensions
@@ -144,8 +144,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ECAT-08 | Phase 26 | Pending |
 | ECAT-09 | Phase 27 | Pending |
 | ECAT-10 | Phase 27 | Pending |
-| OPCUA-01 | Phase 28 | Pending |
-| OPCUA-02 | Phase 28 | Pending |
+| OPCUA-01 | Phase 28 | Complete |
+| OPCUA-02 | Phase 28 | Complete |
 | OPCUA-03 | Phase 28 | Pending |
 | OPCUA-04 | Phase 28 | Pending |
 | OPCUA-05 | Phase 28 | Pending |
