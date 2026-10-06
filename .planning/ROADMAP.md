@@ -442,7 +442,13 @@ Plans:
   2. In free-running mode the scan is paced against wall-clock so 10 s of real time is approximately 10 000 cycles of a 1 ms task
   3. A `p_cfg_*` PERSISTENT value written in one run is restored from the state file on the next run
   4. An `AT %I*` INT reads back as -5 after its slot is set to 0xFFFB, and REAL, enum and struct-with-`AT %I*`-member bindings round-trip by declared type
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 23-01-PLAN.md -- LoadProject (ProjectSpec, per-task engines over Phase 22 Runtime), deterministic priority Tick, shared CLI project loader
+- [ ] 23-02-PLAN.md -- shared declared-type AT codec (IOBinder + scan.go), wildcard slots, free-running Run with monotonic pacing
+- [ ] 23-03-PLAN.md -- PERSISTENT/RETAIN JSON state file, `stc sim` project mode (--project/--io/--realtime/--persist), `stc serve` skeleton
+- [ ] 23-04-PLAN.md -- fixture SC1-4 gate + env-gated ST301 1000-cycle run, VALIDATION, docs, coverage gate
 
 ### Phase 24: EtherCAT Topology & Link Binding
 **Goal**: The project's EtherCAT I/O tree is loaded from TwinCAT exports and every `TcLinkTo` link is resolved and copied through per-master process images, so link errors are caught statically and I/O values flow at scan boundaries
